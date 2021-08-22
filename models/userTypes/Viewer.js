@@ -3,17 +3,8 @@ const mongoose = require("mongoose");
 const viewerSchema = new mongoose.Schema({
     rootUser: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
+        // required: true,
         ref: "User"
-    },
-    permissions: {
-        type: [String],
-        required: true
-    },
-    role: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        ref: "Role"
     },
     name: {
         type: String,
@@ -29,12 +20,17 @@ const viewerSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    hobbies: {
-        type: [String],
-        required: true
+    gender:{
+        type:String,
+        required:true,
+        enum:["Male","Female","Custom"]
     },
     profileImages: {
         type: String,
+        required: true
+    },
+    hobbies: {
+        type: [String],
         required: true
     },
     wallet:{
@@ -70,6 +66,6 @@ const viewerSchema = new mongoose.Schema({
     }]
 })
 
-const Viewer = new mongoose.Model("Viewer",viewerSchema)
+const Viewer = new mongoose.model("Viewer",viewerSchema)
 
 module.exports = Viewer

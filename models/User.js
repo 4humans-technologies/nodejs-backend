@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
-
+const Permission = require("./Permission")
 
 const userSchema = new mongoose.Schema({
     username: {
@@ -10,18 +10,18 @@ const userSchema = new mongoose.Schema({
         // unique: true,
         // index:true
     },
+    password: {
+        type: String,
+        required: true
+    },
     permissions:{
         type:[String],
         required:true
     },
     role:{
-        type:mongoose.Schema.Types.ObjectId,
-        required:true,
-        ref:"Role"
-    },
-    password: {
-        type: String,
-        required: true
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        ref: "Role"
     },
     userType: {
         type: String,
@@ -37,11 +37,11 @@ const userSchema = new mongoose.Schema({
         type:Map,
         required:true,
         default:{
-            created:new Date().getTime(),
             lastLogin:null,
-            lastUpdated:null
         }
     }
+},{
+    timestamps:true
 })
 
 userSchema.pre("save", function(next) {

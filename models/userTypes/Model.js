@@ -3,17 +3,8 @@ const mongoose = require("mongoose");
 const modelSchema = new mongoose.Schema({
     rootUser: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
+        // required: true,
         ref: "User"
-    },
-    permissions: {
-        type: [String],
-        required: true
-    },
-    role: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        ref: "Role"
     },
     name: {
         type: String,
@@ -26,6 +17,11 @@ const modelSchema = new mongoose.Schema({
         maxlength: 24,
         // add validation here
     },
+    gender:{
+        type:String,
+        required:true,
+        enum:["Male","Female","Custom"]
+    },
     email: {
         type: String,
         required: true,
@@ -37,7 +33,7 @@ const modelSchema = new mongoose.Schema({
         unique: true
     },
     bio: {
-        type: string,
+        type: String,
         required: true,
         minlength: 20,
         maxlength: 512
@@ -55,6 +51,11 @@ const modelSchema = new mongoose.Schema({
         type: Number,
         required: true,
         validate: val => v
+    },
+    rating:{
+        type:Number,
+        min:0,
+        max:5,
     },
     isOnline: {
         type: Boolean,
