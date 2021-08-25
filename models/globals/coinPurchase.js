@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const coinPurchaseSchema = new mongoose.Schema({
     timestamp:{
         type:Number,
-        default:new Date().getTime()
+        default:new Date().toISOString()
     },
     by:{
         type:mongoose.Schema.Types.ObjectId,
@@ -20,4 +20,4 @@ const coinPurchaseSchema = new mongoose.Schema({
     }
 })
 
-const CoinPurchase = new mongoose.model("CoinPurchase",coinPurchaseSchema)
+const CoinPurchase = mongoose.model("CoinPurchase",coinPurchaseSchema)

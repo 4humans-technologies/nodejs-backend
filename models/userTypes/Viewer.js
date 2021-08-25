@@ -10,6 +10,13 @@ const viewerSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    screenName: {
+        type: String,
+        required: true,
+        minlength: 5,
+        maxlength: 24,
+        // add validation here
+    },
     email: {
         type: String,
         required: true,
@@ -27,11 +34,11 @@ const viewerSchema = new mongoose.Schema({
     },
     profileImages: {
         type: String,
-        required: true
+        required: false
     },
     hobbies: {
         type: [String],
-        required: true
+        required: false
     },
     wallet:{
         type:mongoose.Schema.Types.ObjectId,
@@ -66,6 +73,6 @@ const viewerSchema = new mongoose.Schema({
     }]
 })
 
-const Viewer = new mongoose.model("Viewer",viewerSchema)
+const Viewer = mongoose.model("Viewer",viewerSchema)
 
 module.exports = Viewer

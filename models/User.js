@@ -14,51 +14,53 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    permissions:{
-        type:[String],
-        required:true
+    permissions: {
+        type: [String],
+        required: true
     },
-    role:{
+    role: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
         ref: "Role"
     },
     userType: {
         type: String,
-        required:true,
-        enum:["Viewer","Model","Superadmin","Staff"]
+        required: true,
+        enum: ["Viewer", "Model", "SuperAdmin", "Staff"]
     },
-    relatedUser:{
-        type:mongoose.Schema.Types.ObjectId,
-        required:true,
-        refPath:"userType"
+    relatedUser: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        refPath: "userType"
     },
-    meta:{
-        type:Map,
+    needApproval:{
+        type:Boolean,
         required:true,
-        default:{
-            lastLogin:null,
+        default:true
+    },
+    meta: {
+        type: Map,
+        required: true,
+        default: {
+            lastLogin: null,
         }
     }
-},{
-    timestamps:true
+}, {
+    timestamps: true
 })
 
-userSchema.pre("save", function(next) {
-    const password = this.password
-    // this.userpassword = bcrypt.hashSync(password,12)
-    bcrypt.hash(password,5).then(hashedPassword => {
-        this.password = hashedPassword
-        console.log("before saving");
-        next();
-    })
-})
+userSchema.methods.updateLastLogin = function () {
+    // could have used this.updateOne({"meta.lastLogin":new Date().toISOString()})
+    this.meta.set("lastLogin", new Date().toISOString())
+    this.save()
+}
 
-userSchema.post("save", function(doc){
-    // do stuff
-    console.log("After saving");
-})
 
-const User = new mongoose.model("User",userSchema)
+// userSchema.post("save", function(doc){
+//     // do stuff
+//     console.log("After saving user");
+// })
+
+const User = mongoose.model("User", userSchema)
 
 module.exports = User

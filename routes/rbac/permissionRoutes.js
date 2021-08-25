@@ -2,16 +2,16 @@ const express = require("express");
 const permissionController = require("../../controllers/rbac/permissionController")
 const router = express.Router()
 const verifyUser = require("../../middlewares/tokenVerify")
-const permissionChecker = require("../../middlewares/adminOrStaffChecker")
+const {checkForSuperAdminOrStaff} = require("../../middlewares/userTypeChecker")
 
 // permission curd
-router.get("/get-permission/:id", verifyUser, permissionChecker, permissionController.getAllPermissions)
+router.get("/get-permission/:id", verifyUser, checkForSuperAdminOrStaff, permissionController.getAllPermissions)
 
-router.post("/create-permission", verifyUser, permissionChecker, permissionController.createPermission)
+router.post("/create-permission", verifyUser, checkForSuperAdminOrStaff, permissionController.createPermission)
 
-router.get("/all-permission", verifyUser, permissionChecker, permissionController.getAllPermissions)
+router.get("/all-permission", verifyUser, checkForSuperAdminOrStaff, permissionController.getAllPermissions)
 
-router.post("/remove-permission", verifyUser, permissionChecker, permissionController.removePermission)
+router.post("/remove-permission", verifyUser, checkForSuperAdminOrStaff, permissionController.removePermission)
 
 
 // permission generation

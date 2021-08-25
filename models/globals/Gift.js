@@ -11,7 +11,7 @@ const giftSchema = new mongoose.Schema({
     },
     created:{
         type:Date,
-        default:new Date().getTime()
+        default:new Date().toISOString()
     },
     priceInCoins:{
         type:Number,

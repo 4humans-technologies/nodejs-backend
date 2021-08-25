@@ -4,7 +4,14 @@ const modelSchema = new mongoose.Schema({
     rootUser: {
         type: mongoose.Schema.Types.ObjectId,
         // required: true,
+        unique: true,
         ref: "User"
+    },
+    approval: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Approval",
+        required:true,
+        default:null
     },
     name: {
         type: String,
@@ -15,12 +22,13 @@ const modelSchema = new mongoose.Schema({
         required: true,
         minlength: 5,
         maxlength: 24,
+        unique: true
         // add validation here
     },
-    gender:{
-        type:String,
-        required:true,
-        enum:["Male","Female","Custom"]
+    gender: {
+        type: String,
+        required: true,
+        enum: ["Male", "Female", "Custom"]
     },
     email: {
         type: String,
@@ -32,38 +40,41 @@ const modelSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
+    dob:{
+        type:Date,
+        required:true
+    },
     bio: {
         type: String,
-        required: true,
         minlength: 20,
         maxlength: 512
     },
     hobbies: {
         type: [String],
-        required: true
     },
     adminPriceRange: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
-        ref: "priceRange"
+        ref: "PriceRange"
     },
     charges: {
         type: Number,
         required: true,
-        validate: val => v
     },
-    rating:{
-        type:Number,
-        min:0,
-        max:5,
+    rating: {
+        type: Number,
+        min: 0,
+        max: 5,
     },
     isOnline: {
         type: Boolean,
-        default: false
+        default: false,
+        index:true
     },
     isStreaming: {
         type: Boolean,
-        default: false
+        default: false,
+        index:true
     },
     currentStream: {
         type: mongoose.Schema.Types.ObjectId,
@@ -91,20 +102,20 @@ const modelSchema = new mongoose.Schema({
             }
         })
     },
-    streams:[{
-        type:mongoose.Schema.Types.ObjectId,
+    streams: [{
+        type: mongoose.Schema.Types.ObjectId,
         ref: "Streams"
     }],
-    videoCallHistory:[{
-        type:mongoose.Schema.Types.ObjectId,
+    videoCallHistory: [{
+        type: mongoose.Schema.Types.ObjectId,
         ref: "videoCall"
     }],
-    audioCallHistory:[{
-        type:mongoose.Schema.Types.ObjectId,
+    audioCallHistory: [{
+        type: mongoose.Schema.Types.ObjectId,
         ref: "audioCall"
     }]
 })
 
-const Model = new mongoose.model("Model",modelSchema)
+const Model = mongoose.model("Model", modelSchema)
 
 module.exports = Model

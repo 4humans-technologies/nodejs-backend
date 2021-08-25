@@ -2,10 +2,12 @@ const jwt = require('jsonwebtoken');
 const User = require("../models/User");
 
 module.exports = (req, _res, next) => {
-    if(process.env.NODE_ENV !== "DEVELOPMENT"){
+    // if(process.env.NODE_ENV === "DEVELOPMENT"){
+    //     return next()
+    // }
         if (!req.get('Authorization')) {
             const err = new Error("Not Authenticated")
-            err.statusCode = 401
+            err.statusCode = 403
             throw err
     
             // 👇👇 this will not work
@@ -14,7 +16,7 @@ module.exports = (req, _res, next) => {
         const token = req.get('Authorization').split(" ")[1]
         let decodedToken;
         try {
-            decodedToken = jwt.verify(token, 'privatekey9133');
+            decodedToken = jwt.verify(token, process.env.SECRET);
         } catch (error) {
             console.log(error);
             if(error.message === "jwt malformed"){
@@ -36,10 +38,12 @@ module.exports = (req, _res, next) => {
         User.findById(decodedToken.userId,function(err,user){
             if(err){
                 return next(err)
+            }else if (user.needApproval){
+                const error = new Error("User is not approved yet or Banned by admin")
+                error.statusCode = 403
+                return next(error)
             }
             req.user = user
             return next()
         })
-    }
-    next()
 }

@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const giftPurchaseSchema = new mongoose.Schema({
     time:{
         type:Date,
-        default: new Date().getTime()
+        default: new Date().toISOString()
     },
     gifts:[
         {

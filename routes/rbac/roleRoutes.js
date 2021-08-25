@@ -3,16 +3,16 @@ const roleController = require("../../controllers/rbac/roleController")
 
 // NECESSARY MIDDLEWARE--->
 const verifyToken = require("../../middlewares/tokenVerify")
-const permissionChecker = require("../../middlewares/adminOrStaffChecker")
+const {checkForSuperAdminOrStaff} = require("../../middlewares/userTypeChecker")
 
-router.post("/create-role", verifyToken, permissionChecker, roleController.createRole)
+router.post("/create-role", verifyToken, checkForSuperAdminOrStaff, roleController.createRole)
 
-router.post("/update-role", verifyToken, permissionChecker, roleController.updateRole)
+router.post("/update-role", verifyToken, checkForSuperAdminOrStaff, roleController.updateRole)
 
-router.post("/remove-role", verifyToken, permissionChecker, roleController.removeRole)
+router.post("/remove-role", verifyToken, checkForSuperAdminOrStaff, roleController.removeRole)
 
-router.get("/get-role/:roleId", verifyToken, permissionChecker, roleController.getRole)
+router.get("/get-role/:roleId", verifyToken, checkForSuperAdminOrStaff, roleController.getRole)
 
-router.get("/get-all-role", verifyToken, permissionChecker, roleController.getAllRoles)
+router.get("/get-all-role", verifyToken, checkForSuperAdminOrStaff, roleController.getAllRoles)
 
 module.exports = router

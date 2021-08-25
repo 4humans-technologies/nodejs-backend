@@ -12,18 +12,25 @@ exports.createRole = (req, res, next) => {
         }
     }, "value")
         .then(permissions => {
-            return Role({
-                permissions: permissions.map(permission => permission.value),
-                roleName: roleName,
-                createdBy: req.user || null
-            }).save()
+            if(permissions.length !== 0){
+                return Role({
+                    permissions: permissions.map(permission => permission.value),
+                    roleName: roleName,
+                    createdBy: req.user || null
+                }).save()
+                .then(role => {
+                    res.status(201).json({
+                        message: "role created successfully",
+                        doc: role
+                    })
+                })
+            }else{
+                const error = new Error("permission ids are invalid")
+                error.statusCode = 400
+                throw error
+            }
         })
-        .then(role => {
-            res.status(201).json({
-                message: "role created successfully",
-                doc: role
-            })
-        }).catch(err => {
+        .catch(err => {
             const error = new Error(err.message || err.errMsg || "Role not created")
             error.statusCode = err.status || err.statusCode || 500
             error.data = {
