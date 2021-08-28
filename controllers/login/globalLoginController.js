@@ -9,47 +9,50 @@ const jwtGenerator = require("../../utils/generateJwt")
 const generateJwt = require("../../utils/generateJwt")
 
 
-exports.loginHandler = (req,res,next) => {
-    errorCollector(req,"Username of Password is incorrect, please try again!")
+exports.loginHandler = (req, res, next) => {
+    errorCollector(req, "Username of Password is incorrect, please try again!")
 
-    const {username, password } = req.body    
+    const { username, password } = req.body
     let theUser;
     User.findOne({
-        username:username
+        username: username
     })
-    .populate("role","roleName")
-    .exec()
-    .then(user => {
-        if(!user){
-            const error = new Error("Invalid credentials  ")
-            error.statusCode = 422
-            throw error
-        }
-        theUser = user
-        return bcrypt.compare(password,user.password)
-    })
-    .then(didMatched => {
-        if(!didMatched){
-            const error = new Error("Invalid credentials")
-            error.statusCode = 422
-            throw error
-        }
-
-        theUser.updateLastLogin()
-        const hours = 100
-        res.status(200).json({
-            actionStatus:"success",
-            token:generateJwt({
-                hours:hours,
-                userId:theUser._id,
-                relatedUserId:theUser.relatedUser._id,
-                userType:theUser.userType,
-                role:theUser.role.roleName
-            }),
-            expiresIn:hours
+        .populate("role", "roleName")
+        .exec()
+        .then(user => {
+            if (!user) {
+                const error = new Error("Invalid credentials  ")
+                error.statusCode = 422
+                throw error
+            }
+            theUser = user
+            return bcrypt.compare(password, user.password)
         })
-    })
-    .catch(err => {
-        next(err)
-    })
+        .then(didMatched => {
+            if (!didMatched) {
+                const error = new Error("Invalid credentials")
+                error.statusCode = 422
+                throw error
+            }
+
+            theUser.updateLastLogin()
+            const hours = 100
+            res.status(200).json({
+                actionStatus: "success",
+                userType: theUser.userType,
+                userId: theUser._id,
+                relatedUserId: theUser.relatedUser._id,
+                expiresIn: hours,
+                token: generateJwt({
+                    hours: hours,
+                    userId: theUser._id,
+                    relatedUserId: theUser.relatedUser._id,
+                    userType: theUser.userType,
+                    role: theUser.role.roleName
+                })
+            })
+        })
+        .catch(err => {
+            next(err)
+        })
 }
