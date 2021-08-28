@@ -24,6 +24,13 @@ if (process.env.HOSTED_DB === "true") {
     CONNECT_URL = `mongodb://127.0.0.1:27017/${process.env.DB_NAME}`
 }
 
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'PUT, GET, POST, DELETE, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    next()
+})
+
 
 // ALL HTTP ROUTES--->
 app.use("/api/website/permissions", permissionRouter);
