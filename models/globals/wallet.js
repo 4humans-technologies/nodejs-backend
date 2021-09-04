@@ -32,6 +32,19 @@ const walletSchema = new mongoose.Schema({
     }
 })
 
+walletSchema.methods.deductAmount = function(amount){
+    if(this.currentAmount >= amount){
+        this.currentAmount = this.currentAmount - amount
+    }
+    const error = new Error("don't have sufficient balance to perform this call")
+    error.statusCode = 401
+    throw error
+}
+
+walletSchema.methods.addAmount = function(amount){
+    this.currentAmount = this.currentAmount + amount
+}
+
 const Wallet = mongoose.model("Wallet", walletSchema)
 
 module.exports = Wallet

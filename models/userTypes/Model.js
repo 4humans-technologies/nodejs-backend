@@ -10,8 +10,8 @@ const modelSchema = new mongoose.Schema({
     approval: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Approval",
-        required:true,
-        default:null
+        required: true,
+        default: null
     },
     name: {
         type: String,
@@ -40,9 +40,9 @@ const modelSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    dob:{
-        type:Date,
-        required:true
+    dob: {
+        type: Date,
+        required: true
     },
     bio: {
         type: String,
@@ -52,14 +52,31 @@ const modelSchema = new mongoose.Schema({
     hobbies: {
         type: [String],
     },
+    sharePercent:Number,
     adminPriceRange: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
         ref: "PriceRange"
     },
     charges: {
-        type: Number,
-        required: true,
+        type: Map,
+        of:Number
+        // {
+        //     videoCall:2,
+        //     audioCall:4
+        // }
+    },
+    minCallDuration:{
+        // in minutes
+        type:Number,
+        required:true,
+        default:2
+    },
+    timeForAcceptingCall:{
+        // in seconds
+        type:Number,
+        required:true,
+        default:30
     },
     rating: {
         type: Number,
@@ -69,12 +86,12 @@ const modelSchema = new mongoose.Schema({
     isOnline: {
         type: Boolean,
         default: false,
-        index:true
+        index: true
     },
     isStreaming: {
         type: Boolean,
         default: false,
-        index:true
+        index: true
     },
     currentStream: {
         type: mongoose.Schema.Types.ObjectId,
@@ -113,6 +130,15 @@ const modelSchema = new mongoose.Schema({
     audioCallHistory: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "audioCall"
+    }],
+    pendingCalls: [{
+        type: Map,
+        of: Map
+    }],
+    dailyIncome:[{
+        date:Date,
+        revenue:Number,
+        netIncome:Number
     }]
 })
 
