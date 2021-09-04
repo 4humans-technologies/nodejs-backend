@@ -76,9 +76,10 @@ exports.handleModelCancelingAudioCalling = (req, res, next) => {
     io.to(callId).emit(socketEvents.modelCancelAudioCalling, { modelName, modelId, callId })
 }
 
-exports.handleViewerAcceptingVideoCalling = (req, res, next) => {
-    const { callId } = req.body
-    VideoCall.findById(callId)
+exports.handleViewerAcceptingCall = (req, res, next) => {
+    const { callId, callType } = req.body
+    let theCall = callType === "audioCall" ? AudioCall : VideoCall 
+    theCall.findById(callId)
         .then(call => {
             if (call.viewer._id.toString() !== req.user.relatedUser._id) {
                 if (call.status !== ("ongoing" || "completed")) {
@@ -86,22 +87,25 @@ exports.handleViewerAcceptingVideoCalling = (req, res, next) => {
                     // and transfer it to the model according to the share percentage
 
                     const modelPr = Model.findById(call.model._id)
-                    const viewerPr = Viewer.findById(call.viewer._id)
                     const modelWalletPr = Wallet.findOne({ relatedUser: call.model })
                     const viewerWalletPr = Wallet.findOne({ relatedUser: call.viewer })
 
-                    return Promise.all([modelPr, viewerPr, modelWalletPr, viewerWalletPr])
+                    return Promise.all([modelPr, modelWalletPr, viewerWalletPr])
                 }
-                const error = new Error("This video call is has been already completed or on going with other user")
+                const error = new Error(`This ${callType} is has been already completed or on going with other user`)
                 error.statusCode = 422
                 throw error
             }
-            const error = new Error("You are not allowed this call, this call is for another viewer to take")
+            const error = new Error(`You are not allowed this ${callType}, this ${callType} is for another viewer to take`)
             error.statusCode = 401
             throw error
         })
-        .then(([model, viewer, modelWallet, viewerWallet]) => {
-            const minCharges = model.charges * model.minDuration
+        .then(([model, modelWallet, viewerWallet]) => {
+            let minCharges
+            if(callType === "audioCall"){
+                minCharges = model.get("charges.audioCall") * model.minDuration
+            }
+            minCharges = model.get("charges.videoCall") * model.minDuration
             try {
                 viewerWallet.deductAmount(minCharges)
             } catch (error) {
@@ -110,8 +114,8 @@ exports.handleViewerAcceptingVideoCalling = (req, res, next) => {
             modelWallet.addAmount(minCharges * (model.sharePercent / 100))
             // rest add to the admin wallet
             // TODO: transfer coins to admin also
-            
-            return Promise.all([modelWallet.save(), viewerWallet.save()])
+            call.status = "ongoing"
+            return Promise.all([modelWallet.save(), viewerWallet.save(), call.save()])
         })
         .then(() => {
             io.to(callId).emit(socketEvents.addedMoneyToWallet, { amount: minCharges * (model.sharePercent / 100) })
