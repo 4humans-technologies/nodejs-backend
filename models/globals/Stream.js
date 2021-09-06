@@ -21,7 +21,7 @@ const streamSchema = new mongoose.Schema({
     endReason: {
         type: String,
         required: true,
-        default: null,
+        default: "Error",
         enum: ["AudioCall", "VideoCall", "Manual", "Error"]
     },
     meta: {

@@ -10,19 +10,24 @@ const socketEvents = require("../../utils/socket/socketEvents")
 
 exports.createStreamAndToken = (req, res, next) => {
     // create stream and generate token for model
+    // this end point will be called by the model
+
     controllerErrorCollector(req)
     const { modelId, modelUserId } = req.body
     // will keep channel as modelID
-    const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator("model", modelId, modelId)
+    const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator("model", req.user.relatedUser._id, req.user.relatedUser._id)
+    // check if the model is approved or not,
+    // by making a new model approval checker
 
     let theStream;
     Stream({
-        model: modelId
+        model: req.user.relatedUser._id,
+        createdAt: new Date().toISOString()
     })
         .save()
         .then(stream => {
             theStream = stream
-            return Model.findOneAndUpdate({ _id: modelId },
+            return Model.findOneAndUpdate({ _id: req.user.relatedUser._id },
                 {
                     isStreaming: true,
                     currentStream: stream._id,

@@ -18,10 +18,10 @@ module.exports = {
     // model accepting/declining calls events
     // naming is not correct these are not for call but
     // for the call requests
-    modelAcceptedVideoCall:"model-accepted-video-call",
-    modelAcceptedAudioCall:"model-accepted-audio-call",
-    modelDeclinedVideoCall:"model-declined-video-call",
-    modelDeclinedAudioCall:"model-declined-audio-call",
+    modelAcceptedVideoCallRequest:"model-accepted-video-call",
+    modelAcceptedAudioCallRequest:"model-accepted-audio-call",
+    modelDeclinedVideoCallRequest:"model-declined-video-call",
+    modelDeclinedAudioCallRequest:"model-declined-audio-call",
 
     // money transfer events
     addedMoneyToWallet:"add-mony-wallet",
@@ -34,8 +34,14 @@ module.exports = {
     modelCancelAudioCalling:'model-cancel-audio-calling',
     viewerAcceptedAudioCalling:"viewer-accepted-audio-calling",
     viewerAcceptedVideoCalling:"viewer-accepted-video-calling",
+    viewerAcceptedCall:"viewer-accepted-call",
 
     // 
+    callHasStarted:"call-has-started",
+    callHasEnded:"call-has-ended",
+
+    // notifying model that the disconnected viewer has joined again
+    // u can have can now
     canAudiCallUsersConnectedAgain:"cacuca",
     canVideoCallUsersConnectedAgain:"cvcuca",
 

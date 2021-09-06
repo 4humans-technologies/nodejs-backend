@@ -33,10 +33,10 @@ const userSchema = new mongoose.Schema({
         required: true,
         refPath: "userType"
     },
-    needApproval:{
-        type:Boolean,
-        required:true,
-        default:true
+    needApproval: {
+        type: Boolean,
+        required: true,
+        default: true
     },
     meta: {
         type: Map,
@@ -45,9 +45,7 @@ const userSchema = new mongoose.Schema({
             lastLogin: null,
         }
     }
-}, {
-    timestamps: true
-})
+}, { timestamps: true })
 
 userSchema.methods.updateLastLogin = function () {
     // could have used this.updateOne({"meta.lastLogin":new Date().toISOString()})
