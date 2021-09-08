@@ -16,12 +16,12 @@ router.post("/",
                     }
                 })
         }).toLowerCase(),
-        body("password").notEmpty().isString().isAlphanumeric(),
+        body("password").notEmpty().isString(),
         body("name").notEmpty().isString().trim().escape().toLowerCase(),
         body("screenName").notEmpty().isString().trim().escape().toLowerCase(),
         body("email").notEmpty().isEmail().normalizeEmail(),
         body("gender").notEmpty().isString(),
-        body("phone").notEmpty().isMobilePhone(),
+        body("phone").notEmpty(),
     ], viewerController.createViewer
 )
 
