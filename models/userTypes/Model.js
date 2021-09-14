@@ -10,20 +10,11 @@ const modelSchema = new mongoose.Schema({
     approval: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Approval",
-        required: true,
         default: null
     },
     name: {
         type: String,
         required: true
-    },
-    screenName: {
-        type: String,
-        required: true,
-        minlength: 5,
-        maxlength: 24,
-        unique: true
-        // add validation here
     },
     gender: {
         type: String,
@@ -41,7 +32,9 @@ const modelSchema = new mongoose.Schema({
         unique: true
     },
     dob: {
-        type: Date,
+        // will store only year
+        // i.e - birth year
+        type: Number,
         required: true
     },
     bio: {
@@ -90,16 +83,14 @@ const modelSchema = new mongoose.Schema({
     },
     currentStream: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
         ref: "Stream"
     },
-    profileImages: {
+    profileImage: {
         type: String,
         required: true
     },
     publicImages: {
         type: [String],
-        required: true
     },
     privateImages: {
         type: Map,
