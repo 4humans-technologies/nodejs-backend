@@ -10,6 +10,9 @@ const generateJwt = require("../../utils/generateJwt")
 
 
 exports.loginHandler = (req, res, next) => {
+    /**
+     * login route for Model and Viewer only
+     */
     errorCollector(req, "Username of Password is incorrect, please try again!")
 
     const { username, password } = req.body
@@ -17,8 +20,6 @@ exports.loginHandler = (req, res, next) => {
     User.findOne({
         username: username
     })
-        .populate("role", "roleName")
-        .exec()
         .then(user => {
             if (!user) {
                 const error = new Error("Invalid credentials  ")
@@ -48,7 +49,7 @@ exports.loginHandler = (req, res, next) => {
                     userId: theUser._id,
                     relatedUserId: theUser.relatedUser._id,
                     userType: theUser.userType,
-                    role: theUser.role.roleName
+                    role: theUser?.role.roleName || "no-role"
                 })
             })
         })

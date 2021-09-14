@@ -29,29 +29,19 @@ exports.createViewer = (req, res, next) => {
         })
         .then(viewer => {
             theViewer = viewer
-            return Role.findOne({ roleName: "viewer" })
-        })
-        .then(role => {
-            if (role !== null) {
-                const salt = bcrypt.genSaltSync(5)
-                const hashedPassword = bcrypt.hashSync(password, salt)
-                return User({
-                    username: username,
-                    password: hashedPassword,
-                    permissions: role.permissions,
-                    role: role,
-                    userType: "Viewer",
-                    relatedUser: theViewer,
-                    needApproval:false,
-                    meta: {
-                        lastLogin: new Date().toISOString()
-                    }
-                }).save()
-            } else {
-                const error = new Error("viewer role not set, A role with name viewer is required, admin has has deleted it by mistake")
-                error.statusCode = 500
-                throw error
-            }
+            const salt = bcrypt.genSaltSync(5)
+            const hashedPassword = bcrypt.hashSync(password, salt)
+            return User({
+                username: username,
+                password: hashedPassword,
+                permissions: [],
+                userType: "Viewer",
+                relatedUser: theViewer,
+                needApproval: false,
+                meta: {
+                    lastLogin: new Date().toISOString()
+                }
+            }).save()
         })
         .then(userDoc => {
             theUser = userDoc
