@@ -66,7 +66,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
 
     })
 
-    const viewerPr = Viewer.update({
+    const viewerPr = Viewer.updateOne({
         _id: viewerId
     }, {
         $push: { streams: Types.ObjectId(streamId) }

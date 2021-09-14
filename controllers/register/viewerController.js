@@ -94,6 +94,9 @@ exports.createViewer = (req, res, next) => {
 }
 
 exports.updateByUser = (req, res, next) => {
+    /**
+     * handles when user updates profile from his dashboard
+     */
     errorCollector(req, "Invalid form details, please try again")
 
     const { name, screenName, email, phone, gender } = req.body

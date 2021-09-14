@@ -12,7 +12,7 @@ exports.createModel = (req, res, next) => {
     const { username, password, name, screenName, email, phone, gender, DOB } = req.body
     let theWallet, theModel, theUser;
 
-
+     
     Wallet({
         userType: "Model",
         currentAmount: 0
@@ -32,29 +32,20 @@ exports.createModel = (req, res, next) => {
         })
         .then(model => {
             theModel = model
-            return Role.findOne({ roleName: "model" })
-        })
-        .then(role => {
-            if (role !== null) {
-                const salt = bcrypt.genSaltSync(5)
-                const hashedPassword = bcrypt.hashSync(password, salt)
-                return User({
-                    username: username,
-                    password: hashedPassword,
-                    permissions: role.permissions,
-                    role: role,
-                    userType: "model",
-                    relatedUser: theModel,
-                    needApproval:true,
-                    meta: {
-                        lastLogin: new Date().toISOString()
-                    }
-                }).save()
-            } else {
-                const error = new Error("model role not set, A role with name model is required, admin has has deleted it by mistake")
-                error.statusCode = 500
-                throw error
-            }
+            const salt = bcrypt.genSaltSync(5)
+            const hashedPassword = bcrypt.hashSync(password, salt)
+            return User({
+                username: username,
+                password: hashedPassword,
+                permissions: role.permissions,
+                role: role,
+                userType: "model",
+                relatedUser: theModel,
+                needApproval: true,
+                meta: {
+                    lastLogin: new Date().toISOString()
+                }
+            }).save()
         })
         .then(userDoc => {
             theUser = userDoc
@@ -76,7 +67,7 @@ exports.createModel = (req, res, next) => {
         })
         .catch(err => {
             try {
-                // if registeration failed delete all the models created
+                // if registration failed delete all the models created
                 theWallet.remove(function (err, doc) {
                     console.log("wallet removed ", doc);
                 })

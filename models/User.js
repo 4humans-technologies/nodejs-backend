@@ -7,8 +7,8 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true,
         lowercase: true,
-        // unique: true,
-        // index:true
+        unique: true,
+        index:true
     },
     password: {
         type: String,
@@ -16,11 +16,9 @@ const userSchema = new mongoose.Schema({
     },
     permissions: {
         type: [String],
-        required: true
     },
     role: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
         ref: "Role"
     },
     userType: {
