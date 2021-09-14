@@ -49,7 +49,7 @@ exports.loginHandler = (req, res, next) => {
                     userId: theUser._id,
                     relatedUserId: theUser.relatedUser._id,
                     userType: theUser.userType,
-                    role: theUser?.role.roleName || "no-role"
+                    role: theUser?.role?.roleName || "no-role"
                 })
             })
         })
