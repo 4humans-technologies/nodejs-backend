@@ -48,7 +48,6 @@ const modelSchema = new mongoose.Schema({
     sharePercent: Number,
     adminPriceRange: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
         ref: "PriceRange"
     },
     charges: {
