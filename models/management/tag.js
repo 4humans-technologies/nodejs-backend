@@ -1,22 +1,18 @@
 const mongoose = require("mongoose")
 
 const tagSchema = new mongoose.Schema({
-    name:{
-        type:String,
-        required:true,
-        unique:true
+    name: {
+        type: String,
+        required: true,
+        unique: true
     },
-    description:String,
-    modelCount:{
-        type:Number,
-        default:0
+    description: String,
+    modelCount: {
+        type: Number,
+        default: 0
     },
-    tagGroups:[{
-        type: mongoose.Schema.Types.ObjectId,
-        ref:"TagGroup"
-    }]
-},{timestamps:true})
+}, { timestamps: true })
 
-const Tag = mongoose.model("Tag",tagSchema)
+const Tag = mongoose.model("Tag", tagSchema)
 
 module.exports = Tag

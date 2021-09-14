@@ -7,7 +7,16 @@ const socket = require("./socket")
 const socketMiddlewares = require("./utils/socket/socketMiddleware")
 const socketListeners = require("./utils/socket/socketEventListeners")
 
-// ROUTERS--->
+// ❌❌❌❌
+/**
+ * create new agora project for dreamgirl
+ * previuous one's cred's may have been leaked
+ * ------
+ * escape user inputs also
+ */
+// ❌❌❌❌
+
+// 🔴 WEBSITE ROUTER 🔴
 const permissionRouter = require("./routes/rbac/permissionRoutes")
 const roleRouter = require("./routes/rbac/roleRoutes")
 const viewerRouter = require("./routes/register/viewerRoutes")
@@ -15,9 +24,14 @@ const modelRouter = require("./routes/register/modelRoutes")
 const superAdminRouter = require("./routes/register/superadminRoutes")
 const globalLoginRoutes = require("./routes/login/globalLoginRoutes")
 const tokenBuilderRouter = require("./routes/agora/tokenBuilderRoutes")
+const testRouter = require("./routes/test/test")
 // category is Depreciated, will now use Tag-group and tags
 // const categoryRoutes = require("./routes/management/categoryRoutes")
 const tagRouter = require("./routes/management/tagRoutes");
+
+// 🔴 ADMIN ROUTES 🔴
+const adminPermissions = require("./routes/ADMIN/permissions")
+
 const AudioCall = require("./models/globals/audioCall");
 const VideoCall = require("./models/globals/videoCall");
 const socketEvents = require("./utils/socket/socketEvents");
@@ -49,6 +63,8 @@ app.use("/api/website/login", globalLoginRoutes)
 // app.use("/api/website/management/category", categoryRoutes)
 app.use("/api/website/management/tags", tagRouter)
 app.use("/api/website/token-builder", tokenBuilderRouter)
+app.use("/api/admin/permissions", adminPermissions)
+app.use("/test", testRouter)
 
 
 // EXPRESS ERROR HANDLER--->
@@ -57,13 +73,13 @@ app.use((err, req, res, next) => {
     if (!err.statusCode) {
         res.status(500).json({
             message: err.message || "error",
-            actionStaus: err.actionStaus || "failed",
+            actionStatus: err.actionStatus || "failed",
             data: err.data || ""
         })
     } else {
         res.status(err.statusCode).json({
             message: err.message || "error",
-            actionStaus: err.actionStaus || "failed",
+            actionStatus: err.actionStatus || "failed",
             data: err.data || ""
         })
     }
@@ -97,26 +113,27 @@ mongoose.connect(
     // example of socket middleware 👇👇
     io.use(socketMiddlewares.verifyToken)
     io.on("connection", client => {
+        socket.setClientSocket(client)
         console.log("New Connection", client.data, client.userType);
         if (client.handshake.query.hasAudioCall || client.handshake.query.hasVideoCall) {
             if (client.authed) {
                 if (client.handshake.query.hasAudioCall) {
                     AudioCall.findById(client.handshake.query.callId)
-                    .then(call => {
-                        if(call.viewer._id == client.data.relatedUserId){
-                            client.join(callId)
-                            io.to(callId).emit(socketEvents.canAudiCallUsersConnectedAgain, {callId})
-                        }
-                    })
+                        .then(call => {
+                            if (call.viewer._id == client.data.relatedUserId) {
+                                client.join(callId)
+                                io.to(callId).emit(socketEvents.canAudiCallUsersConnectedAgain, { callId })
+                            }
+                        })
                 } else if (client.handshake.query.hasVideoCall) {
                     VideoCall.findById(client.handshake.query.callId)
-                    .then(call => {
-                        if(call.viewer._id == client.data.relatedUserId){
-                            client.join(callId)
-                            io.to(callId).emit(socketEvents.canVideoCallUsersConnectedAgain, {callId})
+                        .then(call => {
+                            if (call.viewer._id == client.data.relatedUserId) {
+                                client.join(callId)
+                                io.to(callId).emit(socketEvents.canVideoCallUsersConnectedAgain, { callId })
 
-                        }
-                    })
+                            }
+                        })
                 }
             }
         }

@@ -52,31 +52,26 @@ const modelSchema = new mongoose.Schema({
     hobbies: {
         type: [String],
     },
-    sharePercent:Number,
+    sharePercent: Number,
     adminPriceRange: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
         ref: "PriceRange"
     },
     charges: {
-        type: Map,
-        of:Number
-        // {
-        //     videoCall:2,
-        //     audioCall:4
-        // }
+        audioCall: Number,
+        videoCall: Number
     },
-    minCallDuration:{
+    minCallDuration: {
         // in minutes
-        type:Number,
-        required:true,
-        default:2
+        type: Number,
+        default: 2
     },
-    timeForAcceptingCall:{
+    timeForAcceptingCall: {
         // in seconds
-        type:Number,
-        required:true,
-        default:30
+        type: Number,
+        required: true,
+        default: 30
     },
     rating: {
         type: Number,
@@ -125,22 +120,42 @@ const modelSchema = new mongoose.Schema({
     }],
     videoCallHistory: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: "videoCall"
+        ref: "VideoCall"
     }],
     audioCallHistory: [{
         type: mongoose.Schema.Types.ObjectId,
-        ref: "audioCall"
+        ref: "AudioCall"
     }],
     pendingCalls: [{
         type: Map,
         of: Map
     }],
-    dailyIncome:[{
-        date:Date,
-        revenue:Number,
-        netIncome:Number
+    dailyIncome: [{
+        date: Date,
+        revenue: Number,
+        netIncome: Number
+    }],
+    tags: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Tag"
     }]
 })
+
+modelSchema.index({
+    name: "text",
+    userName:"text",
+    screenName:"text",
+    bio:"text",
+    hobbies:"text"
+}, {
+    name: "ModelSearch index",
+    weights: {
+        name: 2,
+        userName:2,
+        screenName:2,
+    }
+}
+)
 
 const Model = mongoose.model("Model", modelSchema)
 

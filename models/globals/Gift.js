@@ -1,26 +1,26 @@
 const mongoose = require("mongoose");
 
 const giftSchema = new mongoose.Schema({
-    name:{
-        type:String,
-        required:true
+    name: {
+        type: String,
+        required: true
     },
-    image:{
-        type:String,
-        required:true
+    imageUrl: {
+        type: String,
+        required: true
     },
-    created:{
-        type:Date,
-        default:new Date().toISOString()
+    price: {
+        type: Number,
+        required: true
     },
-    priceInCoins:{
-        type:Number,
-        required:true
-    },
-    priceInRupee:{
-        type:Number,
-        required:true
-    }
+    packages: [{
+        giftCount: Number,
+        price: Number
+    }]
     // packages and bundles
 
-})
+}, { timestamps: true })
+
+const Gift = mongoose.model("Gift", giftSchema)
+
+module.exports = Gift

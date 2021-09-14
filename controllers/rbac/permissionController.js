@@ -1,5 +1,7 @@
+const Permission = require("../../models/Permission")
 const generateCode = require("../../utils/generateCode")
 const { generatePermissionsForModel } = require("../../utils/generatePermissions")
+
 
 exports.getPermissions = (req, res, next) => {
     const id = req.params.id

@@ -12,20 +12,21 @@ exports.createRole = (req, res, next) => {
         }
     }, "value")
         .then(permissions => {
-            if(permissions.length !== 0){
+            if (permissions.length !== 0) {
                 return Role({
                     permissions: permissions.map(permission => permission.value),
                     roleName: roleName,
                     createdBy: req.user || null
                 }).save()
-                .then(role => {
-                    res.status(201).json({
-                        message: "role created successfully",
-                        doc: role
+                    .then(role => {
+                        res.status(201).json({
+                            message: `role ${roleName} was created successfully`,
+                            actionStatus: "success",
+                            doc: role
+                        })
                     })
-                })
-            }else{
-                const error = new Error("permission ids are invalid")
+            } else {
+                const error = new Error("selected permission(s) were not found")
                 error.statusCode = 400
                 throw error
             }
@@ -124,26 +125,26 @@ exports.getAllRoles = (req, res, next) => {
     const limit = +req.query.limit || 10
 
     Role.find({ createdAt: { $lte: new Date().toISOString() } })
-    .skip((page - 1)*limit)
-    .limit(limit)
-    .sort("-createdAt")
-    .then(roles => {
-        return Role.count()
-        .then(count => {
-            if(roles !== null && roles.length !== 0){
-                res.status(200).json({
-                    message:"Fetched roles successfully",
-                    docs:roles,
-                    count:count,
-                    pages:Math.ceil(count/limit),
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .sort("-createdAt")
+        .then(roles => {
+            return Role.count()
+                .then(count => {
+                    if (roles !== null && roles.length !== 0) {
+                        res.status(200).json({
+                            message: "Fetched roles successfully",
+                            docs: roles,
+                            count: count,
+                            pages: Math.ceil(count / limit),
+                        })
+                    } else {
+                        const error = new Error("Exceeded limit, this much role does not exist")
+                        error.statusCode = 400
+                        throw error
+                    }
                 })
-            }else {
-                const error = new Error("Exceeded limit, this much role does not exist")
-                error.statusCode = 400
-                throw error
-            }
+        }).catch(err => {
+            return next(err)
         })
-    }).catch(err => {
-        return next(err)
-    })
 }

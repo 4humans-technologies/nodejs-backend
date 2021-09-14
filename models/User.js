@@ -7,8 +7,8 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true,
         lowercase: true,
-        // unique: true,
-        // index:true
+        unique: true,
+        index:true
     },
     password: {
         type: String,
@@ -16,11 +16,9 @@ const userSchema = new mongoose.Schema({
     },
     permissions: {
         type: [String],
-        required: true
     },
     role: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
         ref: "Role"
     },
     userType: {
@@ -33,10 +31,10 @@ const userSchema = new mongoose.Schema({
         required: true,
         refPath: "userType"
     },
-    needApproval:{
-        type:Boolean,
-        required:true,
-        default:true
+    needApproval: {
+        type: Boolean,
+        required: true,
+        default: true
     },
     meta: {
         type: Map,
@@ -45,9 +43,7 @@ const userSchema = new mongoose.Schema({
             lastLogin: null,
         }
     }
-}, {
-    timestamps: true
-})
+}, { timestamps: true })
 
 userSchema.methods.updateLastLogin = function () {
     // could have used this.updateOne({"meta.lastLogin":new Date().toISOString()})

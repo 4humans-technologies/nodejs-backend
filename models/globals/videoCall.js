@@ -21,8 +21,8 @@ const videoCallSchema = new mongoose.Schema({
         type: String,
         required: true,
         default: "model-accept-pending",
-        enum: ["model-accept-pending", "model-accepted", "model-accepted-stream-ended","ongoing", "completed","viewer-call-not-received"],
-        index:true
+        enum: ["model-accept-pending", "model-accepted","model-declined", "model-accepted-stream-ended", "ongoing", "completed", "viewer-call-not-received"],
+        index: true
     },
     callDuration: {
         type: Number,
@@ -42,14 +42,24 @@ const videoCallSchema = new mongoose.Schema({
         ref: "Gifts"
     }],
     moneySpent: {
-        type: Map,
-        default: {
-            onCall: 0,
-            onGift: {
-                gitsCount: 0,
-                total: 0
-            }
-        }
+        onCall: {
+            type: Number,
+            default: 0
+        },
+        onGift: {
+            type: Number,
+            default: 0
+        },
+    },
+    lastPolled: Date,
+    startedAt: {
+        type: Date,
+        default: null
+    },
+    endReason: {
+        type: String,
+        default: "network-error",
+        enum: ["manual", "low-balance", "network-error"]
     }
 }, { timestamps: true })
 
