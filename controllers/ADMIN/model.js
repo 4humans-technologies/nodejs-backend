@@ -6,6 +6,27 @@ const errorCollector = require("../../utils/controllerErrorCollector")
 const bcrypt = require("bcrypt")
 const Approval = require("../../models/management/approval")
 const paginator = require("../../utils/paginator")
+const Tag = require("../../models/management/tag")
+const PriceRange = require("../../models/management/priceRanges")
+const Category = require("../../models/management/category")
+
+exports.sendCreateData = (req, res, next) => {
+    // get request
+    Promise.all([
+        Tag.find({}, "name"),
+        PriceRange.find({}, "name minCharges maxCharges"),
+        Category.find({}, "name")
+    ])
+        .then(values => {
+            res.status(200).json({
+                actionStatus: "success",
+                tags: values[0],
+                priceRanges: values[1],
+                categories: values[2]
+            })
+        })
+        .catch(err => next(err))
+}
 
 exports.createModel = (req, res, next) => {
     /**
@@ -121,7 +142,7 @@ exports.getModel = (req, res, next) => {
 
     Model.findById(modelId)
         .then(model => {
-            if(!model){
+            if (!model) {
                 // ERROR 🔴
             }
             res.status(200).json({

@@ -38,7 +38,6 @@ exports.createModel = (req, res, next) => {
                 username: username,
                 password: hashedPassword,
                 permissions: role.permissions,
-                role: role,
                 userType: "model",
                 relatedUser: theModel,
                 needApproval: true,
