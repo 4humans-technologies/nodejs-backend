@@ -39,7 +39,7 @@ exports.createModel = (req, res, next) => {
                 permissions: [],
                 userType: "Model",
                 relatedUser: theModel,
-                needApproval: true,
+                needApproval: false, //🔴🔴 set to true only for testing
                 meta: {
                     lastLogin: new Date().toISOString()
                 }

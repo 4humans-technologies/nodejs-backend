@@ -13,6 +13,7 @@ exports.loginHandler = (req, res, next) => {
     /**
      * login route for Model and Viewer only
      */
+    
     errorCollector(req, "Username of Password is incorrect, please try again!")
 
     const { username, password } = req.body

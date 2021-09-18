@@ -13,8 +13,15 @@ exports.createStreamAndToken = (req, res, next) => {
     // this end point will be called by the model
 
     controllerErrorCollector(req)
-    const { modelId, modelUserId } = req.body
     // will keep channel as modelID
+
+    // 🔴🔴
+    // if(!req.user.relatedUser.approval._id){
+    //     // throw ERROR
+    //     // or
+    //     // create a middleware to check for this every time
+    // }
+
     const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator("model", req.user.relatedUser._id, req.user.relatedUser._id)
     // check if the model is approved or not,
     // by making a new model approval checker
@@ -37,7 +44,7 @@ exports.createStreamAndToken = (req, res, next) => {
         .then(model => {
             // io.join(theStream._id)
             // everybody will get the notification of new stream
-            io.getIO().emit(socketEvents.streamCreated, { modelId:modelId, modelName:model.screenName, streamId:theStream._id })
+            io.getIO().emit(socketEvents.streamCreated, { modelId:req.user._id, modelName:model.screenName, streamId:theStream._id })
             res.status(200).json({
                 actionStatus: "success",
                 rtcToken: rtcToken,
