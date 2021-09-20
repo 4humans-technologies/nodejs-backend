@@ -216,3 +216,7 @@ exports.handleModelDeclineCallRequest = (req, res, next) => {
         })
         .catch(err => next(err))
 }
+
+exports.setOngoing = (req, res, next) => {
+  const { streamId } = req.body;
+};

@@ -28,9 +28,10 @@ const testRouter = require("./routes/test/test")
 // category is Depreciated, will now use Tag-group and tags
 // const categoryRoutes = require("./routes/management/categoryRoutes")
 const tagRouter = require("./routes/management/tagRoutes");
+const uxUtils = require("./routes/uxUtils/uxUtilsRoutes");
 
 // 🔴 ADMIN ROUTES 🔴
-const adminPermissions = require("./routes/ADMIN/permissions")
+const adminPermissions = require("./routes/ADMIN/permissions");
 
 const AudioCall = require("./models/globals/audioCall");
 const VideoCall = require("./models/globals/videoCall");
@@ -39,18 +40,20 @@ const socketEvents = require("./utils/socket/socketEvents");
 // CONNECT-URL--->
 let CONNECT_URL;
 if (process.env.HOSTED_DB === "true") {
-    CONNECT_URL = `mongodb+srv://${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_USER}:${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_PASS}@dreamgirl-cluster-0.65bjj.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`
+  CONNECT_URL = `mongodb+srv://${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_USER}:${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_PASS}@dreamgirl-cluster-0.65bjj.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`;
 } else {
-    CONNECT_URL = `mongodb://127.0.0.1:27017/${process.env.DB_NAME}`
+  CONNECT_URL = `mongodb://127.0.0.1:27017/${process.env.DB_NAME}`;
 }
 
 app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'PUT, GET, POST, DELETE, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    next()
-})
-
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "PUT, GET, POST, DELETE, OPTIONS"
+  );
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  next();
+});
 
 // ALL HTTP ROUTES--->
 app.use("/api/website/permissions", permissionRouter);
@@ -58,7 +61,8 @@ app.use("/api/website/role", roleRouter);
 app.use("/api/website/register/viewer", viewerRouter);
 app.use("/api/website/register/model", modelRouter);
 app.use("/api/website/register/superadmin", superAdminRouter);
-app.use("/api/website/login", globalLoginRoutes)
+app.use("/api/website/login", globalLoginRoutes);
+app.use("/api/website/compose-ui", uxUtils);
 // category is Depreciated, will now use Tag-group and tags
 // app.use("/api/website/management/category", categoryRoutes)
 app.use("/api/website/management/tags", tagRouter)
