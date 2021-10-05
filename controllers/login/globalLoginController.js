@@ -10,6 +10,9 @@ const generateJwt = require("../../utils/generateJwt")
 
 
 exports.loginHandler = (req, res, next) => {
+    /**
+     * login route for Model and Viewer only
+     */
     errorCollector(req, "Username of Password is incorrect, please try again!")
 
     const { username, password } = req.body
@@ -17,11 +20,9 @@ exports.loginHandler = (req, res, next) => {
     User.findOne({
         username: username
     })
-        .populate("role", "roleName")
-        .exec()
         .then(user => {
             if (!user) {
-                const error = new Error("Invalid credentials  ")
+                const error = new Error("Invalid credentials, User does not exists")
                 error.statusCode = 422
                 throw error
             }
@@ -34,21 +35,22 @@ exports.loginHandler = (req, res, next) => {
                 error.statusCode = 422
                 throw error
             }
-
             theUser.updateLastLogin()
-            const hours = 100
+            const hours = 12
+            console.debug("loggedIn")
             res.status(200).json({
                 actionStatus: "success",
                 userType: theUser.userType,
-                userId: theUser._id,
+                rootUserId: theUser._id,
                 relatedUserId: theUser.relatedUser._id,
                 expiresIn: hours,
+                user: theUser,
                 token: generateJwt({
                     hours: hours,
                     userId: theUser._id,
                     relatedUserId: theUser.relatedUser._id,
                     userType: theUser.userType,
-                    role: theUser.role.roleName
+                    role: theUser?.role?.roleName || "no-role"
                 })
             })
         })

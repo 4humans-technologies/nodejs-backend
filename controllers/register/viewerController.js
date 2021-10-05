@@ -8,7 +8,7 @@ const bcrypt = require("bcrypt")
 exports.createViewer = (req, res, next) => {
     errorCollector(req, "Invalid form details, please try again")
 
-    const { username, password, name, screenName, email, phone, gender } = req.body
+    const { username, password, name, email, phone, gender } = req.body
     let theWallet, theViewer, theUser;
 
     Wallet({
@@ -23,35 +23,24 @@ exports.createViewer = (req, res, next) => {
                 email: email,
                 phone: phone,
                 gender: gender,
-                screenName: screenName,
                 wallet: wallet
             }).save({ validateBeforeSave: false })
         })
         .then(viewer => {
             theViewer = viewer
-            return Role.findOne({ roleName: "viewer" })
-        })
-        .then(role => {
-            if (role !== null) {
-                const salt = bcrypt.genSaltSync(5)
-                const hashedPassword = bcrypt.hashSync(password, salt)
-                return User({
-                    username: username,
-                    password: hashedPassword,
-                    permissions: role.permissions,
-                    role: role,
-                    userType: "Viewer",
-                    relatedUser: theViewer,
-                    needApproval:false,
-                    meta: {
-                        lastLogin: new Date().toISOString()
-                    }
-                }).save()
-            } else {
-                const error = new Error("viewer role not set, A role with name viewer is required, admin has has deleted it by mistake")
-                error.statusCode = 500
-                throw error
-            }
+            const salt = bcrypt.genSaltSync(5)
+            const hashedPassword = bcrypt.hashSync(password, salt)
+            return User({
+                username: username,
+                password: hashedPassword,
+                permissions: [],
+                userType: "Viewer",
+                relatedUser: theViewer,
+                needApproval: false,
+                meta: {
+                    lastLogin: new Date().toISOString()
+                }
+            }).save()
         })
         .then(userDoc => {
             theUser = userDoc
@@ -99,13 +88,12 @@ exports.updateByUser = (req, res, next) => {
      */
     errorCollector(req, "Invalid form details, please try again")
 
-    const { name, screenName, email, phone, gender } = req.body
+    const { name, email, phone, gender } = req.body
 
     Viewer.findOneAndUpdate({
         _id: req.user._id
     }, {
         name,
-        screenName,
         email,
         phone,
         gender

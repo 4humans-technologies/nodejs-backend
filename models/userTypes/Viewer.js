@@ -11,13 +11,6 @@ const viewerSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    screenName: {
-        type: String,
-        required: true,
-        minlength: 5,
-        maxlength: 24,
-        // add validation here
-    },
     email: {
         type: String,
         required: true,
@@ -71,7 +64,15 @@ const viewerSchema = new mongoose.Schema({
     audioCallHistory: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "audioCall"
-    }]
+    }],
+    pendingCallType: {
+        type: String,
+        enum: ["AudioCall", "VideoCall"]
+    },
+    pendingCall: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: "pendingCallType",
+    }
 })
 
 const Viewer = mongoose.model("Viewer", viewerSchema)

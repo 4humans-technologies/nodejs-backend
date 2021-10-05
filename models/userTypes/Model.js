@@ -10,20 +10,11 @@ const modelSchema = new mongoose.Schema({
     approval: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Approval",
-        required: true,
         default: null
     },
     name: {
         type: String,
         required: true
-    },
-    screenName: {
-        type: String,
-        required: true,
-        minlength: 5,
-        maxlength: 24,
-        unique: true
-        // add validation here
     },
     gender: {
         type: String,
@@ -41,9 +32,12 @@ const modelSchema = new mongoose.Schema({
         unique: true
     },
     dob: {
-        type: Date,
+        // will store only year
+        // i.e - birth year
+        type: Number,
         required: true
     },
+    languages: [String],
     bio: {
         type: String,
         minlength: 20,
@@ -55,7 +49,6 @@ const modelSchema = new mongoose.Schema({
     sharePercent: Number,
     adminPriceRange: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
         ref: "PriceRange"
     },
     charges: {
@@ -78,7 +71,7 @@ const modelSchema = new mongoose.Schema({
         min: 0,
         max: 5,
     },
-    isOnline: {
+    onCall: {
         type: Boolean,
         default: false,
         index: true
@@ -90,16 +83,14 @@ const modelSchema = new mongoose.Schema({
     },
     currentStream: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
         ref: "Stream"
     },
-    profileImages: {
+    profileImage: {
         type: String,
         required: true
     },
     publicImages: {
         type: [String],
-        required: true
     },
     privateImages: {
         type: Map,
@@ -126,14 +117,20 @@ const modelSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "AudioCall"
     }],
-    pendingCalls: [{
-        type: Map,
-        of: Map
-    }],
+    pendingCalls: {
+        audioCalls: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "AudioCall"
+        }],
+        videoCalls: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "VideoCall"
+        }]
+    },
     dailyIncome: [{
         date: Date,
         revenue: Number,
-        netIncome: Number
+        netIncome: Number,
     }],
     tags: [{
         type: mongoose.Schema.Types.ObjectId,
@@ -143,16 +140,14 @@ const modelSchema = new mongoose.Schema({
 
 modelSchema.index({
     name: "text",
-    userName:"text",
-    screenName:"text",
-    bio:"text",
-    hobbies:"text"
+    userName: "text",
+    bio: "text",
+    hobbies: "text"
 }, {
     name: "ModelSearch index",
     weights: {
         name: 2,
-        userName:2,
-        screenName:2,
+        userName: 2,
     }
 }
 )

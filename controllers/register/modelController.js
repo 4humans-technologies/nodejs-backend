@@ -9,10 +9,9 @@ exports.createModel = (req, res, next) => {
 
     errorCollector(req, "Invalid form details, please try again")
 
-    const { username, password, name, screenName, email, phone, gender, DOB } = req.body
+    const { username, password, name, email, phone, gender, age, profileImage, languages } = req.body
     let theWallet, theModel, theUser;
-
-     
+    console.log(req.body)
     Wallet({
         userType: "Model",
         currentAmount: 0
@@ -22,12 +21,13 @@ exports.createModel = (req, res, next) => {
             theWallet = wallet
             return Model({
                 name: name,
-                screenName: screenName,
                 gender: gender,
                 email: email,
                 phone: phone,
-                dob: DOB,
-                wallet: wallet
+                dob: new Date().getFullYear() - age,
+                wallet: wallet,
+                profileImage: profileImage,
+                languages: languages.split(",") || []
             }).save({ validateBeforeSave: false })
         })
         .then(model => {
@@ -37,11 +37,10 @@ exports.createModel = (req, res, next) => {
             return User({
                 username: username,
                 password: hashedPassword,
-                permissions: role.permissions,
-                role: role,
-                userType: "model",
+                permissions: [],
+                userType: "Model",
                 relatedUser: theModel,
-                needApproval: true,
+                needApproval: false, //🔴🔴 set to true only for testing
                 meta: {
                     lastLogin: new Date().toISOString()
                 }

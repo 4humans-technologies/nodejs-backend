@@ -28,6 +28,9 @@ const streamSchema = new mongoose.Schema({
         duration: Number,
         moneySpent: Number,
         viewerCount: {
+            /**
+             * will store the peak number of users ever joined
+             */
             type: Number,
             default: 0
         },
@@ -61,13 +64,8 @@ const streamSchema = new mongoose.Schema({
     viewers: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Viewer"
-    }],
-    unAuthedViewers: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "UnAuthedViewer"
     }]
 })
 
 const Stream = mongoose.model("Stream", streamSchema)
-
 module.exports = Stream
