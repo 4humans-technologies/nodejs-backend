@@ -1,5 +1,5 @@
 module.exports = {
-    streamCreated:"stream-created",
+    streamCreated:"new-model-started-stream",
     
     // on-demand events for global audience
     leaveChannel:"leave-channel",

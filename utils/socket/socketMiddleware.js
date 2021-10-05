@@ -11,7 +11,7 @@ module.exports = {
                 client.userType = userType
             }
             client.data = null
-            client.authed = null
+            client.authed = false
             client.userType = "UnAuthedViewer"
             return next()
         } catch (error) {

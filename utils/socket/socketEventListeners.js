@@ -1,6 +1,6 @@
 const socketEvents = require("./socketEvents")
 const io = require("../../socket");
-module.exports = (client, userType) => {
+module.exports = (client) => {
     // get room size by :io.of("/yourNameSpace").adapter.rooms.get(roomId) 
     // get all rooms io.sockets.adapter.rooms
 
@@ -10,7 +10,7 @@ module.exports = (client, userType) => {
     })
 
     // leave the room on clients demand
-    client.on(socketEvents.leaveChannel, ({room}) => {
+    client.on(socketEvents.leaveChannel, ({ room }) => {
         client.leave(room)
     })
 
@@ -21,28 +21,25 @@ module.exports = (client, userType) => {
         }
     })
 
-    // don't repeat yourself, hence creating wrapper functions below
-    const viewerJoined = () => {
+    if (client.userType === "UnAuthedViewer" || client.userType === "Viewer") {
         client.on(socketEvents.viewerJoined, ({ streamId, username }) => {
-            client.join(streamId)
+            client.join(`${streamId}-public`)
             const size = io.getIO().of("/").adapter.rooms.get(streamId).size
-            io.getIO().to(streamId).emit(socketEvents.viewerJoined, { username, userCount: size })
+            io.getIO().to(streamId).emit(socketEvents.viewerJoined, { /* no username for unauthed user */username, userCount: size })
         })
     }
 
-    const viewerLeft = () => {
+    if (client.userType === "UnAuthedViewer" || client.userType === "Viewer") {
         client.on(socketEvents.viewerLeft, ({ streamId, username }) => {
-            client.leave(streamId)
+            client.leave(`${streamId}-public`)
             const size = io.getIO().of("/").adapter.rooms.get(streamId).size
-            io.getIO().to(streamId).emit(socketEvents.viewerLeft, { username, userCount: size })
+            io.getIO().to(streamId).emit(socketEvents.viewerLeft, { /* no username for unauthed user */username, userCount: size })
         })
     }
+
 
     // conditional socket listeners
-    if (userType === "viewer") {
-        viewerJoined()
-        viewerLeft()
-
+    if (client.userType === "viewer") {
         client.on(socketEvents.modelAcceptedVideoCall, ({ streamId, modelId, viewerId, callId }) => {
             io.getIO().to(streamId).emit(socketEvents.modelAcceptedVideoCall, { streamId, modelId, viewerId, callId })
         })
@@ -52,9 +49,6 @@ module.exports = (client, userType) => {
         })
     }
     else if (userType === "model") {
-        viewerJoined()
-        viewerLeft()
-
         client.on(socketEvents.createStreamRoom, ({ streamId, jwt, callback }) => {
             // if needed verify jwt, so that only authed models can create rooms
             io.getIO().join(streamId)

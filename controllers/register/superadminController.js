@@ -2,7 +2,7 @@ const User = require("../../models/User");
 const controllerErrorCollector = require("../../utils/controllerErrorCollector");
 const bcrypt = require("bcrypt");
 const Role = require("../../models/Role");
-const SuperAdmin = require("../../models/userTypes/Superadmin");
+const SuperAdmin = require("../../models/userTypes/SuperAdmin");
 
 exports.createSuperAdmin = (req, res, next) => {
     controllerErrorCollector(req)

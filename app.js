@@ -41,7 +41,7 @@ let CONNECT_URL;
 if (process.env.HOSTED_DB === "true") {
     CONNECT_URL = `mongodb+srv://${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_USER}:${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_PASS}@dreamgirl-cluster-0.65bjj.mongodb.net/${process.env.DB_NAME}?retryWrites=true&w=majority`
 } else {
-    CONNECT_URL = `mongodb://127.0.0.1:27017/${process.env.DB_NAME}`
+    CONNECT_URL = `mongodb://192.168.1.104:27017/${process.env.DB_NAME}`;
 }
 
 app.use((req, res, next) => {
@@ -115,8 +115,9 @@ mongoose.connect(
     io.on("connection", client => {
         socket.setClientSocket(client)
         console.log("New Connection", client.data, client.userType);
-        if (client.handshake.query.hasAudioCall || client.handshake.query.hasVideoCall) {
-            if (client.authed) {
+        if (client.authed) {
+            /* Un-authed clients cannot have calls */
+            if (client.handshake.query.hasAudioCall || client.handshake.query.hasVideoCall) {
                 if (client.handshake.query.hasAudioCall) {
                     AudioCall.findById(client.handshake.query.callId)
                         .then(call => {
@@ -137,7 +138,7 @@ mongoose.connect(
                 }
             }
         }
-        // setup socket listeners
+        /* Setup socket Event listners, will listen for events emitted by browser client*/
         socketListeners(client)
     })
 

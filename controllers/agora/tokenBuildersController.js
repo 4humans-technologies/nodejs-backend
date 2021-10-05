@@ -32,12 +32,18 @@ exports.createStreamAndToken = (req, res, next) => {
                     isStreaming: true,
                     currentStream: stream._id,
                     $push: { streams: stream }
-                })
+                }, { new: true })
+                .populate("rootuser", "userName userType")
+                .select("name userName isStreaming onCall age gender languages profileImages rating dob")
+                .lean()
         })
         .then(model => {
             // io.join(theStream._id)
             // everybody will get the notification of new stream
-            io.getIO().emit(socketEvents.streamCreated, { modelId:modelId, modelName:model.screenName, streamId:theStream._id })
+            /* 👉👉 return data so as to compose the complete card on the main page */
+            io.getIO().emit(socketEvents.streamCreated, {
+                data: JSON.stringify(model)
+            })
             res.status(200).json({
                 actionStatus: "success",
                 rtcToken: rtcToken,
@@ -76,8 +82,8 @@ exports.genRtcTokenViewer = (req, res, next) => {
         .then(values => {
             // socket emit events
             // io.join(streamId)
-            io.getIO().to(streamId).emit(socketEvents.viewerJoined, {viewerCount:values[0].get("meta.viewerCount")})
-            
+            io.getIO().to(streamId).emit(socketEvents.viewerJoined, { viewerCount: values[0].get("meta.viewerCount") })
+
             // http response
             res.status(200).json({
                 actionStatus: "success",
@@ -93,7 +99,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
     controllerErrorCollector(req)
     // will run when unauthed user try to view models live stream, not when he enters the website
     // create unAuthed user and generate token
-    const { channel, modelId , streamId } = req.body
+    const { channel, modelId, streamId } = req.body
 
     UnAuthedViewer({
         sessions: 1,
@@ -114,11 +120,11 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
         })
         .then(stream => {
             const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator("viewer", viewer._id, channel)
-            
+
             // socket emit event
             // io.join(streamId)
-            io.getIO().to(streamId).emit(socketEvents.viewerJoined, {viewerCount:values[0].get("meta.viewerCount")})
-    
+            io.getIO().to(streamId).emit(socketEvents.viewerJoined, { viewerCount: values[0].get("meta.viewerCount") })
+
             res.status(201).json({
                 actionStatus: "success",
                 rtcToken: rtcToken,
