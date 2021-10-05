@@ -8,7 +8,7 @@ const bcrypt = require("bcrypt")
 exports.createViewer = (req, res, next) => {
     errorCollector(req, "Invalid form details, please try again")
 
-    const { username, password, name, screenName, email, phone, gender } = req.body
+    const { username, password, name, email, phone, gender } = req.body
     let theWallet, theViewer, theUser;
 
     Wallet({
@@ -23,7 +23,6 @@ exports.createViewer = (req, res, next) => {
                 email: email,
                 phone: phone,
                 gender: gender,
-                screenName: screenName,
                 wallet: wallet
             }).save({ validateBeforeSave: false })
         })
@@ -89,13 +88,12 @@ exports.updateByUser = (req, res, next) => {
      */
     errorCollector(req, "Invalid form details, please try again")
 
-    const { name, screenName, email, phone, gender } = req.body
+    const { name, email, phone, gender } = req.body
 
     Viewer.findOneAndUpdate({
         _id: req.user._id
     }, {
         name,
-        screenName,
         email,
         phone,
         gender

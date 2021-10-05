@@ -7,6 +7,26 @@ const { Types } = require("mongoose");
 const Viewer = require("../../models/userTypes/Viewer");
 const io = require("../../socket");
 const socketEvents = require("../../utils/socket/socketEvents");
+const UniqueChatUserId = require("../../models/twilio/UniqueChatUserId")
+
+const findAvailableTwilioChatUserId = () => {
+  return UniqueChatUserId.findOne({ isAvailable: true })
+    .then(id => {
+      if (!id) {
+        return UniqueChatUserId({})
+          .save()
+          .then(newId => {
+            return newId._id
+          })
+      }
+      UniqueChatUserId.update({ _id: id._id }, {
+        $inc: {
+          "numUsersServed": 1,
+        }
+      })
+      return id
+    })
+}
 
 exports.createStreamAndToken = (req, res, next) => {
   // create stream and generate token for model
@@ -21,14 +41,18 @@ exports.createStreamAndToken = (req, res, next) => {
   //     // or
   //     // create a middleware to check for this every time
   // }
-  const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-    "model",
-    req.user.relatedUser._id.toString(),
-    req.user.relatedUser._id.toString(),
-    1
-  );
   // check if the model is approved or not,
   // by making a new model approval checker
+
+  // this to be added in production 🔴❌
+  // check for only one ongoing stream
+  // Stream.find({ model: req.user.relatedUser._id, status: { $in: ["ongoing", "initializing"] } })
+  //   .then(stream => {
+  //     if (!stream) {
+  //       // go-on everything fine
+  //     }
+  //     // throw error: you already have another stream on-going or initializing
+  //   })
 
   let theStream;
   Stream({
@@ -50,17 +74,23 @@ exports.createStreamAndToken = (req, res, next) => {
     .then((model) => {
       // io.join(theStream._id)
       // everybody will get the notification of new stream
-      io.getIO().emit(socketEvents.streamCreated, {
-        modelId: req.user._id,
-        modelName: model.screenName,
-        streamId: theStream._id,
-      });
+
+      // generate token here
+      const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+        "model",
+        req.user.relatedUser._id.toString(),
+        theStream._id.toString(),
+        1
+      );
+
+      io.getClient().join(theStream._id.toString())
+
       res.status(200).json({
         actionStatus: "success",
         rtcToken: rtcToken,
         privilegeExpiredTs: privilegeExpiredTs,
-        streamId: theStream._id.toString(),
-        modelId:req.user.relatedUser._id.toString()
+        streamId: theStream._id,
+        modelId: req.user.relatedUser._id
       });
     })
     .catch((err) => next(err));
@@ -124,51 +154,136 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
   controllerErrorCollector(req);
   // will run when unauthed user try to view models live stream, not when he enters the website
   // create unAuthed user and generate token
-  const { channel, modelId, streamId } = req.body;
+  const { modelId, newSession, unAuthedUserId } = req.body;
 
-  UnAuthedViewer({
-    sessions: 1,
-    streamViewed: 1,
-    timeSpent: 1,
-    lastAccess: new Date().toISOString(),
-  })
-    .save()
-    .then((viewer) => {
-      return Stream.findOneAndUpdate(
-        { _id: streamId },
-        {
-          $push: {
-            unAuthedViewers: Types.ObjectId(viewer._id),
-          },
-          $inc: {
-            "meta.viewerCount": 1,
-          },
+  Model.findById(modelId, "currentStream isStreaming onCall")
+    .lean()
+    .then(model => {
+      console.log(model);
+      if (model.isStreaming) {
+        if (!req.body.unAuthedUserId && !req.user) {
+          /**
+           * means the un-authed user is untracked
+           * create a new un-authed user
+           */
+
+          /** find a available twillioChatUserId */
+          return findAvailableTwilioChatUserId()
+            .then(tempToken => {
+              return UnAuthedViewer({
+                sessions: 1,
+                streamViewed: 1,
+                timeSpent: 0,
+                lastStream: model.currentStream,
+                twillioChatUserId: tempToken
+              })
+                .save()
+                .then(viewer => {
+                  // generate twilio chat token as well
+                  const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                    "unAuthed",
+                    viewer._id,
+                    model.currentStream.toString()
+                  );
+
+                  io.getIO()
+                    .to(streamId)
+                    .emit(socketEvents.viewerJoined, {
+                      viewerCount: values[0].get("meta.viewerCount"),
+                    });
+
+                  return Stream.updateOne(
+                    { _id: model.currentStream },
+                    {
+                      $inc: {
+                        "meta.viewerCount": 1,
+                      },
+                    }
+                  )
+                    .lean()
+                    .then(stream => {
+                      res.status(200).json({
+                        actionStatus: "success",
+                        uid: viewer._id,
+                        rtcToken: rtcToken,
+                        privilegeExpiredTs: privilegeExpiredTs,
+                        newUnAuthedUserCreated: true
+                      })
+                    })
+                })
+                .catch(err => next(err))
+            })
         }
-      );
-    })
-    .then((stream) => {
-      const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-        "viewer",
-        viewer._id,
-        channel
-      );
+        /**
+         * means the un-authed user is already initialized
+         * and being tracked
+         */
+        return UnAuthedViewer.findById(req.body.unAuthedUserId)
+          .then(viewer => {
+            if (!viewer?.twillioChatUserId && req.body.newSession) {
+              /**
+               * new session and hence new temp id for twilio from the pool
+               */
+              findAvailableTwilioChatUserId()
+                .then(tempId => {
+                  viewer.twillioChatUserId = tempId
+                  return viewer.save()
+                })
+                .then(savedViewer => {
+                  // generate twilio chat token as well
+                  const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                    "unAuthed",
+                    viewer.twillioChatUserId,
+                    model.currentStream.toString()
+                  );
+                  return { privilegeExpiredTs, rtcToken }
+                })
+            } else {
+              /**
+               * its a subsequent request by the viewer, he has already been alloted the temp token
+               */
 
-      // socket emit event
-      // io.join(streamId)
-      io.getIO()
-        .to(streamId)
-        .emit(socketEvents.viewerJoined, {
-          viewerCount: values[0].get("meta.viewerCount"),
-        });
-
-      res.status(201).json({
-        actionStatus: "success",
-        rtcToken: rtcToken,
-        uid: viewer._id,
-        privilegeExpiredTs: privilegeExpiredTs,
-      });
+              // generate twilio chat token as well
+              const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                "unAuthed",
+                viewer.twillioChatUserId,
+                model.currentStream.toString()
+              );
+              return { privilegeExpiredTs, rtcToken }
+            }
+          })
+          .then(tokens => {
+            /**
+             * currently only returning rtc token,
+             * will also return twilio chat token later
+             */
+            return Stream.updateOne(
+              { _id: model.currentStream },
+              {
+                $inc: {
+                  "meta.viewerCount": 1,
+                },
+              }
+            )
+              .lean()
+              .then(stream => {
+                io.getIO()
+                  .to(streamId)
+                  .emit(socketEvents.viewerJoined, {
+                    viewerCount: values[0].get("meta.viewerCount"),
+                  });
+                res.status(200).json({
+                  actionStatus: "success",
+                  ...tokens
+                })
+              })
+          })
+      }
+      const error = new Error("This model is currently not streaming!")
+      error.statusCode = 400
+      throw error
     })
-    .catch((err) => next(err));
+    .catch(error => next(error))
 };
 
 exports.renewRtcTokenGlobal = (req, res, next) => {

@@ -4,7 +4,7 @@ module.exports = (userType, userTypeId, channel, validity = 1) => {
   console.log(">>>", userType);
   const privilegeExpiredTs = Math.floor(Date.now() / 1000) + 3600 * validity;
   let rtcToken;
-  if (userType === "viewer" || userType === "UnAuthed") {
+  if (userType === "viewer" || userType === "unAuthed") {
     const role = RtcRole.SUBSCRIBER;
     rtcToken = RtcTokenBuilder.buildTokenWithUid(
       process.env.APP_ID,

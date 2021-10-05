@@ -37,6 +37,7 @@ const modelSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    languages: [String],
     bio: {
         type: String,
         minlength: 20,
@@ -70,7 +71,7 @@ const modelSchema = new mongoose.Schema({
         min: 0,
         max: 5,
     },
-    isOnline: {
+    onCall: {
         type: Boolean,
         default: false,
         index: true
@@ -116,14 +117,20 @@ const modelSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "AudioCall"
     }],
-    pendingCalls: [{
-        type: Map,
-        of: Map
-    }],
+    pendingCalls: {
+        audioCalls: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "AudioCall"
+        }],
+        videoCalls: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "VideoCall"
+        }]
+    },
     dailyIncome: [{
         date: Date,
         revenue: Number,
-        netIncome: Number
+        netIncome: Number,
     }],
     tags: [{
         type: mongoose.Schema.Types.ObjectId,
@@ -133,16 +140,14 @@ const modelSchema = new mongoose.Schema({
 
 modelSchema.index({
     name: "text",
-    userName:"text",
-    screenName:"text",
-    bio:"text",
-    hobbies:"text"
+    userName: "text",
+    bio: "text",
+    hobbies: "text"
 }, {
     name: "ModelSearch index",
     weights: {
         name: 2,
-        userName:2,
-        screenName:2,
+        userName: 2,
     }
 }
 )

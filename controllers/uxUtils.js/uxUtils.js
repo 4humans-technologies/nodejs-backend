@@ -15,6 +15,34 @@ exports.getStreamingModels = (req, res, next) => {
   paginator.withNormal(Model, qry, null, req, res).catch((err) => next(err));
 };
 
+exports.getLiveStreams = (req, res, next) => {
+  const query = {
+    status: "ongoing",
+  };
+  paginator.withNormal(Stream, query, "model createdAt status", req, res).catch((err) => next(err));
+};
+
+exports.getRankingOnlineModels = (req, res, next) => {
+  /**
+   * get the streaming or onCall models
+   */
+  const query = Model.find(
+    {
+      $or: [{ "onCall": true }, { "isStreaming": true }]
+    }
+  )
+    .sort("rating")
+    .populate("rootUser", "username userType currentStream")
+    .populate("currentStream", "createdAt status")
+  // .populate({
+  //   path: 'rootUser',
+  //   model: 'User',
+  //   select: { 'field_name': 1, 'field_name': 1 },
+  // })
+  paginator.withNormal(null, query, "name gender rating onCall isStreaming currentStream dob username languages profileImage", req, res)
+    .catch((err) => next(err));
+}
+
 exports.getModelsByRating = (req, res, next) => {
   const { lowerVal, upperVal, sort } = req.query;
 
@@ -87,11 +115,4 @@ exports.modelSearch = (req, res, next) => {
       });
     })
     .catch((err) => next(err));
-};
-
-exports.getLiveStreams = (req, res, next) => {
-  const query = {
-    status: "ongoing",
-  };
-  paginator.withNormal(Stream, query, null, req, res).catch((err) => next(err));
 };

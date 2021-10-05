@@ -178,16 +178,32 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         .then(() => {
             const evt = callType === "audioCall" ? socketEvents.modelAcceptedAudioCallRequest : socketEvents.modelAcceptedVideoCallRequest
             // emit to everybody in stream that model accepted call
+            /**
+             * 🙏🙏🙏 the reciving client should save the call document details in LOCALSTOREAGE
+             */
             io.getIO().to(streamId).emit(evt, { viewerUserName })
             io.to(io.getClient().id).emit(socketEvents.addedMoneyToWallet, { amount: minCharges * (model.sharePercent / 100) })
             // join call channel, viewer has already joined this channel
-            io.getClient().joint(callId)
+            io.getClient().join(callId)
             const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator("viewer", req.user.relatedUser._id, callId, 60)
-            res.status(200).json({
-                actionStatus: "success",
-                rtcToken,
-                privilegeExpiredTs
-            })
+
+            return Promise.all([
+                Viewer.updateOne({ _id: callDoc.viewer }, {
+                    pendingCall: callDoc._id,
+                    pendingCallType: callDoc.callType
+                }),
+                Model.updateOne({ _id: callDoc.viewer }, {
+                    $push: callDoc.callType === "AudioCall" ? { "pendingCalls.$.audioCalls": callDoc._id } : { "pendingCalls.$.videoCalls": callDoc._id }
+                })
+            ])
+                .then(values => {
+                    console.debug("added pending calls >>>", values)
+                    res.status(200).json({
+                        actionStatus: "success",
+                        rtcToken,
+                        privilegeExpiredTs
+                    })
+                })
         })
         .catch(err => next(err))
 }
@@ -218,5 +234,32 @@ exports.handleModelDeclineCallRequest = (req, res, next) => {
 }
 
 exports.setOngoing = (req, res, next) => {
-  const { streamId } = req.body;
+    // endpoint to handle request of stream status update
+    const { streamId } = req.body;
+
+    Stream.findById(streamId)
+        .then(stream => {
+            if (stream.model._id === req.user.relatedUser._id) {
+                stream.status = "ongoing"
+                return stream.save()
+            }
+            const error = new Error("This stream does not belong to you hence you cannot change status of it")
+            error.statusCode = 400
+            throw error
+        })
+        .then(stream => {
+            io.getClient().join(stream._id.toString())
+            io.getIO().emit(socketEvents.streamCreated, {
+                modelId: req.user._id,
+                modelName: req.user.userName,
+                streamId: stream._id,
+            });
+            res.status(200).json({
+                message: "stream status set to ongoing, you are live to everyone now",
+                actionStatus: "success",
+            })
+        })
+        .catch(error => {
+            throw error
+        })
 };

@@ -6,12 +6,19 @@ module.exports = (req, _res, next) => {
     const err = new Error("No Token Found In The Header");
     err.statusCode = 403;
     throw err;
-    // 👇👇 this will not work
-    // throw new Error('Not Authenticated').statusCode = 401
+
+    /**
+     * NEED THROW ERROR 🔥🔥
+     * because this middleware will only be present where
+     * it is required to have token in the request
+     */
   }
 
   const token = req.get("Authorization").split(" ")[1];
   if (!token) {
+    /**
+     * wrong token is a clear violation, raise error
+     */
     const err = new Error("token wrongly attached");
     err.statusCode = 403;
     throw err;
@@ -39,6 +46,7 @@ module.exports = (req, _res, next) => {
           "role permissions userType needApproval relatedUser"
         )
           .populate("relatedUser")
+          .lean()
           .then((user) => {
             req.user = user;
             next();

@@ -27,38 +27,68 @@ exports.withAggregation = (Model, qry, req) => {
         })
 }
 
-exports.withNormal = (Model, qry, select,req, res) => {
+exports.withNormal = (Model, qry, select, req, res) => {
     const page = +req.query.page || 1
     const limit = +req.query.limit || 10
     const sort = req.query.sort
 
     let theResults;
-    return Model.find(qry)
-        .select(select || null)
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .sort(sort || "")
-        .then(results => {
-            theResults = results
-            return Model.find(qry)
-                .countDocuments()
-        })
-        .then(count => {
-            if (!res) {
-                return {
+    if (Model) {
+        return Model.find(qry)
+            .select(select || null)
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .sort(sort || "")
+            .then(results => {
+                theResults = results
+                return Model.find(qry)
+                    .countDocuments()
+            })
+            .then(count => {
+                if (!res) {
+                    return {
+                        actionStatus: "success",
+                        totalMatches: count,
+                        pages: Math.ceil(count / limit),
+                        resultDocs: theResults
+                    }
+                }
+                res.status(200).json({
                     actionStatus: "success",
                     totalMatches: count,
                     pages: Math.ceil(count / limit),
                     resultDocs: theResults
-                }
-            }
-            res.status(200).json({
-                actionStatus: "success",
-                totalMatches: count,
-                pages: Math.ceil(count / limit),
-                resultDocs: theResults
+                })
             })
-        })
+    } else {
+        return qry
+            .select(select || null)
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .sort(sort || "")
+            .exec()
+            .then(results => {
+                theResults = results
+                return qry
+                    .countDocuments()
+            })
+            .then(count => {
+                if (!res) {
+                    return {
+                        actionStatus: "success",
+                        totalMatches: count,
+                        pages: Math.ceil(count / limit),
+                        resultDocs: theResults
+                    }
+                }
+                res.status(200).json({
+                    actionStatus: "success",
+                    totalMatches: count,
+                    pages: Math.ceil(count / limit),
+                    resultDocs: theResults
+                })
+            })
+    }
 }
 
 // const [{ paginatedResult, totalCount }] = Sale.aggregate([{
