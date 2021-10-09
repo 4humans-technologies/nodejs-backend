@@ -11,15 +11,9 @@ const unAuthedViewerSchema = new mongoose.Schema({
         default: 1
     },
     streamViewed: {
-
         type: Number,
         required: true,
         default: 0,
-    },
-    timeSpent: {
-        type: Number,
-        required: true,
-        default: 1
     },
     createdAt: {
         type: Date,
@@ -35,10 +29,6 @@ const unAuthedViewerSchema = new mongoose.Schema({
          */
         type: mongoose.Schema.Types.ObjectId,
         ref: "Stream"
-    },
-    twillioChatUserId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "UniqueChatId"
     }
 })
 
