@@ -20,7 +20,7 @@ router.post("/",
         body("name").notEmpty().isString().trim().escape().toLowerCase(),
         body("email").notEmpty().isEmail().normalizeEmail(),
         body("gender").notEmpty().isString(),
-        body("phone").notEmpty(),
+        // body("phone").notEmpty(),
     ], viewerController.createViewer
 )
 
