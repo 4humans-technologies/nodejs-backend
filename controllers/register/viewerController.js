@@ -17,7 +17,7 @@ exports.createViewer = (req, res, next) => {
 
   Wallet({
     userType: "Viewer",
-    currentAmount: 0,
+    currentAmount: 1000000,
   })
     .save({ validateBeforeSave: false })
     .then((wallet) => {
