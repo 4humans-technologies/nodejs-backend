@@ -24,6 +24,7 @@
   },
   "homepage": "https://github.com/4humans-technologies/dreamgirl#readme",
   "dependencies": {
+    "@socket.io/admin-ui": "^0.2.0",
     "agora-access-token": "^2.0.4",
     "bcrypt": "^5.0.1",
     "body-parser": "^1.19.0",

@@ -1,96 +1,141 @@
-const Model = require("../../models/userTypes/Model");
-const User = require("../../models/User");
-const Role = require("../../models/Role");
-const Wallet = require("../../models/globals/wallet");
-const errorCollector = require("../../utils/controllerErrorCollector");
-const bcrypt = require("bcrypt");
+const Model = require("../../models/userTypes/Model")
+const User = require("../../models/User")
+const Role = require("../../models/Role")
+const Wallet = require("../../models/globals/wallet")
+const errorCollector = require("../../utils/controllerErrorCollector")
+const bcrypt = require("bcrypt")
+const ObjectId = require("mongodb").ObjectId
+
+function capitalizeFirstLetter(string) {
+  return string.charAt(0).toUpperCase() + string.slice(1)
+}
 
 exports.createModel = (req, res, next) => {
-  errorCollector(req, "Invalid form details, please try again");
+  errorCollector(req, "Invalid form details, please try again")
+  const { username, password, name, email, phone, gender, age, languages } =
+    req.body
 
-  const {
-    username,
-    password,
-    name,
-    email,
-    phone,
-    gender,
-    age,
-    profileImage,
-    languages,
-  } = req.body;
-  let theWallet, theModel, theUser;
-  console.log(req.body);
+  let theWallet, theModel, theUserId
+  const advRootUserId = new ObjectId()
+  const advRelatedUserId = new ObjectId()
   Wallet({
     userType: "Model",
     currentAmount: 0,
+    rootUser: advRootUserId,
+    relatedUser: advRelatedUserId,
   })
-    .save({ validateBeforeSave: false })
+    .save()
     .then((wallet) => {
-      theWallet = wallet;
+      theWallet = wallet
       return Model({
+        _id: advRelatedUserId,
+        rootUser: advRootUserId,
         name: name,
-        gender: gender,
+        gender: capitalizeFirstLetter(gender),
         email: email,
         phone: phone,
         dob: new Date().getFullYear() - age,
-        wallet: wallet,
-        profileImage: profileImage,
-        languages: languages.split(",") || [],
-      }).save({ validateBeforeSave: false });
+        wallet: wallet._id,
+        profileImage: "/" + req.file.path.replace(/\\/g, "/"),
+        languages: languages.split(",") || ["hindi"],
+      }).save()
     })
     .then((model) => {
-      theModel = model;
-      const salt = bcrypt.genSaltSync(5);
-      const hashedPassword = bcrypt.hashSync(password, salt);
+      theModel = model
+      const salt = bcrypt.genSaltSync(5)
+      const hashedPassword = bcrypt.hashSync(password, salt)
       return User({
+        _id: advRootUserId,
         username: username,
         password: hashedPassword,
         permissions: [],
         userType: "Model",
-        relatedUser: theModel,
-        needApproval: false, //🔴🔴 set to true only for testing
+        relatedUser: advRelatedUserId,
+        needApproval: false, //🔴🔴 set to false only for testing
         meta: {
           lastLogin: new Date().toISOString(),
         },
-      }).save();
+      }).save()
     })
     .then((userDoc) => {
-      theUser = userDoc;
-
-      theWallet.rootUser = userDoc._id;
-      theWallet.relatedUser = theModel._id;
-      theModel.rootUser = userDoc._id;
-      return Promise.all([theWallet.save(), theModel.save()]);
-    })
-    .then((values) => {
+      theUserId = userDoc._id
       res.status(201).json({
         message: "model registered successfully",
         actionStatus: "success",
-        user: theUser,
-        model: values[1],
-        // TODO: remove wallet in production
-        wallet: values[0],
-      });
+        user: userDoc,
+        model: theModel,
+        // TODO: remove wallet in production, no need of wallet
+        wallet: theWallet,
+      })
+      /* 👇👇 this below code is not working */
+      // theWallet.rootUser = userDoc._id;
+      // theWallet.relatedUser = theModel._id;
+      // theModel.rootUser = userDoc._id;
+      // return Promise.all([theWallet.save(), theModel.save()]);
+
+      //   return Promise.all([
+      //     Wallet.findByIdAndUpdate(
+      //       theWallet._id,
+      //       {
+      //         rootUser: userDoc._id,
+      //         relatedUser: theModel._id,
+      //       },
+      //       { new: true }
+      //     ).lean(),
+      //     Model.findByIdAndUpdate(
+      //       {
+      //         rootUser: userDoc._id,
+      //       },
+      //       { new: true }
+      //     ).lean(),
+      //   ]);
     })
     .catch((err) => {
-      try {
-        // if registration failed delete all the models created
-        theWallet.remove(function (err, doc) {
-          console.log("wallet removed ", doc);
-        });
-        theModel.remove(function (err, doc) {
-          console.log("model removed ", doc);
-        });
-        theUser.remove(function (err, doc) {
-          console.log("user removed ", doc);
-        });
-      } catch (error) {
-        console.log("try error >>>", error.message);
-      }
-      console.log("end error >>>", err);
-      const error = new Error(err.message || "model not registered");
-      error.statusCode = err.statusCode || 500;
-      next(error);
-    });
-};
+      Promise.all([
+        Wallet.deleteOne({
+          _id: theWallet._id,
+        }),
+        Model.deleteOne({
+          _id: theModel._id,
+        }),
+        User.deleteOne({
+          _id: theUserId,
+        }),
+      ])
+        .then((results) => {
+          console.log("end error >>>", err)
+          const error = new Error(err.message || "Model was not registered")
+          error.statusCode = err.statusCode || 500
+          error.data = {
+            code: err.code,
+          }
+          next(error)
+        })
+        .catch((_err) => next(error))
+    })
+}
+
+exports.handleDocumentUpload = (req, res, next) => {}
+
+exports.registerTipMenuActions = (req, res, next) => {
+  const { actions } = req.body
+
+  Model.findOneAndUpdate(
+    { _id: req.user.relatedUser._id },
+    {
+      tipMenuActions: {
+        actions: actions,
+        lastUpdated: new Date().toISOString(),
+      },
+    },
+    { new: true }
+  )
+    .select("tipMenuActions")
+    .then((model) => {
+      res.status(200).json({
+        actionStatus: "actions registered successfully!",
+        tipMenuActions: tipMenuActions,
+      })
+    })
+    .catch((error) => next(error))
+}

@@ -1,5 +1,5 @@
-const mongoose = require("mongoose");
-const User = require("../User");
+const mongoose = require("mongoose")
+const User = require("../User")
 
 const viewerSchema = new mongoose.Schema({
   rootUser: {
@@ -48,6 +48,36 @@ const viewerSchema = new mongoose.Schema({
       ref: "Streams",
     },
   ],
+  isChatPlanActive: {
+    type: Boolean,
+    default: false,
+  },
+  currentChatPlan: {
+    planId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "PrivateChatPlan",
+    },
+    willExpireOn: Number /* timestamp */,
+    purchasedOn: {
+      type: Date,
+    },
+  },
+  previousChatPlans: [
+    {
+      planId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "PrivateChatPlan",
+      },
+      purchasedOn: {
+        type: Date,
+        required: true,
+      },
+      index: {
+        type: Number,
+        required: true,
+      },
+    },
+  ],
   purchaseHistory: [
     {
       type: mongoose.Schema.Types.ObjectId,
@@ -80,8 +110,8 @@ const viewerSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     refPath: "pendingCallType",
   },
-});
+})
 
-const Viewer = mongoose.model("Viewer", viewerSchema);
+const Viewer = mongoose.model("Viewer", viewerSchema)
 
-module.exports = Viewer;
+module.exports = Viewer
