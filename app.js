@@ -14,6 +14,14 @@ app.use(express.static(__dirname + "/images"))
 app.use("/images/gifts", express.static(__dirname + "/images/gifts"))
 app.use("/images/model", express.static(__dirname + "/images/model"))
 
+/* SSL setup */
+const https = require("https")
+const fs = require("fs")
+const sslOptions = {
+  key: fs.readFileSync("./localhost-key.pem"),
+  cert: fs.readFileSync("./localhost.pem"),
+}
+
 // ❌❌❌❌
 /**
  * create new agora project for dreamgirl
@@ -37,6 +45,7 @@ const testRouter = require("./routes/test/test")
 const tagRouter = require("./routes/management/tagRoutes")
 const uxUtils = require("./routes/uxUtils/uxUtilsRoutes")
 const giftsRouter = require("./routes/gifts/gifts")
+const streamRouter = require("./routes/stream/streamRoutes")
 
 // 🔴 ADMIN ROUTES 🔴
 const adminPermissions = require("./routes/ADMIN/permissions")
@@ -81,6 +90,7 @@ app.use("/api/website/compose-ui", uxUtils)
 app.use("/api/website/management/tags", tagRouter)
 app.use("/api/website/token-builder", tokenBuilderRouter)
 app.use("/api/website/gifts", giftsRouter)
+app.use("/api/website/stream", streamRouter)
 
 // ADMIN PATHS
 app.use("/api/admin/permissions", adminPermissions)
@@ -117,6 +127,10 @@ mongoose
   })
   .then(() => {
     console.log("============== CONNECTED TO MongoDB =============")
+    // const server = https.createServer(sslOptions, app)
+    // server.listen(process.env.PORT || 8080, () =>
+    //   console.log("Listening on : " + process.env.PORT)
+    // )
 
     const server = app.listen(process.env.PORT || 8080, () =>
       console.log("Listening on : " + process.env.PORT)
@@ -144,24 +158,32 @@ mongoose
     io.on("connection", (client) => {
       client.on("putting-me-in-these-rooms", (rooms, callback) => {
         console.log("put in rooms >> ", rooms)
-        if (client.userType === "UnAuthedViewer") {
-          if (rooms.length > 1) {
-            throw new Error("UnAuthedViewer joining more rooms!")
-          }
-          rooms.forEach((room) => {
-            client.join(room)
-          })
-          callback({
-            status: "ok",
-          })
-        } else {
-          rooms.forEach((room) => {
-            client.join(room)
-          })
-          callback({
-            status: "ok",
-          })
-        }
+
+        /* have to check valadity of these rooms
+          these rooms must exist beforehand in order to be joined by the user or not 🤔🤔
+          👇👇 below is problem
+        */
+
+        // ⭕⭕
+        // if (client.userType === "UnAuthedViewer") {
+        //   console.log("client data >>>", client.userType)
+        //   if (rooms.length > 1) {
+        //     throw new Error("UnAuthedViewer joining more rooms!")
+        //   }
+        //   rooms.forEach((room) => {
+        //     client.join(room)
+        //   })
+        //   callback({
+        //     status: "ok",
+        //   })
+        // } else {
+        rooms.forEach((room) => {
+          client.join(room)
+        })
+        callback({
+          status: "ok",
+        })
+        // }
       })
 
       client.on("take-me-out-of-these-rooms", (rooms, callback) => {

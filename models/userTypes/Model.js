@@ -46,7 +46,26 @@ const modelSchema = new mongoose.Schema({
   hobbies: {
     type: [String],
   },
-  sharePercent: Number,
+  offLineMessage: {
+    type: String,
+    default: "This is default offline Message",
+  },
+  tipMenuActions: {
+    actions: [
+      {
+        action: String,
+        price: Number,
+        timesTipped: {
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
+    lastUpdated: {
+      type: Date,
+    },
+  },
+  sharePercent: Number /* Not in decimals, 90% === 90 not 0.9 */,
   adminPriceRange: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "PriceRange",
@@ -92,6 +111,12 @@ const modelSchema = new mongoose.Schema({
   publicImages: {
     type: [String],
   },
+  offlineStatus: {
+    type: String,
+    default: "I will soon come online, I Know you are waiting for me 🥰🥰",
+  },
+  backGroundImage: String,
+  profileBg: String,
   privateImages: {
     type: Map,
     of: new mongoose.Schema({
@@ -162,9 +187,9 @@ const modelSchema = new mongoose.Schema({
     default: "Indian",
   },
   dynamicFields: {
-    hair_color: String,
-    eye_color: String,
-    body_type: String,
+    "hair color": String,
+    "eye color": String,
+    "body type": String,
     country: String,
   },
 })
@@ -185,6 +210,6 @@ modelSchema.index(
   }
 )
 
-const Model = mongoose.model("Model", modelSchema)
+const Model = new mongoose.model("Model", modelSchema)
 
 module.exports = Model

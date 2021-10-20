@@ -109,8 +109,33 @@ exports.createModel = (req, res, next) => {
           error.data = {
             code: err.code,
           }
-          next(err)
+          next(error)
         })
-        .catch((_err) => next(err))
+        .catch((_err) => next(error))
     })
+}
+
+exports.handleDocumentUpload = (req, res, next) => {}
+
+exports.registerTipMenuActions = (req, res, next) => {
+  const { actions } = req.body
+
+  Model.findOneAndUpdate(
+    { _id: req.user.relatedUser._id },
+    {
+      tipMenuActions: {
+        actions: actions,
+        lastUpdated: new Date().toISOString(),
+      },
+    },
+    { new: true }
+  )
+    .select("tipMenuActions")
+    .then((model) => {
+      res.status(200).json({
+        actionStatus: "actions registered successfully!",
+        tipMenuActions: tipMenuActions,
+      })
+    })
+    .catch((error) => next(error))
 }

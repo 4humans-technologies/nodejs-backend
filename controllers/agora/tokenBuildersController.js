@@ -59,13 +59,12 @@ exports.createStreamAndToken = (req, res, next) => {
         {
           isStreaming: true,
           currentStream: stream._id,
+          /* 👇👇 how to ensure same stream is not added again */
           $push: { streams: stream },
-        },
-        { new: true }
+        }
       )
-        .populate("rootuser", "userName userType")
         .select(
-          "name userName isStreaming onCall age gender languages profileImages rating dob"
+          "profileImage"
         ) /* for live updating of the landing page */
         .lean()
     })
@@ -74,13 +73,15 @@ exports.createStreamAndToken = (req, res, next) => {
       // everybody will get the notification of new stream
       /* 👉👉 return data so as to compose the complete card on the main page */
 
-      const streamRoom = `${theStream._id}-public`
+      const streamRoomPublic = `${theStream._id}-public`
+      const streamRoomPrivate = `${theStream._id}-private`
       const clientSocket = io.getIO().sockets.sockets.get(socketId)
-      clientSocket.join(streamRoom)
+      clientSocket.join(streamRoomPublic)
+      clientSocket.join(streamRoomPrivate)
 
       /* 👇👇 broadcast to all who are not in any room */
       // io.getIO().except(io.getIO().sockets.adapter.rooms)
-      clientSocket.broadcast.emit(socketEvents.streamCreated, { data: model })
+      clientSocket.broadcast.emit(socketEvents.streamCreated, { modelId: req.user.relatedUser._id, profileImage: model.profileImage })
       res.status(200).json({
         actionStatus: "success",
         rtcToken: rtcToken,
@@ -111,31 +112,37 @@ exports.genRtcTokenViewer = (req, res, next) => {
 
   let theModel
   Model.findById(modelId)
-    .select("currentStream isStreaming")
+    .select(
+      "currentStream isStreaming onCall tags rating profileImage publicImages hobbies bio languages dob name gender ethnicity dynamicFields"
+    )
     .lean()
     .then((model) => {
       theModel = model
-      if (model.isStreaming && model.currentStream) {
-        const streamPr = Stream.findOneAndUpdate(
+      if (model.isStreaming) {
+        /* 🔴 Dangerously 👆👆 removing currentstream check, only while developing */
+        // if (model.isStreaming && model.currentStream) {
+        const streamPr = Stream.updateOne(
           { _id: model.currentStream },
           {
-            $push: {
+            $addToSet: {
               viewers: Types.ObjectId(req.user.relatedUserId),
             },
             $inc: {
               "meta.viewerCount": 1,
             },
-          }
+          },
+          { new: true }
         )
-        const viewerPr = Viewer.updateOne(
+        const viewerPr = Viewer.findOneAndUpdate(
           {
             _id: req.user.relatedUser,
           },
           {
-            $push: { streams: Types.ObjectId(model.currentStream) },
-          }
+            $addToSet: { streams: Types.ObjectId(model.currentStream) },
+          },
         )
-
+          .select("isChatPlanActive currentChatPlan")
+          .lean()
         return Promise.all([streamPr, viewerPr])
       } else {
         const error = new Error("Model is not currently streaming")
@@ -143,11 +150,24 @@ exports.genRtcTokenViewer = (req, res, next) => {
       }
     })
     .then((values) => {
+      const viewer = values[1]
       const streamRoom = `${theModel.currentStream._id}-public`
       const clientSocket = io.getIO().sockets.sockets.get(socketId)
       clientSocket.join(streamRoom)
+      if (viewer.isChatPlanActive) {
+        if (
+          /* 👇👇 for use in production */
+          // new Date(viewer.currentChatPlan.willExpireOn).getTime() >
+          // Date.now() + 10000
+          /* for now always true */
+          true
+        ) {
+          const privateStreamRoom = `${theModel.currentStream._id}-private`
+          clientSocket.join(privateStreamRoom)
+        }
+      }
       const roomSize = io.getIO().sockets.adapter.rooms.get(streamRoom).size
-      io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
+      clientSocket.to(streamRoom).emit(socketEvents.viewerJoined, {
         roomSize: roomSize,
         message: "New user join the stream 🤩🤩",
       })
@@ -157,8 +177,10 @@ exports.genRtcTokenViewer = (req, res, next) => {
         actionStatus: "success",
         rtcToken: rtcToken,
         privilegeExpiredTs: privilegeExpiredTs,
-        viewerCount: values[0].get("meta.viewerCount"),
+        viewerCount: roomSize,
         streamRoom: streamRoom,
+        theModel: theModel,
+        isChatPlanActive: viewer.isChatPlanActive
       })
     })
     .catch((err) => next(err))
@@ -173,7 +195,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
   let theModel
   Model.findById(modelId)
     .select(
-      "currentStream isStreaming onCall tags rating profileImage publicImages hobbies bio languages dob name gender ethnicity"
+      "currentStream isStreaming onCall tags rating profileImage publicImages hobbies bio languages dob name gender ethnicity dynamicFields"
     )
     .populate({
       path: "tags",
@@ -183,6 +205,8 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
     .then((model) => {
       console.log(model)
       if (model.isStreaming) {
+        /* 🔴 Dangerously 👆👆 removing currentstream check, only while developing */
+        // if (model.isStreaming && model.currentStream) {
         theModel = model
         if (!unAuthedUserId && !req.user) {
           /**
@@ -210,7 +234,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
               const roomSize = io
                 .getIO()
                 .sockets.adapter.rooms.get(streamRoom).size
-              io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
+              clientSocket.to(streamRoom).emit(socketEvents.viewerJoined, {
                 roomSize: roomSize,
                 message: "New user join the stream 🤩🤩",
               })
@@ -247,29 +271,73 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
         )
           .lean()
           .then((viewer) => {
-            const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-              "unAuthed",
-              viewer._id.toString(),
-              model._id.toString()
-            )
+            if (viewer) {
+              const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                "unAuthed",
+                viewer._id.toString(),
+                model._id.toString()
+              )
 
-            const streamRoom = `${model.currentStream}-public`
-            const clientSocket = io.getIO().sockets.sockets.get(socketId)
-            clientSocket.join(streamRoom)
-            const roomSize = io
-              .getIO()
-              .sockets.adapter.rooms.get(streamRoom).size
-            io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
-              roomSize: roomSize,
-              message: "New user join the stream 🤩🤩",
-            })
+              const streamRoom = `${model.currentStream}-public`
+              const clientSocket = io.getIO().sockets.sockets.get(socketId)
+              clientSocket.join(streamRoom)
+              const roomSize = io
+                .getIO()
+                .sockets.adapter.rooms.get(streamRoom).size
+              io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
+                roomSize: roomSize,
+                message: "New user join the stream 🤩🤩",
+              })
 
-            res.status(200).json({
-              actionStatus: "success",
-              rtcToken: rtcToken,
-              privilegeExpiredTs: privilegeExpiredTs,
-              newUnAuthedUserCreated: false,
-            })
+              res.status(200).json({
+                actionStatus: "success",
+                rtcToken: rtcToken,
+                privilegeExpiredTs: privilegeExpiredTs,
+                newUnAuthedUserCreated: false,
+                theModel: theModel,
+              })
+            } else {
+              /* means the un-authedUserId is invalid */
+              /* ===================================== */
+              return UnAuthedViewer({
+                sessions: 1,
+                streamViewed: 1,
+                lastStream: model.currentStream,
+              })
+                .save()
+                .then((viewer) => {
+                  // generate twilio chat token as well
+                  const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                    "unAuthed",
+                    viewer._id.toString(),
+                    model._id.toString()
+                  )
+                  //way1:👉 io.in(theSocketId).socketsJoin("room1");
+                  //way2:👉 io.sockets.sockets.get(socketId)
+                  const streamRoom = `${model.currentStream}-public`
+                  const clientSocket = io.getIO().sockets.sockets.get(socketId)
+                  clientSocket.join(streamRoom)
+                  const roomSize = io
+                    .getIO()
+                    .sockets.adapter.rooms.get(streamRoom).size
+                  io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
+                    roomSize: roomSize,
+                    message: "New user join the stream 🤩🤩",
+                  })
+                  res.status(200).json({
+                    actionStatus: "success",
+                    unAuthedUserId: viewer._id,
+                    rtcToken: rtcToken,
+                    privilegeExpiredTs: privilegeExpiredTs,
+                    newUnAuthedUserCreated: true,
+                    streamRoom: streamRoom,
+                    theModel: theModel,
+                  })
+                })
+                .catch((err) => {
+                  throw err
+                })
+            }
           })
           .catch((err) => {
             throw err

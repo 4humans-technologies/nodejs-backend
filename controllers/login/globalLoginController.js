@@ -22,7 +22,8 @@ exports.loginHandler = (req, res, next) => {
     .select("username needApproval userType relatedUser password lastLogin")
     .populate({
       path: "relatedUser",
-      select: "name pendingCall pendingCalls wallet",
+      select:
+        "name pendingCall pendingCalls wallet isChatPlanActive currentChatPlan",
       populate: {
         path: "wallet",
         select: "currentAmount",
