@@ -26,9 +26,18 @@ exports.getRankingOnlineModels = (req, res, next) => {
   /**
    * get the streaming or onCall models
    */
-  const query = Model.find(
+
+  /* onCall or streaming */
+  /* const query = Model.find(
     {
       $or: [{ "onCall": true }, { "isStreaming": true }]
+    }
+  ) */
+
+  /* streaming */
+  const query = Model.find(
+    {
+      $or: [{ "isStreaming": true }]
     }
   )
     .sort("rating")

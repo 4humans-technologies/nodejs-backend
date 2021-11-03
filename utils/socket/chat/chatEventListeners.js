@@ -31,9 +31,25 @@ module.exports = {
     })
 
     socket.on(chatEvents.model_message_private_emitted, (data) => {
+      socket.in(data.room).emit(chatEvents.model_message_private_received, data)
+    })
+
+    socket.on(chatEvents.viewer_requested_for_call_emitted, (data) => {
       socket
-        .in(data.room)
-        .emit(chatEvents.model_message_private_received, data)
+        .to(data.modelId)
+        .emit(chatEvents.viewer_requested_for_call_received, data)
+    })
+
+    socket.on(chatEvents.model_call_request_response_emitted, (data) => {
+      socket
+        .to(data.modelId)
+        .emit(chatEvents.model_call_request_response_received, data)
+    })
+
+    socket.on(chatEvents.viewer_call_end_request_init_emitted, (data) => {
+      socket
+        .to(data.room)
+        .emit(chatEvents.viewer_call_end_request_init_received, data)
     })
   },
   unAuthedViewerListeners: (socket) => {
@@ -63,9 +79,20 @@ module.exports = {
     })
 
     socket.on(chatEvents.model_message_private_emitted, (data) => {
+      socket.in(data.room).emit(chatEvents.model_message_private_received, data)
+    })
+
+    /* call listeners */
+    socket.on(chatEvents.viewer_requested_for_call_emitted, (data) => {
       socket
-        .in(data.room)
-        .emit(chatEvents.model_message_private_received, data)
+        .to(data.modelId)
+        .emit(chatEvents.viewer_requested_for_call_received, data)
+    })
+
+    socket.on(chatEvents.model_call_request_response_emitted, (data) => {
+      socket
+        .to(data.modelId)
+        .emit(chatEvents.model_call_request_response_received, data)
     })
   },
   modelListeners: (socket) => {
@@ -95,9 +122,26 @@ module.exports = {
     })
 
     socket.on(chatEvents.model_message_private_emitted, (data) => {
+      socket.in(data.room).emit(chatEvents.model_message_private_received, data)
+    })
+
+    /* call listeners */
+    socket.on(chatEvents.viewer_requested_for_call_emitted, (data) => {
       socket
-        .in(data.room)
-        .emit(chatEvents.model_message_private_received, data)
+        .to(data.modelId)
+        .emit(chatEvents.viewer_requested_for_call_received, data)
+    })
+
+    socket.on(chatEvents.model_call_request_response_emitted, (data) => {
+      socket
+        .to(data.room)
+        .emit(chatEvents.model_call_request_response_received, data)
+    })
+
+    socket.on(chatEvents.model_call_end_request_init_emitted, (data) => {
+      socket
+        .to(data.room)
+        .emit(chatEvents.model_call_end_request_init_received, data)
     })
   },
 }

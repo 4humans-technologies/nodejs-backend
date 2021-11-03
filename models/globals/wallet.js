@@ -1,48 +1,47 @@
-const mongoose = require("mongoose");
+const mongoose = require("mongoose")
 
 const walletSchema = new mongoose.Schema({
-    rootUser: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        unique: true,
-        index: true
+  rootUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+  },
+  userType: {
+    type: String,
+    required: true,
+    enum: ["Viewer", "Model"],
+  },
+  relatedUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    refPath: "userType",
+    unique: true,
+  },
+  currentAmount: {
+    type: Number,
+    required: true,
+    default: 0,
+  },
+  lastTransaction: {
+    type: Map,
+    required: true,
+    default: {
+      amount: null,
+      time: null,
     },
-    userType: {
-        type: String,
-        required: true,
-        enum: ["Viewer", "Model"]
-    },
-    relatedUser: {
-        type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        refPath: "userType"
-    },
-    currentAmount: {
-        type: Number,
-        required: true,
-        default: 0
-    },
-    lastTransaction:{
-        type:Map,
-        required:true,
-        default:{
-            amount:null,
-            time:null
-        }
-    }
+  },
 })
 
-walletSchema.methods.deductAmount = function(amount){
-    if(this.currentAmount >= amount){
-        this.currentAmount = this.currentAmount - amount
-    }
-    const error = new Error("don't have sufficient balance to perform this call")
-    error.statusCode = 401
-    throw error
+walletSchema.methods.deductAmount = function (amount) {
+  if (this.currentAmount >= amount) {
+    return (this.currentAmount = this.currentAmount - amount)
+  }
+  const error = new Error("don't have sufficient balance to perform this call")
+  error.statusCode = 401
+  throw error
 }
 
-walletSchema.methods.addAmount = function(amount){
-    this.currentAmount = this.currentAmount + amount
+walletSchema.methods.addAmount = function (amount) {
+  this.currentAmount = this.currentAmount + amount
 }
 
 const Wallet = mongoose.model("Wallet", walletSchema)

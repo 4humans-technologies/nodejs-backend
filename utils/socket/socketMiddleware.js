@@ -6,7 +6,7 @@ const Model = require("../../models/userTypes/Model")
 
 module.exports = {
     verifyToken: (client, next) => {
-        console.log("verifying token start");
+        // console.log("verifying token start");
         const token = client.handshake.auth.token
         if (token) {
             try {
@@ -23,10 +23,13 @@ module.exports = {
                         }
                     }
                     if (decodedToken) {
-                        client.data.userId = decodedToken.userId
-                        client.data.relatedUserId = decodedToken.relatedUserId
+                        client.data.userId = decodedToken.userId.toString()
+                        client.data.relatedUserId = decodedToken.relatedUserId.toString()
                         client.authed = true
                         client.userType = client.handshake.query.userType
+                        // if (client.userType === "Model") {
+                        //     client.join(client.data.relatedUserId)
+                        // }
                         return next()
                     }
                 });
@@ -43,7 +46,7 @@ module.exports = {
         }
     },
     pendingCallResolver: (client, next) => {
-        console.log("checking pendingCalls");
+        // console.log("checking pendingCalls");
         /* Call checking setup, only for authed users */
         if (client.authed) {
             /* un-authed clients cannot have calls */

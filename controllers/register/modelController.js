@@ -5,6 +5,7 @@ const Wallet = require("../../models/globals/wallet")
 const errorCollector = require("../../utils/controllerErrorCollector")
 const bcrypt = require("bcrypt")
 const ObjectId = require("mongodb").ObjectId
+const generateJwt = require("../../utils/generateJwt")
 
 function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
@@ -59,39 +60,27 @@ exports.createModel = (req, res, next) => {
     })
     .then((userDoc) => {
       theUserId = userDoc._id
+      const hours = 12
+      const token = generateJwt({
+        hours: hours,
+        userId: theUserId,
+        relatedUserId: userDoc.relatedUser._id,
+        userType: userDoc.userType,
+        role: userDoc?.role?.roleName || "no-role",
+      })
       res.status(201).json({
         message: "model registered successfully",
         actionStatus: "success",
         user: userDoc,
         model: theModel,
-        // TODO: remove wallet in production, no need of wallet
+        // TODO: remove wallet in production, no need of wallet 🔺🔻🔻🔺
         wallet: theWallet,
+        token: token,
+        expiresIn: hours,
       })
-      /* 👇👇 this below code is not working */
-      // theWallet.rootUser = userDoc._id;
-      // theWallet.relatedUser = theModel._id;
-      // theModel.rootUser = userDoc._id;
-      // return Promise.all([theWallet.save(), theModel.save()]);
-
-      //   return Promise.all([
-      //     Wallet.findByIdAndUpdate(
-      //       theWallet._id,
-      //       {
-      //         rootUser: userDoc._id,
-      //         relatedUser: theModel._id,
-      //       },
-      //       { new: true }
-      //     ).lean(),
-      //     Model.findByIdAndUpdate(
-      //       {
-      //         rootUser: userDoc._id,
-      //       },
-      //       { new: true }
-      //     ).lean(),
-      //   ]);
     })
     .catch((err) => {
-      Promise.all([
+      Promise.allSettled([
         Wallet.deleteOne({
           _id: theWallet._id,
         }),

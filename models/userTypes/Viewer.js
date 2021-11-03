@@ -15,6 +15,7 @@ const viewerSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
+    index: true,
   },
   gender: {
     type: String,
@@ -34,7 +35,6 @@ const viewerSchema = new mongoose.Schema({
     required: true,
     ref: "Wallet",
     unique: true,
-    index: true,
   },
   following: [
     {

@@ -7,6 +7,7 @@ const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
 const jwtGenerator = require("../../utils/generateJwt")
 const generateJwt = require("../../utils/generateJwt")
+const io = require("../../socket")
 
 exports.loginHandler = (req, res, next) => {
   /**
@@ -15,6 +16,7 @@ exports.loginHandler = (req, res, next) => {
   errorCollector(req, "Username of Password is incorrect, please try again!")
 
   const { username, password } = req.body
+  const { socketId } = req.query
   let theUser
   User.findOne({
     username: username,
@@ -50,7 +52,13 @@ exports.loginHandler = (req, res, next) => {
       )
       const hours = 12
       console.debug("loggedIn")
-      res.status(200).json({
+
+      /*  */
+      // this work should be handed to socket🔺🔺
+      /* const clientSocket = io.getIO().sockets.sockets.get(socketId)
+      clientSocket.join(theUser.relatedUser._id.toString()) */
+
+      return res.status(200).json({
         actionStatus: "success",
         userType: theUser.userType,
         rootUserId: theUser._id,

@@ -17,6 +17,9 @@ module.exports = {
   // model accepting/declining calls events
   // naming is not correct these are not for call but
   // for the call requests
+  modelAcceptedCallRequest: "model-accepted-call-request",
+  modelDeclinedCallRequest: "model-declined-call-request",
+  
   modelAcceptedVideoCallRequest: "model-accepted-video-call",
   modelAcceptedAudioCallRequest: "model-accepted-audio-call",
   modelDeclinedVideoCallRequest: "model-declined-video-call",

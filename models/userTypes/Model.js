@@ -7,6 +7,16 @@ const modelSchema = new mongoose.Schema({
     unique: true,
     ref: "User",
   },
+  followers: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Viewer",
+    },
+  ],
+  numberOfFollowers: {
+    type: Number,
+    default: 0,
+  },
   approval: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Approval",
@@ -46,49 +56,56 @@ const modelSchema = new mongoose.Schema({
   hobbies: {
     type: [String],
   },
-  offLineMessage: {
-    type: String,
-    default: "This is default offline Message",
-  },
   tipMenuActions: {
     actions: [
       {
         action: String,
         price: Number,
-        timesTipped: {
-          type: Number,
-          default: 0,
-        },
       },
     ],
     lastUpdated: {
       type: Date,
     },
   },
-  sharePercent: Number /* Not in decimals, 90% === 90 not 0.9 */,
+  sharePercent: {
+    type: Number,
+    /* 🔻🔻 remove in production 🔻🔻 */
+    default: 60 /* amount model will give to admin */,
+  } /* Not in decimals, 90% === 90 not 0.9 */,
   adminPriceRange: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "PriceRange",
   },
   charges: {
-    audioCall: Number,
-    videoCall: Number,
+    audioCall: {
+      type: Number,
+      /* 🔻🔻 remove in production 🔻🔻 */
+      default: 50,
+    },
+    videoCall: {
+      type: Number,
+      /* 🔻🔻 remove in production 🔻🔻 */
+      default: 80,
+    },
   },
   minCallDuration: {
     // in minutes
     type: Number,
+    /* 🔻🔻 remove in production 🔻🔻 */
     default: 2,
   },
   timeForAcceptingCall: {
     // in seconds
     type: Number,
-    required: true,
+    /* 🔻🔻 remove in production 🔻🔻 */
     default: 30,
   },
   rating: {
     type: Number,
     min: 0,
     max: 5,
+    /* 🔻🔻 remove in production 🔻🔻 */
+    default: 4.5,
   },
   onCall: {
     type: Boolean,
@@ -112,6 +129,9 @@ const modelSchema = new mongoose.Schema({
     type: [String],
   },
   offlineStatus: {
+    /**
+     * offline message is the actually the more right name
+     */
     type: String,
     default: "I will soon come online, I Know you are waiting for me 🥰🥰",
   },

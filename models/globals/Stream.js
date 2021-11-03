@@ -22,7 +22,7 @@ const streamSchema = new mongoose.Schema({
         type: String,
         required: true,
         default: "Error",
-        enum: ["AudioCall", "VideoCall", "Manual", "Error"]
+        enum: ["AudioCall", "VideoCall", "Manual", "Error", "tab-close | window-reload | connection-error"]
     },
     meta: {
         duration: Number,
