@@ -433,7 +433,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
                 VideoCall.findById(callId),
                 Wallet.findOne({ relatedUser: req.user.relatedUser._id }),
               ])
-        return query.exec()
+        return query
       }
     })
     .then((values) => {
@@ -449,10 +449,12 @@ exports.handleEndCallFromViewer = (req, res, next) => {
       } else {
         /* do the money transfer logic */
         theCall.endTimeStamp = endTimeStamp
-        const totalCallDuration = +endTimeStamp - theCall.startTimeStamp
-        const billableCallDuration =
-          Math.ceil(totalCallDuration / 60) -
-          theCall.minCallDuration * 1000 * 60
+        const totalCallDuration =
+          (+endTimeStamp - theCall.startTimeStamp) /
+          60000 /* convert milliseconds to seconds */
+        const billableCallDuration = Math.ceil(
+          totalCallDuration - theCall.minCallDuration
+        ) /* in minutes */
         amountToDeduct = billableCallDuration * theCall.chargePerMin
         viewerWallet.deductAmount(amountToDeduct)
         return Promise.all([
@@ -475,13 +477,18 @@ exports.handleEndCallFromViewer = (req, res, next) => {
     })
     .then((wallet) => {
       /* now remove the pending calls from model & viewer */
-      const viewerPr = Viewer.findOneAndUpdate(
+      const viewerPr = Viewer.updateOne(
         {
           _id: req.user.relatedUser._id,
         },
         {
           pendingCall: null,
-        }
+          $addToSet:
+            callType === "audioCall"
+              ? { audioCallHistory: theCall._id }
+              : { videoCallHistory: theCall._id },
+        },
+        { runValidators: true }
       )
       let modelPr
 
@@ -595,7 +602,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
                 VideoCall.findById(callId),
                 Wallet.findOne({ relatedUser: req.user.relatedUser._id }),
               ])
-        return query.exec()
+        return query
       }
     })
     .then((values) => {
@@ -611,10 +618,12 @@ exports.handleEndCallFromModel = (req, res, next) => {
       } else {
         /* do the money transfer logic */
         theCall.endTimeStamp = endTimeStamp
-        const totalCallDuration = +endTimeStamp - theCall.startTimeStamp
-        const billableCallDuration =
-          Math.ceil(totalCallDuration / 60) -
-          theCall.minCallDuration * 1000 * 60
+        const totalCallDuration =
+          (+endTimeStamp - theCall.startTimeStamp) /
+          60000 /* convert milliseconds to seconds */
+        const billableCallDuration = Math.ceil(
+          totalCallDuration - theCall.minCallDuration
+        ) /* in minutes */
         amountToDeduct = billableCallDuration * theCall.chargePerMin
         modelWallet.addAmount(
           amountToDeduct * (req.user.relatedUser.sharePercent / 100)
@@ -637,7 +646,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
     })
     .then((wallet) => {
       /* now remove the pending calls from model & viewer */
-      const viewerPr = Viewer.findOneAndUpdate(
+      const viewerPr = Viewer.updateOne(
         {
           _id: theCall.viewer._id,
         },

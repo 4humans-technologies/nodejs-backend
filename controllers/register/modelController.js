@@ -85,22 +85,38 @@ exports.createModel = (req, res, next) => {
           _id: theWallet._id,
         }),
         Model.deleteOne({
-          _id: theModel._id,
+          _id: advRelatedUserId,
         }),
         User.deleteOne({
-          _id: theUserId,
+          _id: advRootUserId,
         }),
       ])
         .then((results) => {
-          console.log("end error >>>", err)
-          const error = new Error(err.message || "Model was not registered")
-          error.statusCode = err.statusCode || 500
-          error.data = {
-            code: err.code,
+          if (err?.name === "MongoError") {
+            switch (err.code) {
+              case 11000:
+                const field = Object.keys(err.keyValue)[0]
+                const fieldValue = err.keyValue[field]
+                errMessage = `${field} "${fieldValue}", is already used.`
+                const error = new Error(errMessage)
+                error.statusCode = 400
+                throw error
+              default:
+                const error_default = new Error(
+                  err.message || "viewer not registered"
+                )
+                error_default.statusCode = err.statusCode || 500
+                throw error_default
+            }
+          } else {
+            const error = new Error(err.message || "Model was not registered")
+            error.statusCode = err.statusCode || 400
+            error.data = {
+              code: err.code,
+            }
           }
-          next(error)
         })
-        .catch((_err) => next(error))
+        .catch((finalError) => next(finalError))
     })
 }
 

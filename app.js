@@ -101,9 +101,10 @@ app.use("/api/website/profile", modelProfileRouter)
 /* aws setup */
 app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
   generatePublicUploadUrl()
-    .then((uploadUrl) => {
+    .then((s3UrlData) => {
       res.status(200).json({
-        uploadUrl: uploadUrl,
+        uploadUrl: s3UrlData.uploadUrl,
+        key: s3UrlData.key,
       })
     })
     .catch((err) => next(err))

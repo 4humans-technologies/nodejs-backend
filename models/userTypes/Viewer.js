@@ -78,18 +78,6 @@ const viewerSchema = new mongoose.Schema({
       },
     },
   ],
-  purchaseHistory: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "coinPurchase",
-    },
-  ],
-  giftHistory: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "giftPurchase",
-    },
-  ],
   videoCallHistory: [
     {
       type: mongoose.Schema.Types.ObjectId,

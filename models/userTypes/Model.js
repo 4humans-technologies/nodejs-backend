@@ -4,8 +4,9 @@ const modelSchema = new mongoose.Schema({
   rootUser: {
     type: mongoose.Schema.Types.ObjectId,
     // required: true,
-    unique: true,
     ref: "User",
+    unique: true,
+    index: true,
   },
   followers: [
     {
@@ -21,6 +22,8 @@ const modelSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Approval",
     default: null,
+    unique: true,
+    index: true,
   },
   name: {
     type: String,
@@ -35,11 +38,13 @@ const modelSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
+    index: true,
   },
   phone: {
     type: String,
     required: true,
     unique: true,
+    index: true,
   },
   dob: {
     // will store only year
@@ -120,6 +125,7 @@ const modelSchema = new mongoose.Schema({
   currentStream: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Stream",
+    index: true,
   },
   profileImage: {
     type: String,
