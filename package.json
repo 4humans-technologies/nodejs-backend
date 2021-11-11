@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "nodemon app.js",
-    "https": "nodemon httpsApp.js"
+    "https": "nodemon httpsApp.js",
+    "prodstart": "node app.js"
   },
   "repository": {
     "type": "git",
