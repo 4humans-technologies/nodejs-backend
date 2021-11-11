@@ -9,6 +9,7 @@ const io = require("../../socket")
 const socketEvents = require("../../utils/socket/socketEvents")
 const PrivateChatPlan = require("../../models/management/privateChatPlan")
 const chatEvents = require("../../utils/socket/chat/chatEvents")
+const controllerErrorCollector = require("../../utils/controllerErrorCollector")
 
 /* 
     👉👉 function to handle streaming start is in tokenBuilderController
@@ -64,13 +65,11 @@ exports.withOutTokenStreamStart = (req, res, next) => {
       /* 👉👉 return data so as to compose the complete card on the main page */
 
       const streamRoomPublic = `${theStream._id}-public`
-      const streamRoomPrivate = `${theStream._id}-private`
       const clientSocket = io.getIO().sockets.sockets.get(socketId)
       /* save data on client about the stream */
       clientSocket.isStreaming = true
       clientSocket.streamId = theStream._id.toString()
       clientSocket.join(streamRoomPublic)
-      clientSocket.join(streamRoomPrivate)
       clientSocket.join(req.user.relatedUser._id.toString())
 
       /* 👇👇 broadcast to all who are not in any room */
@@ -171,18 +170,42 @@ exports.handleEndStream = (req, res, next) => {
       .then((values) => {
         const stream = values[0]
         const model = values[1]
-        const clientSocket = io.getIO().sockets.sockets.get(socketId)
-        clientSocket.broadcast.emit(socketEvents.deleteStreamRoom, {
-          modelId: req.user.relatedUser._id,
-        })
+        let clientSocket = io.getIO().sockets.sockets.get(socketId)
+        if (!clientSocket) {
+          clientSocket = io
+            .getIO()
+            .sockets.sockets.get(
+              Array.from(
+                io
+                  .getIO()
+                  .sockets.adapter.rooms.get(
+                    `${req.user.relatedUser._id}-private`
+                  )
+              )[0]
+            )
+        }
+        if (!clientSocket) {
+          io.getIO()
+            .in(`${streamId}-public`)
+            .emit(socketEvents.deleteStreamRoom, {
+              modelId: req.user.relatedUser._id,
+            })
+        } else {
+          clientSocket.broadcast.emit(socketEvents.deleteStreamRoom, {
+            modelId: req.user.relatedUser._id,
+          })
+        }
 
         /* destroy the stream chat rooms */
         io.getIO()
           .in(`${stream._id}-public`)
           .socketsLeave(`${stream._id}-public`)
-        io.getIO()
-          .in(`${stream._id}-private`)
-          .socketsLeave(`${stream._id}-private`)
+
+        // 👇👇 why leave this, this is model id private room
+        // io.getIO()
+        //   .in(`${req.user.relatedUser._id}-private`)
+        //   .except(socketId)
+        //   .socketsLeave(`${req.user.relatedUser._id}-private`)
 
         /* remove previous streams attributes from socket client */
         clientSocket.isStreaming = false
@@ -258,9 +281,9 @@ exports.handleViewerCallRequest = (req, res, next) => {
       } else {
         /* in sufficient balance */
         const error = new Error(
-          `You do not have sufficient balance in your wallet to request ${callType}, ₹ ${minBalance} is required`
+          `You do not have sufficient balance in your wallet to request ${callType}, ₹ ${minBalance} is required, you have ₹ ${wallet.currentAmount}`
         )
-        error.statusCode = 401
+        error.statusCode = 400
         throw error
       }
     })
@@ -272,13 +295,21 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
   // this is just for updating call doc and emitting event
 
   const { streamId, socketData } = req.body
+  let { socketId } = req.query
+  if (!socketId) {
+    socketId = Array.from(
+      io
+        .getIO()
+        .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+    )[0]
+  }
 
   const viewerId = req.body.socketData.relatedUserId
   const callType = req.body.socketData.callType
 
   let theCall = callType === "audioCall" ? AudioCall : VideoCall
   let callDoc
-  const callStartTimeStamp = Date.now() + 5000
+  const callStartTimeStamp = Date.now() + 0
   socketData.callStartTs = callStartTimeStamp
 
   /* create the call entry in DB */
@@ -353,6 +384,13 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         newError.statusCode = 400
         throw newError
       }
+      let clientSocket = io.getIO().sockets.sockets.get(socketId)
+      clientSocket.isStreaming = false
+      clientSocket.streamId = null
+
+      clientSocket.onCall = true
+      clientSocket.callId = callDoc._id.toString()
+      clientSocket.callType = callDoc.callType
 
       io.getIO()
         .in(`${streamId}-public`)
@@ -360,7 +398,10 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       /* MAKE ALL OTHER CLIENTS EXCEPT THE MOdEL AND THE VIEWER LEAVE PUBLIC CHANNEL & destroy private channel 
         but leaving will be done from client side, later can kick user out from server 🔺🔺
       */
-      io.getIO().in(`${streamId}-private`).socketsLeave(`${streamId}-private`)
+      io.getIO()
+        .in(`${req.user.relatedUser._id}-private`)
+        .except(socketId)
+        .socketsLeave(`${req.user.relatedUser._id}-private`)
       /* not destorying public channel for token gift to work on call */
 
       return res.status(200).json({
@@ -374,11 +415,20 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
 
 exports.handleEndCallFromViewer = (req, res, next) => {
   const { callId, callType, endTimeStamp } = req.body
-  const { socketId } = req.query
+  let { socketId } = req.query
+  if (!socketId) {
+    socketId = Array.from(
+      io
+        .getIO()
+        .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+    )[0]
+  }
 
   let theCall
   let viewerWallet
   let amountToDeduct
+  let amountAdded
+  let modelWallet
 
   const initialQuery =
     callType === "audioCall"
@@ -451,11 +501,16 @@ exports.handleEndCallFromViewer = (req, res, next) => {
         theCall.endTimeStamp = endTimeStamp
         const totalCallDuration =
           (+endTimeStamp - theCall.startTimeStamp) /
-          60000 /* convert milliseconds to seconds */
-        const billableCallDuration = Math.ceil(
-          totalCallDuration - theCall.minCallDuration
-        ) /* in minutes */
-        amountToDeduct = billableCallDuration * theCall.chargePerMin
+          60000 /* convert milliseconds to minutes */
+
+        if (totalCallDuration <= theCall.minCallDuration) {
+          amountToDeduct = 0
+        } else {
+          const billableCallDuration = Math.ceil(
+            totalCallDuration - theCall.minCallDuration
+          ) /* in minutes */
+          amountToDeduct = billableCallDuration * theCall.chargePerMin
+        }
         viewerWallet.deductAmount(amountToDeduct)
         return Promise.all([
           viewerWallet.save(),
@@ -467,10 +522,11 @@ exports.handleEndCallFromViewer = (req, res, next) => {
     })
     .then((values) => {
       const sharePercent = values[2].sharePercent
-      const modelWallet = values[3]
+      modelWallet = values[3]
       /* assign the latest values to theCall */
       theCall = values[1]
-      modelWallet.addAmount(amountToDeduct * (sharePercent / 100))
+      amountAdded = amountToDeduct * (sharePercent / 100)
+      modelWallet.addAmount(amountAdded)
       /* for admin account */
       // adminWallet.addAmount(amountToDeduct * ((100 - sharePercent) / 100))
       return modelWallet.save()
@@ -493,7 +549,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
       let modelPr
 
       if (callType === "audioCall") {
-        modelPr = Model.updateOne(
+        modelPr = Model.findOneAndUpdate(
           {
             _id: theCall.model._id,
           },
@@ -508,8 +564,10 @@ exports.handleEndCallFromViewer = (req, res, next) => {
           },
           { runValidators: true }
         )
+          .select("name profileImage")
+          .lean()
       } else {
-        modelPr = Model.updateOne(
+        modelPr = Model.findOneAndUpdate(
           {
             _id: theCall.model._id,
           },
@@ -518,20 +576,45 @@ exports.handleEndCallFromViewer = (req, res, next) => {
           },
           { runValidators: true }
         )
+          .select("name profileImage")
+          .lean()
       }
 
       return Promise.all([viewerPr, modelPr])
     })
     .then((values) => {
-      if (values[0].n === 1 && values[0].n === 1) {
+      if (values[0].n === 1) {
         io.getIO()
           .in(`${theCall.stream._id.toString()}-public`)
           .emit(chatEvents.viewer_call_end_request_finished, {
             theCall: theCall,
+            callDuration: theCall.startTimeStamp - theCall.endTimeStamp,
+            callType: theCall.callType,
+            name: req.user.relatedUser.name,
+            username: req.user.username,
+            profileImage: req.user.relatedUser.profileImage,
+            dateTime: theCall.startedAt,
+            currentAmount: modelWallet.currentAmount,
+            totalCharges: amountToDeduct,
+            amountAdded: amountAdded,
             ended: "ok",
           })
+
+        const clientSocket = io.getIO().sockets.sockets.get(socketId)
+        clientSocket.onCall = false
+        clientSocket.callId = null
+        clientSocket.callType = null
+
         res.status(200).json({
           theCall: theCall,
+          callDuration: (theCall.startTimeStamp = theCall.endTimeStamp),
+          callType: theCall.callType,
+          name: values[1].name,
+          username: "no-username",
+          profileImage: values[1].profileImage,
+          dateTime: theCall.startedAt,
+          currentAmount: viewerWallet.currentAmount,
+          totalCharges: amountToDeduct,
           actionStatus: "success",
           message: "call was ended successfully",
           wasFirst: "yes" /* was first to put the call end request */,
@@ -555,11 +638,20 @@ exports.handleEndCallFromViewer = (req, res, next) => {
 
 exports.handleEndCallFromModel = (req, res, next) => {
   const { callId, callType, endTimeStamp } = req.body
-  const { socketId } = req.query
+  let { socketId } = req.query
+  if (!socketId) {
+    socketId = Array.from(
+      io
+        .getIO()
+        .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+    )[0]
+  }
 
   let theCall
   let modelWallet
   let amountToDeduct
+  let amountAdded
+  let viewerWallet
 
   const initialQuery =
     callType === "audioCall"
@@ -621,13 +713,16 @@ exports.handleEndCallFromModel = (req, res, next) => {
         const totalCallDuration =
           (+endTimeStamp - theCall.startTimeStamp) /
           60000 /* convert milliseconds to seconds */
-        const billableCallDuration = Math.ceil(
-          totalCallDuration - theCall.minCallDuration
-        ) /* in minutes */
-        amountToDeduct = billableCallDuration * theCall.chargePerMin
-        modelWallet.addAmount(
-          amountToDeduct * (req.user.relatedUser.sharePercent / 100)
-        )
+        if (totalCallDuration <= theCall.minCallDuration) {
+          amountToDeduct = 0
+        } else {
+          const billableCallDuration = Math.ceil(
+            totalCallDuration - theCall.minCallDuration
+          ) /* in minutes */
+          amountToDeduct = billableCallDuration * theCall.chargePerMin
+        }
+        amountAdded = amountToDeduct * (req.user.relatedUser.sharePercent / 100)
+        modelWallet.addAmount(amountAdded)
         /* for admin account */
         // adminWallet.addAmount(amountToDeduct * ((100 - sharePercent) / 100))
         return Promise.all([
@@ -640,13 +735,13 @@ exports.handleEndCallFromModel = (req, res, next) => {
     .then((values) => {
       /* assign the latest values to theCall */
       theCall = values[1]
-      const viewerWallet = values[2]
+      viewerWallet = values[2]
       viewerWallet.deductAmount(amountToDeduct)
       return viewerWallet.save()
     })
     .then((wallet) => {
       /* now remove the pending calls from model & viewer */
-      const viewerPr = Viewer.updateOne(
+      const viewerPr = Viewer.findOneAndUpdate(
         {
           _id: theCall.viewer._id,
         },
@@ -654,6 +749,8 @@ exports.handleEndCallFromModel = (req, res, next) => {
           pendingCall: null,
         }
       )
+        .select("name profileImage")
+        .lean()
       let modelPr
 
       if (callType === "audioCall") {
@@ -683,15 +780,37 @@ exports.handleEndCallFromModel = (req, res, next) => {
       return Promise.all([viewerPr, modelPr])
     })
     .then((values) => {
-      if (values[0].n === 1 && values[0].n === 1) {
+      // if (values[0].n === 1 && values[0].n === 1) {
+      if (values[1].n === 1) {
         io.getIO()
           .in(`${theCall.stream._id.toString()}-public`)
-          .emit(chatEvents.model_call_request_response_received, {
+          .emit(chatEvents.model_call_end_request_finished, {
             theCall: theCall,
+            callDuration: theCall.startTimeStamp - theCall.endTimeStamp,
+            callType: theCall.callType,
+            name: req.user.relatedUser.name,
+            username: req.user.username,
+            profileImage: req.user.relatedUser.profileImage,
+            dateTime: theCall.startedAt,
+            currentAmount: viewerWallet.currentAmount,
+            amountDeducted: amountToDeduct,
             ended: "ok",
           })
+        /* clear client */
+        const clientSocket = io.getIO().sockets.sockets.get(socketId)
+        clientSocket.onCall = false
+        clientSocket.callId = null
+        clientSocket.callType = null
+
         res.status(200).json({
-          theCall: theCall,
+          // theCall: theCall,
+          callDuration: (theCall.startTimeStamp = theCall.endTimeStamp),
+          callType: theCall.callType,
+          name: values[0].name,
+          dateTime: theCall.startedAt,
+          currentAmount: modelWallet.currentAmount,
+          amountAdded: amountAdded,
+          totalCharges: amountToDeduct,
           actionStatus: "success",
           message: "call was ended successfully",
           wasFirst: "yes" /* was first to put the call end request */,
@@ -901,6 +1020,63 @@ exports.processTokenGift = (req, res, next) => {
     .catch((error) => next(error))
 }
 
+exports.processTipMenuRequest = (req, res, next) => {
+  controllerErrorCollector(req)
+  const { activity, modelId, socketData, room } = req.body
+
+  let sharePercent
+  let viewerNewWalletAmount
+  Wallet.findOne({ rootUser: req.user._id })
+    .then((wallet) => {
+      if (activity.price <= wallet.currentAmount) {
+        const amountLeft = wallet.currentAmount - activity.price
+        viewerNewWalletAmount = amountLeft
+        wallet.currentAmount = amountLeft
+        return wallet.save()
+      } else {
+        const error = new Error(
+          `You dont have sufficient amount of coins to gift the model, ${activity.price} is required you have only ${wallet.currentAmount}`
+        )
+        error.statusCode = 400
+        throw error
+      }
+    })
+    .then((wallet) => {
+      /* transfer the amount to model*/
+      return Model.findById(modelId).select("sharePercent currentStream").lean()
+    })
+    .then((model) => {
+      sharePercent = model?.sharePercent
+      if (!sharePercent) {
+        sharePercent = 60
+      }
+      return Wallet.findOneAndUpdate(
+        { relatedUser: modelId },
+        {
+          currentAmount: activity.price * (sharePercent / 100),
+        }
+      ).lean()
+    })
+    .then((wallet) => {
+      return TokenGiftHistory({
+        tokenAmount: activity.price,
+        forModel: modelId,
+        by: req.user.relatedUser,
+      }).save()
+    })
+    .then((history) => {
+      // const clientSocket = io.getIO().sockets.sockets.get(socketId)
+      io.getIO()
+        .in(room)
+        .emit(chatEvents.viewer_super_message_public_received, socketData)
+      return res.status(200).json({
+        actionStatus: "success",
+        viewerNewWalletAmount: viewerNewWalletAmount,
+      })
+    })
+    .catch((error) => next(error))
+}
+
 exports.buyChatPlan = (req, res, next) => {
   /* verify is viewer and loggedIn */
   /* check is already active he cannot buy again */
@@ -1014,7 +1190,14 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
   /* NOTE: at this sage the viewer already has the rtcToken */
 
   const { modelId } = req.body
-  const { socketId } = req.query
+  let { socketId } = req.query
+  if (!socketId) {
+    socketId = Array.from(
+      io
+        .getIO()
+        .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+    )[0]
+  }
 
   try {
     const [viewer, model] = await Promise.all([
@@ -1029,18 +1212,30 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
         .sockets.sockets.get(socketId)
         .join(`${model.currentStream._id}-public`)
       if (viewer.isChatPlanActive) {
+        if (
+          /* 👇👇 for use in production */
+          // new Date(viewer.currentChatPlan.willExpireOn).getTime() >
+          // Date.now() + 10000
+          /* for now always true */
+          true
+        ) {
+          /* for future  */
+        }
+        /* join his own channel */
         io.getIO()
           .sockets.sockets.get(socketId)
-          .join(`${model.currentStream._id}-private`)
+          .join(`${req.user.relatedUser._id}-private`)
       }
 
       return res.status(200).json({
         actionStatus: "success",
+        isChatPlanActive: req.user.relatedUser.isChatPlanActive,
       })
     }
-    return res.status(400).json({
+    return res.status(200).json({
       actionStatus: "failed",
       message: "This model is currently no streaming, please comeback later.",
+      isChatPlanActive: req.user.relatedUser.isChatPlanActive,
     })
   } catch (e) {
     const err = new Error(e.message + "Stream chats not joined")

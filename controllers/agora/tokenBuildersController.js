@@ -85,13 +85,24 @@ exports.createStreamAndToken = (req, res, next) => {
       /* 👉👉 return data so as to compose the complete card on the main page */
 
       const streamRoomPublic = `${theStream._id}-public`
-      const streamRoomPrivate = `${theStream._id}-private`
-      const clientSocket = io.getIO().sockets.sockets.get(socketId)
+      let clientSocket = io.getIO().sockets.sockets.get(socketId)
+      if (!clientSocket) {
+        clientSocket = io
+          .getIO()
+          .sockets.sockets.get(
+            Array.from(
+              io
+                .getIO()
+                .sockets.adapter.rooms.get(
+                  `${req.user.relatedUser._id}-private`
+                )
+            )[0]
+          )
+      }
       /* save data on client about the stream */
       clientSocket.isStreaming = true
       clientSocket.streamId = theStream._id.toString()
       clientSocket.join(streamRoomPublic)
-      clientSocket.join(streamRoomPrivate)
       clientSocket.join(String(req.user.relatedUser._id))
 
       /* 👇👇 broadcast to all who are not in any room */
@@ -165,7 +176,20 @@ exports.genRtcTokenViewer = (req, res, next) => {
           .then((values) => {
             const viewer = values[1]
             const streamRoom = `${theModel.currentStream._id}-public`
-            const clientSocket = io.getIO().sockets.sockets.get(socketId)
+            let clientSocket = io.getIO().sockets.sockets.get(socketId)
+            if (!clientSocket) {
+              clientSocket = io
+                .getIO()
+                .sockets.sockets.get(
+                  Array.from(
+                    io
+                      .getIO()
+                      .sockets.adapter.rooms.get(
+                        `${req.user.relatedUser._id}-private`
+                      )
+                  )[0]
+                )
+            }
             /* save data on client about the stream */
             clientSocket.isStreaming = true
             clientSocket.streamId = theModel.currentStream._id.toString()
@@ -178,8 +202,10 @@ exports.genRtcTokenViewer = (req, res, next) => {
                 /* for now always true */
                 true
               ) {
-                const privateStreamRoom = `${theModel.currentStream._id}-private`
-                clientSocket.join(privateStreamRoom)
+                // const privateStreamRoom = `${theModel._id}-private`
+                // clientSocket.join(privateStreamRoom)
+                /* join his own id channel */
+                clientSocket.join(`${req.user.relatedUser._id}-private`)
               }
             }
             const roomSize = io
@@ -208,6 +234,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
           actionStatus: "success",
           message: "model not streaming",
           theModel: theModel,
+          isChatPlanActive: req.user.relatedUser.isChatPlanActive,
         })
       }
     })

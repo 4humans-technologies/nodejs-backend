@@ -1,12 +1,13 @@
 module.exports = {
   viewer_request_to_have_private_listeners:
     "viewer-request-to-have-private-listeners",
-  viewer_message_private_emitted: "viewer-message-private-emitted",
-  viewer_message_private_received: "viewer-message-private-received",
+  viewer_private_message_emitted: "viewer-private-message-emitted",
+  viewer_private_message_received: "viewer-private-message-received",
+  model_private_message_emitted: "model-private-message-emitted",
+  model_private_message_received: "model-private-message-received",
+  /*  */
   viewer_message_public_emitted: "viewer-message-public-emitted",
   viewer_message_public_received: "viewer-message-public-received",
-  model_message_private_emitted: "model-message-private-emitted",
-  model_message_private_received: "model-message-private-received",
   model_message_public_emitted: "model-message-public-emitted",
   model_message_public_received: "model-message-public-received",
   viewer_super_message_public_emitted: "viewer_super_message_pubic-emitted",
@@ -19,7 +20,6 @@ module.exports = {
   /*  */
   got_notification_for_user: "got_notification_for_user",
   send_notification_to_user: "send-notification-to-user",
-  /*  */
   // viewer_gifted_token_emitted: "viewer-gifted-token-emitted",
   // viewer_gifted_token_received: "viewer-gifted-token-received"
   /* call */

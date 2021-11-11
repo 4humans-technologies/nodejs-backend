@@ -18,6 +18,11 @@ const privateChatPlanSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    status: {
+      type: String,
+      default: "active",
+      enum: ["active", "discouraged", "deactivated"],
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

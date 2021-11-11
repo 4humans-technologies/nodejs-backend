@@ -142,7 +142,7 @@ const modelSchema = new mongoose.Schema({
     default: "I will soon come online, I Know you are waiting for me 🥰🥰",
   },
   backGroundImage: String,
-  profileBg: String,
+  coverImage: String,
   privateImages: {
     type: Map,
     of: new mongoose.Schema({
@@ -218,6 +218,12 @@ const modelSchema = new mongoose.Schema({
     "body type": String,
     country: String,
   },
+  privateChats: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ModelViewerPrivateChat",
+    },
+  ],
 })
 
 modelSchema.index(

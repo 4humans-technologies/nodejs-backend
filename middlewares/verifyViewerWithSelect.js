@@ -1,7 +1,22 @@
+/**
+ * verify user token in header, and dynamic select and populate for mongoose user query
+ */
+
 const jwt = require("jsonwebtoken")
 const User = require("../models/User")
 
-module.exports = (req, _res, next) => {
+module.exports = (req, _res, next, select, populate) => {
+  if (!select) {
+    select = "role permissions userType needApproval relatedUser"
+  }
+
+  if (!populate) {
+    populate = {
+      path: "relatedUser",
+      select: "name profileImage isChatPlanActive email",
+    }
+  }
+
   if (!req.get("Authorization")) {
     const err = new Error("No Token Found In The Header")
     err.statusCode = 403
@@ -41,23 +56,9 @@ module.exports = (req, _res, next) => {
       }
       if (decodedToken) {
         req.userId = decodedToken.userId
-        let select
-        if (decodedToken.userType === "Model") {
-          select =
-            "-followers -hobbies -bio -privateImages -streams -videoCallHistory -audioCallHistory -pendingCalls -dailyIncome -tags"
-        } else if (decodedToken.userType === "Viewer") {
-          select = "-hobbies -following -streams"
-        } else {
-          select = ""
-        }
-        User.findById(
-          decodedToken.userId,
-          "role permissions userType needApproval relatedUser"
-        )
-          .populate({
-            path: "relatedUser",
-            select: select,
-          })
+        User.findById(decodedToken.userId)
+          .select(select)
+          .populate(populate)
           .lean()
           .then((user) => {
             req.user = user

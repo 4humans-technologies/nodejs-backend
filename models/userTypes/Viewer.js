@@ -62,22 +62,21 @@ const viewerSchema = new mongoose.Schema({
       type: Date,
     },
   },
-  previousChatPlans: [
-    {
-      planId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "PrivateChatPlan",
+  previousChatPlans: {
+    type: [
+      {
+        planId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "PrivateChatPlan",
+        },
+        purchasedOn: {
+          type: Date,
+          required: true,
+        },
       },
-      purchasedOn: {
-        type: Date,
-        required: true,
-      },
-      index: {
-        type: Number,
-        required: true,
-      },
-    },
-  ],
+    ],
+    default: [],
+  },
   videoCallHistory: [
     {
       type: mongoose.Schema.Types.ObjectId,
@@ -98,6 +97,12 @@ const viewerSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     refPath: "pendingCallType",
   },
+  privateChats: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ModelViewerPrivateChat",
+    },
+  ],
 })
 
 const Viewer = mongoose.model("Viewer", viewerSchema)

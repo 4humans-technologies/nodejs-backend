@@ -13,13 +13,16 @@ const s3 = new aws.S3({
   signatureVersion: "v4",
 })
 
-exports.generatePublicUploadUrl = () => {
+exports.generatePublicUploadUrl = (extension, type) => {
+  let uniqueImageName
   return nanoid(24)
-    .then((uniqueImageName) => {
+    .then((id) => {
+      uniqueImageName = id
       const params = {
         Bucket: bucketName,
-        Key: uniqueImageName,
+        Key: `${uniqueImageName}${extension}`,
         Expires: 60,
+        ContentType: type,
       }
       return s3.getSignedUrlPromise("putObject", params)
     })

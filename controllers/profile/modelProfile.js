@@ -1,4 +1,5 @@
 const Model = require("../../models/userTypes/Model")
+const User = require("../../models/User")
 const bcrypt = require("bcrypt")
 const Approval = require("../../models/management/approval")
 
@@ -112,4 +113,54 @@ exports.updatePassword = (req, res, next) => {
       })
     })
     .catch((err) => next(error))
+}
+
+exports.updateModelBasicDetails = (req, res, next) => {
+  const { updatedData } = req.body
+
+  const userData = {}
+
+  if (updatedData?.username) {
+    userData[username] = updatedData.username
+  }
+
+  const queryArray = updatedData?.userName
+    ? [
+        Model.findByIdAndUpdate(
+          req.user.relatedUser._id,
+          {
+            ...updatedData,
+          },
+          {
+            runValidators: true,
+          }
+        ).lean(),
+        User.findByIdAndUpdate(req.user._id, {
+          ...userData,
+        }).lean(),
+      ]
+    : [
+        Model.findByIdAndUpdate(
+          req.user.relatedUser._id,
+          {
+            ...updatedData,
+          },
+          {
+            runValidators: true,
+          }
+        ).lean(),
+      ]
+
+  const query = Promise.all(queryArray)
+
+  query
+    .then((values) => {
+      updatedModel = values[0]
+      updatedUser = values?.[1]
+      return res.status(200).json({
+        actionStatus: "success",
+        theModel: { ...updatedModel, rootUser: updatedUser },
+      })
+    })
+    .catch((err) => next(err))
 }

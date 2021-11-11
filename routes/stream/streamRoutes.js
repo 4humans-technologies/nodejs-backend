@@ -2,6 +2,7 @@ const router = require("express").Router()
 const streamController = require("../../controllers/stream/streamController")
 const tokenVerify = require("../../middlewares/tokenVerify")
 const putUserInRequest = require("../../middlewares/putUserInRequest")
+const { body } = require("express-validator")
 
 router.get(
   "/create-stream-without-token",
@@ -47,6 +48,17 @@ router.post(
   "/handle-call-end-from-viewer",
   tokenVerify,
   streamController.handleEndCallFromViewer
+)
+router.post(
+  "/request-process-tip-menu-action",
+  [
+    body("activity").isObject(),
+    body("socketData").isObject(),
+    body("modelId").isString(),
+    body("room").isString(),
+  ],
+  tokenVerify,
+  streamController.processTipMenuRequest
 )
 
 module.exports = router

@@ -13,12 +13,22 @@ function capitalizeFirstLetter(string) {
 
 exports.createModel = (req, res, next) => {
   errorCollector(req, "Invalid form details, please try again")
-  const { username, password, name, email, phone, gender, age, languages } =
-    req.body
+  const {
+    username,
+    password,
+    name,
+    email,
+    phone,
+    gender,
+    age,
+    languages,
+    profileImage,
+  } = req.body
 
   let theWallet, theModel, theUserId
   const advRootUserId = new ObjectId()
   const advRelatedUserId = new ObjectId()
+  const approvalId = new ObjectId()
   Wallet({
     userType: "Model",
     currentAmount: 0,
@@ -31,13 +41,15 @@ exports.createModel = (req, res, next) => {
       return Model({
         _id: advRelatedUserId,
         rootUser: advRootUserId,
+        approval: approvalId,
         name: name,
         gender: capitalizeFirstLetter(gender),
         email: email,
         phone: phone,
         dob: new Date().getFullYear() - age,
         wallet: wallet._id,
-        profileImage: "/" + req.file.path.replace(/\\/g, "/"),
+        // profileImage: "/" + req.file.path.replace(/\\/g, "/"),
+        profileImage: profileImage,
         languages: languages.split(",") || ["hindi"],
       }).save()
     })
@@ -114,6 +126,7 @@ exports.createModel = (req, res, next) => {
             error.data = {
               code: err.code,
             }
+            throw error
           }
         })
         .catch((finalError) => next(finalError))

@@ -50,17 +50,21 @@ const tagRouter = require("./routes/management/tagRoutes")
 const uxUtils = require("./routes/uxUtils/uxUtilsRoutes")
 const giftsRouter = require("./routes/gifts/gifts")
 const streamRouter = require("./routes/stream/streamRoutes")
+const privateChatsRouter = require("./routes/stream/privateChatsRoute")
 const modelProfileRouter = require("./routes/profile/modelProfile")
 
 // 🔴 ADMIN ROUTES 🔴
 const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
+const privateChatRouter = require("./routes/ADMIN/privateChat")
 
 // Required Models
 const socketEvents = require("./utils/socket/socketEvents")
-// const Viewer = require("./models/userTypes/Viewer")
+const Viewer = require("./models/userTypes/Viewer")
 const Model = require("./models/userTypes/Model")
 const Stream = require("./models/globals/Stream")
+const AudioCall = require("./models/globals/audioCall")
+const VideoCall = require("./models/globals/videoCall")
 
 // CONNECT-URL--->
 let CONNECT_URL
@@ -96,11 +100,14 @@ app.use("/api/website/management/tags", tagRouter)
 app.use("/api/website/token-builder", tokenBuilderRouter)
 app.use("/api/website/gifts", giftsRouter)
 app.use("/api/website/stream", streamRouter)
+app.use("/api/website/private-chat", privateChatsRouter)
 app.use("/api/website/profile", modelProfileRouter)
 
 /* aws setup */
 app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
-  generatePublicUploadUrl()
+  const { type } = req.query
+  const extension = "." + type?.split("/")[1]
+  generatePublicUploadUrl(extension, type)
     .then((s3UrlData) => {
       res.status(200).json({
         uploadUrl: s3UrlData.uploadUrl,
@@ -113,6 +120,7 @@ app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
 // ADMIN PATHS
 app.use("/api/admin/permissions", adminPermissions)
 app.use("/api/admin/gifts", adminGiftRoutes)
+app.use("/api/admin/privatechat", privateChatRouter)
 app.use("/test", testRouter)
 
 // EXPRESS ERROR HANDLER--->
@@ -176,91 +184,301 @@ mongoose
 
     // example of socket middleware 👇👇
     io.use(socketMiddlewares.verifyToken)
-    io.use(socketMiddlewares.pendingCallResolver)
-
-    // io.use((client, next) => {
-    //   console.log("Putted socket on hold")
-    //   setTimeout(() => {
-    //     next()
-    //   }, 5000)
-    // })
+    // io.use(socketMiddlewares.pendingCallResolver)
 
     io.on("connection", (client) => {
+      if (client.handshake.query.userType === "Model") {
+        client.join(`${client.data.relatedUserId}-private`)
+      }
       client.on("disconnect", () => {
         if (client?.isStreaming && client.authed) {
-          /* client (model) disconnected in between of the stream */
-          console.log("🚩 a model left in between of streaming")
-          Stream.findById(client.streamId)
-            .then((stream) => {
-              const duration =
-                (Date.now() - new Date(stream.createdAt).getTime()) / 1000
-              stream.endReason = "tab-close | window-reload | connection-error"
-              stream.status = "ended"
-              stream.duration = duration
-              return Promise.all([
-                stream.save(),
-                Model.updateOne(
-                  { _id: client.data.relatedUserId },
-                  {
-                    isStreaming: false,
-                    currentStream: null,
-                  }
-                ),
-              ])
-            })
-            .then((values) => {
-              const stream = values[0]
-              client.broadcast.emit(socketEvents.deleteStreamRoom, {
-                modelId: client.data.relatedUserId,
+          /**
+           * client (model) disconnected in between of the stream
+           */
+          try {
+            console.log("🚩 a model left in between of streaming")
+            Stream.findById(client.streamId)
+              .then((stream) => {
+                const duration =
+                  (Date.now() - new Date(stream.createdAt).getTime()) / 1000
+                stream.endReason =
+                  "tab-close | window-reload | connection-error"
+                stream.status = "ended"
+                stream.duration = duration
+                return Promise.all([
+                  stream.save(),
+                  Model.updateOne(
+                    { _id: client.data.relatedUserId },
+                    {
+                      isStreaming: false,
+                      currentStream: null,
+                    }
+                  ),
+                ])
               })
+              .then((values) => {
+                const stream = values[0]
+                client.broadcast.emit(socketEvents.deleteStreamRoom, {
+                  modelId: client.data.relatedUserId,
+                })
 
-              /* destroy the stream chat rooms */
-              io.in(`${client.streamId}-public`).socketsLeave(
-                `${client.streamId}-public`
-              )
-              io.in(`${client.streamId}-private`).socketsLeave(
-                `${client.streamId}-private`
-              )
-              client.isStreaming = false
-              client.currentStream = null
-            })
+                /* destroy the stream chat rooms */
+                io.in(`${client.streamId}-public`).socketsLeave(
+                  `${client.streamId}-public`
+                )
+                io.in(`${client.data.relatedUserId}-private`).socketsLeave(
+                  `${client.data.relatedUserId}-private`
+                )
+                client.isStreaming = false
+                client.currentStream = null
+              })
+          } catch (error) {
+            /* log that stream was not closed */
+            console.warn("The streaming status was not updated(closed)")
+          }
+        } else if (client?.onCall && !client.authed) {
+          if ((client.userType = "Model")) {
+            const callId = client.callId
+            const callType = client.callType
+
+            /*  */
+            let theCall
+            let modelWallet
+            let amountToDeduct
+            let amountAdded
+            let viewerWallet
+
+            const initialQuery =
+              callType === "audioCall"
+                ? AudioCall.updateOne(
+                    {
+                      _id: callId,
+                    },
+                    {
+                      $addToSet: { concurrencyControl: 1 },
+                    }
+                  )
+                : VideoCall.updateOne(
+                    {
+                      _id: callId,
+                    },
+                    {
+                      $addToSet: { concurrencyControl: 1 },
+                    }
+                  )
+
+            initialQuery
+              .then((result) => {
+                if (result.n === 0) {
+                  /* no doc modified, model has ended tha call faster, return */
+                  res.status(200).json({
+                    actionStatus: "failed",
+                    wasFirst: "no" /* was first to put the call end request */,
+                    message:
+                      "viewer ended call before you, please wait while we are processing the transaction!",
+                  })
+                } else if (result.n > 0) {
+                  /* you have locked the db model cannot over-rite */
+                  const query =
+                    callType === "audioCall"
+                      ? Promise.all([
+                          AudioCall.findById(callId),
+                          Wallet.findOne({
+                            relatedUser: req.user.relatedUser._id,
+                          }),
+                        ])
+                      : Promise.all([
+                          VideoCall.findById(callId),
+                          Wallet.findOne({
+                            relatedUser: req.user.relatedUser._id,
+                          }),
+                        ])
+                  return query
+                }
+              })
+              .then((values) => {
+                theCall = values[0]
+                modelWallet = values[1]
+                if (theCall.endTimeStamp) {
+                  /* return bro */
+                  const error = new Error(
+                    "call doc updated even after locking, this should be impossible"
+                  )
+                  error.statusCode = 500
+                  throw error
+                } else {
+                  /* do the money transfer logic */
+                  theCall.endTimeStamp = endTimeStamp
+                  const totalCallDuration =
+                    (+endTimeStamp - theCall.startTimeStamp) /
+                    60000 /* convert milliseconds to seconds */
+                  if (totalCallDuration <= theCall.minCallDuration) {
+                    amountToDeduct = 0
+                  } else {
+                    const billableCallDuration = Math.ceil(
+                      totalCallDuration - theCall.minCallDuration
+                    ) /* in minutes */
+                    amountToDeduct = billableCallDuration * theCall.chargePerMin
+                  }
+                  amountAdded =
+                    amountToDeduct * (req.user.relatedUser.sharePercent / 100)
+                  modelWallet.addAmount(amountAdded)
+                  /* for admin account */
+                  // adminWallet.addAmount(amountToDeduct * ((100 - sharePercent) / 100))
+                  return Promise.all([
+                    modelWallet.save(),
+                    theCall.save(),
+                    Wallet.findOne({ relatedUser: theCall.viewer._id }),
+                  ])
+                }
+              })
+              .then((values) => {
+                /* assign the latest values to theCall */
+                theCall = values[1]
+                viewerWallet = values[2]
+                viewerWallet.deductAmount(amountToDeduct)
+                return viewerWallet.save()
+              })
+              .then((wallet) => {
+                /* now remove the pending calls from model & viewer */
+                const viewerPr = Viewer.findOneAndUpdate(
+                  {
+                    _id: theCall.viewer._id,
+                  },
+                  {
+                    pendingCall: null,
+                  }
+                )
+                  .select("name rootUser profileImage")
+                  .populate({
+                    path: "rootUser",
+                    select: "username",
+                  })
+                  .lean()
+                let modelPr
+
+                if (callType === "audioCall") {
+                  modelPr = Model.findOneAndUpdate(
+                    {
+                      _id: theCall.model._id,
+                    },
+                    {
+                      $pull: {
+                        "pendingCalls.audioCalls": theCall._id,
+                      },
+                    },
+                    { runValidators: true }
+                  )
+                    .select("name rootUser profileImage")
+                    .populate({
+                      path: "rootUser",
+                      select: "username",
+                    })
+                    .lean()
+                } else {
+                  modelPr = Model.findOneAndUpdate(
+                    {
+                      _id: theCall.model._id,
+                    },
+                    {
+                      $pull: { "pendingCalls.videoCalls": theCall._id },
+                    },
+                    { runValidators: true }
+                  )
+                    .select("name rootUser profileImage")
+                    .populate({
+                      path: "rootUser",
+                      select: "username",
+                    })
+                    .lean()
+                }
+
+                return Promise.all([viewerPr, modelPr])
+              })
+              .then((values) => {
+                const viewer = viewer
+                const model = values[1]
+
+                if (viewer._id && model._id) {
+                  io.getIO()
+                    .in(`${theCall.stream._id.toString()}-public`)
+                    .emit(chatEvents.model_call_end_request_finished, {
+                      theCall: theCall,
+                      callDuration: (theCall.startTimeStamp =
+                        theCall.endTimeStamp),
+                      callType: theCall.callType,
+                      name: req.user.relatedUser.name,
+                      username: req.user.username,
+                      profileImage: req.user.relatedUser.profileImage,
+                      dateTime: theCall.startedAt,
+                      currentAmount: viewerWallet.currentAmount,
+                      amountDeducted: amountToDeduct,
+                      ended: "ok",
+                    })
+                  /* clear client */
+
+                  clientSocket.onCall = false
+                  client.callId = null
+                  clientSocket.callType = null
+
+                  res.status(200).json({
+                    // theCall: theCall,
+                    callDuration: (theCall.startTimeStamp =
+                      theCall.endTimeStamp),
+                    callType: theCall.callType,
+                    name: viewer.name,
+                    dateTime: theCall.startedAt,
+                    currentAmount: modelWallet.currentAmount,
+                    amountAdded: amountAdded,
+                    totalCharges: amountToDeduct,
+                    actionStatus: "success",
+                    message: "call was ended successfully",
+                    wasFirst: "yes" /* was first to put the call end request */,
+                  })
+                } else {
+                  const error = new Error(
+                    "pending calls were not removed successfully"
+                  )
+                  error.statusCode = 500
+                  throw error
+                }
+              })
+              .catch((err) => next(err))
+          } else {
+          }
         }
       })
 
       client.on("putting-me-in-these-rooms", (rooms, callback) => {
         console.log("put in rooms >> ", rooms)
-
-        /* have to check valadity of these rooms
-          these rooms must exist beforehand in order to be joined by the user or not 🤔🤔
-          👇👇 below is problem
-        */
-
-        // ⭕⭕
-        /* unauthed user should only join one room, that's it */
-        // if (client.userType === "UnAuthedViewer") {
-        //   console.log("client data >>>", client.userType)
-        //   if (rooms.length > 1) {
-        //     throw new Error("UnAuthedViewer joining more rooms!")
-        //   }
-        //   rooms.forEach((room) => {
-        //     client.join(room)
-        //   })
-        //   callback({
-        //     status: "ok",
-        //   })
-        // } else {
-
-        for (let i = 0; i < rooms.length; i++) {
-          client.leave(rooms[i])
+        if (client.userType === "UnAuthedViewer") {
+          if (rooms.length === 1 && rooms[0].endsWith("-public")) {
+            /* un-authed user can only join public room */
+            client.join(rooms[0])
+            callback({
+              status: "ok",
+            })
+          }
+        } else if (client.authed) {
+          for (let i = 0; i < rooms.length; i++) {
+            if (rooms[i].endsWith("-private")) {
+              if (rooms[i] === `${client.data.relatedUserId}-private`) {
+                /* join his private room */
+                client.join(rooms[i])
+              }
+              /* else joining "someone-"elses" room */
+            } else if (rooms[i].endsWith("-private")) {
+              /* put in public room */
+              client.join(rooms[i])
+            }
+          }
+          callback({
+            status: "ok",
+          })
         }
-        callback({
-          status: "ok",
-        })
-        // }
       })
 
       client.on("take-me-out-of-these-rooms", (rooms, callback) => {
-        console.log("leave rooms >> ", rooms)
         for (let i = 0; i < rooms.length; i++) {
           client.leave(rooms[i])
         }
