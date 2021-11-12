@@ -48,7 +48,7 @@ exports.createViewer = (req, res, next) => {
                 relatedUser: theViewer,
                 needApproval: approved || false,
                 meta: {
-                    lastLogin: new Date().toISOString()
+                    lastLogin: new Date()
                 }
             }).save()
         })

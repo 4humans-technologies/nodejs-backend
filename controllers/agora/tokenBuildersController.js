@@ -58,7 +58,7 @@ exports.createStreamAndToken = (req, res, next) => {
   let theStream
   Stream({
     model: req.user.relatedUser._id,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
   })
     .save()
     .then((stream) => {
@@ -318,7 +318,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
               sessions: 1,
               streamViewed: 1,
             },
-            lastAccess: new Date().toISOString(),
+            lastAccess: new Date(),
             lastStream: model.currentStream,
           },
           { new: true }

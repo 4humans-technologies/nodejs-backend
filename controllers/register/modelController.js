@@ -6,10 +6,15 @@ const errorCollector = require("../../utils/controllerErrorCollector")
 const bcrypt = require("bcrypt")
 const ObjectId = require("mongodb").ObjectId
 const generateJwt = require("../../utils/generateJwt")
+const Document = require("../../models/globals/modelDocuments")
 
 function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
 }
+
+/**
+ * contains endpoints for models registration and official works
+ */
 
 exports.createModel = (req, res, next) => {
   errorCollector(req, "Invalid form details, please try again")
@@ -66,7 +71,7 @@ exports.createModel = (req, res, next) => {
         relatedUser: advRelatedUserId,
         needApproval: false, //🔴🔴 set to false only for testing
         meta: {
-          lastLogin: new Date().toISOString(),
+          lastLogin: new Date(),
         },
       }).save()
     })
@@ -133,7 +138,50 @@ exports.createModel = (req, res, next) => {
     })
 }
 
-exports.handleDocumentUpload = (req, res, next) => {}
+exports.handleDocumentUpload = (req, res, next) => {
+  const { documentImages } = req.body
+
+  if (req.user.relatedUser.documents) {
+    Document.updateOne(
+      {
+        _id: req.user.relatedUser.documents,
+      },
+      {
+        $push: { images: { $each: documentImages } },
+      }
+    )
+      .then((result) => {
+        return res.status(200).json({
+          actionStatus: "success",
+        })
+      })
+      .catch((err) => next(err))
+  } else {
+    Document({
+      model: req.user.relatedUser._id,
+      images: documentImages,
+    })
+      .save()
+      .then((document) => {
+        return Model.updateOne(
+          {
+            _id: req.user.relatedUser._id,
+          },
+          {
+            documents: document._id,
+          }
+        )
+      })
+      .then((result) => {
+        if (result.n === 1) {
+          return res.status(200).json({
+            actionStatus: "success",
+          })
+        }
+      })
+      .catch((err) => next(err))
+  }
+}
 
 exports.registerTipMenuActions = (req, res, next) => {
   const { actions } = req.body
@@ -143,7 +191,7 @@ exports.registerTipMenuActions = (req, res, next) => {
     {
       tipMenuActions: {
         actions: actions,
-        lastUpdated: new Date().toISOString(),
+        lastUpdated: new Date(),
       },
     },
     { new: true }

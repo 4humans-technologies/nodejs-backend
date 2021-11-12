@@ -127,12 +127,30 @@ const modelSchema = new mongoose.Schema({
     ref: "Stream",
     index: true,
   },
+  documents: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Document",
+    index: true,
+  },
   profileImage: {
     type: String,
     required: true,
   },
   publicImages: {
     type: [String],
+    default: [],
+  },
+  privateImages: {
+    type: [String],
+    default: [],
+  },
+  publicVideos: {
+    type: [String],
+    default: [],
+  },
+  privateVideos: {
+    type: [String],
+    default: [],
   },
   offlineStatus: {
     /**

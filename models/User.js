@@ -46,8 +46,8 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 userSchema.methods.updateLastLogin = function () {
-    // could have used this.updateOne({"meta.lastLogin":new Date().toISOString()})
-    this.meta.set("lastLogin", new Date().toISOString())
+    // could have used this.updateOne({"meta.lastLogin":new Date()})
+    this.meta.set("lastLogin", new Date())
     this.save()
 }
 

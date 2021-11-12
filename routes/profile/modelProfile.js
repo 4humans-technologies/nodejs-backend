@@ -1,6 +1,7 @@
 const router = require("express").Router()
 const modelProfileData = require("../../controllers/profile/modelProfile")
 const tokenVerify = require("../../middlewares/tokenVerify")
+const { body } = require("express-validator")
 
 router.get(
   "/get-model-profile-data",
@@ -12,10 +13,25 @@ router.post(
   tokenVerify,
   modelProfileData.updateTipMenuActions
 )
+
 router.post(
   "/update-model-basic-details",
   tokenVerify,
   modelProfileData.updateModelBasicDetails
+)
+
+router.post(
+  "/handle-public-image-upload",
+  tokenVerify,
+  [body("newImageUrl").isURL()],
+  modelProfileData.handlePublicImageUpload
+)
+
+router.post(
+  "/handle-public-video-upload",
+  tokenVerify,
+  [body("newImageUrl").isURL({ require_host: true })],
+  modelProfileData.handlePublicVideosUpload
 )
 
 module.exports = router

@@ -7,6 +7,7 @@ const { nanoid } = require("nanoid")
 const { extname } = require("path")
 const { body, validationResult } = require("express-validator")
 const User = require("../../models/User")
+const tokenVerify = require("../../middlewares/tokenVerify")
 
 router.post(
   "/create",
@@ -36,49 +37,11 @@ router.post(
   modelController.createModel
 )
 
-const modelDocumentStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = `./images/model/${req.body.username}/documents/`
-    fs.exists(dir, (dirExists) => {
-      if (!dirExists) {
-        fs.mkdir(
-          dir,
-          {
-            recursive: true,
-          },
-          (err) => {
-            if (err) {
-              cb("Could not create directory")
-            } else {
-              cb(null, dir)
-            }
-          }
-        )
-      } else {
-        cb(null, dir)
-      }
-    })
-  },
-  filename: function (req, file, cb) {
-    const name = `${nanoid(10)}__model_doc__${file.originalname}`
-    cb(null, name)
-  },
-})
-
-const modelDocumentUpload = multer({
-  storage: modelDocumentStorage,
-  fileFilter: function (req, file, cb) {
-    const fileTypes = /png|jpg|jpeg/
-    const extnameTest = fileTypes.test(extname(file.originalname).toLowerCase())
-    const mimetypeTest = fileTypes.test(file.mimetype)
-    if (extnameTest && mimetypeTest) {
-      return cb(null, true)
-    } else {
-      cb("Error: only .png, .jpg .jpeg images are allowed")
-    }
-  },
-}).array("document", 2)
-
-router.post("/", modelDocumentUpload, modelController.handleDocumentUpload)
+router.post(
+  "/handle-documents-upload",
+  tokenVerify,
+  [body("documentImages").isArray()],
+  modelController.handleDocumentUpload
+)
 
 module.exports = router

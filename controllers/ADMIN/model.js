@@ -84,7 +84,7 @@ exports.createModel = (req, res, next) => {
                 relatedUser: theModel,
                 needApproval: false,
                 meta: {
-                    lastLogin: new Date().toISOString()
+                    lastLogin: new Date()
                 }
             }).save()
         })
@@ -100,7 +100,7 @@ exports.createModel = (req, res, next) => {
                     roleDuringApproval: req.user.role.name,
                     by: req.user._id,
                     remark: approvalRemark,
-                    approvalTime: new Date().toISOString()
+                    approvalTime: new Date()
                 })])
             }
             return Promise.all([theWallet.save(), theModel.save()])

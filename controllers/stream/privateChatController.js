@@ -261,7 +261,7 @@ exports.buyChatPlanForViewer = (req, res, next) => {
             currentChatPlan: {
               planId: planId,
               willExpireOn: validityDays * 24 * 3600 * 1000 + Date.now(),
-              purchasedOn: new Date().toISOString(),
+              purchasedOn: new Date(),
             },
           },
           {

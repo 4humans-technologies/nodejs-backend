@@ -126,7 +126,7 @@ exports.getTags = (req, res, next) => {
     const page = +req.query.page || 1
     const limit = +req.query.limit || 10
 
-    Tag.find({ createdAt: { $lte: new Date().toISOString() } })
+    Tag.find({ createdAt: { $lte: new Date() } })
         .skip((page - 1) * limit)
         .limit(limit)
         .sort("-createdAt")
@@ -168,7 +168,7 @@ exports.getTagGroups = (req, res, next) => {
     const page = +req.query.page || 1
     const limit = +req.query.limit || 10
 
-    TagGroup.find({ createdAt: { $lte: new Date().toISOString() } })
+    TagGroup.find({ createdAt: { $lte: new Date() } })
         .skip((page - 1) * limit)
         .limit(limit)
         .sort("-createdAt")

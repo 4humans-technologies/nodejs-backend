@@ -46,7 +46,7 @@ exports.loginHandler = (req, res, next) => {
       }
       User.updateOne(
         { _id: theUser._id },
-        { lastLogin: new Date().toISOString() }
+        { lastLogin: new Date() }
       )
       const hours = 12
       console.debug("loggedIn")

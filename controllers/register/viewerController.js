@@ -56,7 +56,7 @@ exports.createViewer = (req, res, next) => {
           relatedUser: advRelatedUserId,
           needApproval: false,
           meta: {
-            lastLogin: new Date().toISOString(),
+            lastLogin: new Date(),
           },
         }).save({
           w: 1,
@@ -79,7 +79,7 @@ exports.createViewer = (req, res, next) => {
         userId: user._id,
         relatedUserId: user.relatedUser._id,
         userType: user.userType,
-        role: user?.role?.roleName || "no-role",
+        role: "no-role",
       })
 
       res.status(201).json({

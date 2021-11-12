@@ -5,7 +5,7 @@ const roleController = require("../../controllers/rbac/roleController")
 const verifyToken = require("../../middlewares/tokenVerify")
 const {checkForSuperAdminOrStaff} = require("../../middlewares/userTypeChecker")
 
-router.post("/create-role", verifyToken, checkForSuperAdminOrStaff, roleController.createRole)
+router.post("/create-role", /* verifyToken, checkForSuperAdminOrStaff, */ roleController.createRole)
 
 router.post("/update-role", verifyToken, checkForSuperAdminOrStaff, roleController.updateRole)
 

@@ -38,7 +38,7 @@ exports.withOutTokenStreamStart = (req, res, next) => {
   let theStream
   Stream({
     model: req.user.relatedUser._id,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date(),
   })
     .save()
     .then((stream) => {
@@ -1101,13 +1101,13 @@ exports.buyChatPlan = (req, res, next) => {
             viewer.currentChatPlan = {
               planId: planId,
               willExpireOn: plan.validityDays * 24 * 3600 * 1000 + Date.now(),
-              purchasedOn: new Date().toISOString(),
+              purchasedOn: new Date(),
             }
             const newPlans = [
               ...viewer.previousChatPlans,
               {
                 planId: planId,
-                purchasedOn: new Date().toISOString(),
+                purchasedOn: new Date(),
                 index: viewer.previousChatPlans + 1,
               },
             ]

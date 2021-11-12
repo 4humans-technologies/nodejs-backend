@@ -41,7 +41,7 @@ exports.updateTipMenuActions = (req, res, next) => {
       if (newActions.length !== 0) {
         model.tipMenuActions = {
           actions: newActions,
-          lastUpdated: new Date().toISOString(),
+          lastUpdated: new Date(),
         }
       }
       return model.save()
@@ -161,6 +161,56 @@ exports.updateModelBasicDetails = (req, res, next) => {
         actionStatus: "success",
         theModel: { ...updatedModel, rootUser: updatedUser },
       })
+    })
+    .catch((err) => next(err))
+}
+
+exports.handlePublicImageUpload = (req, res, next) => {
+  const { newImageUrl } = req.body
+
+  Model.updateOne(
+    {
+      _id: req.user.relatedUser._id,
+    },
+    {
+      $addToSet: { publicImages: newImageUrl },
+    }
+  )
+    .then((result) => {
+      if (result.n === 1) {
+        return res.status(200).json({
+          actionStatus: "success",
+        })
+      } else {
+        return res.status(200).json({
+          actionStatus: "failed",
+        })
+      }
+    })
+    .catch((err) => next(err))
+}
+
+exports.handlePublicVideosUpload = (req, res, next) => {
+  const { newVideoUrl } = req.body
+
+  Model.updateOne(
+    {
+      _id: req.user.relatedUser._id,
+    },
+    {
+      $addToSet: { publicVideos: newVideoUrl },
+    }
+  )
+    .then((result) => {
+      if (result.n === 1) {
+        return res.status(200).json({
+          actionStatus: "success",
+        })
+      } else {
+        return res.status(200).json({
+          actionStatus: "failed",
+        })
+      }
     })
     .catch((err) => next(err))
 }

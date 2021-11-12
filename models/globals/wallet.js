@@ -8,7 +8,7 @@ const walletSchema = new mongoose.Schema({
   userType: {
     type: String,
     required: true,
-    enum: ["Viewer", "Model"],
+    enum: ["Viewer", "Model", "SuperAdmin"],
   },
   relatedUser: {
     type: mongoose.Schema.Types.ObjectId,

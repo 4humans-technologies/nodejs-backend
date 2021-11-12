@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const logSchema = new mongoose.Schema({
     timestamp:{
         type:Number,
-        default:new Date().toISOString()
+        default:new Date()
     },
     action:{
         type:String,

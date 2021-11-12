@@ -52,11 +52,13 @@ const giftsRouter = require("./routes/gifts/gifts")
 const streamRouter = require("./routes/stream/streamRoutes")
 const privateChatsRouter = require("./routes/stream/privateChatsRoute")
 const modelProfileRouter = require("./routes/profile/modelProfile")
+const couponRouter = require("./routes/management/coupon")
 
 // 🔴 ADMIN ROUTES 🔴
 const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
 const privateChatRouter = require("./routes/ADMIN/privateChat")
+const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
 
 // Required Models
 const socketEvents = require("./utils/socket/socketEvents")
@@ -88,10 +90,8 @@ app.use((req, res, next) => {
 
 // ALL HTTP ROUTES--->
 app.use("/api/website/permissions", permissionRouter)
-app.use("/api/website/role", roleRouter)
 app.use("/api/website/register/viewer", viewerRouter)
 app.use("/api/website/register/model", modelRouter)
-app.use("/api/website/register/superadmin", superAdminRouter)
 app.use("/api/website/login", globalLoginRoutes)
 app.use("/api/website/compose-ui", uxUtils)
 // category is Depreciated, will now use Tag-group and tags
@@ -102,10 +102,17 @@ app.use("/api/website/gifts", giftsRouter)
 app.use("/api/website/stream", streamRouter)
 app.use("/api/website/private-chat", privateChatsRouter)
 app.use("/api/website/profile", modelProfileRouter)
+app.use("/api/website/coupon", couponRouter)
 
 /* aws setup */
 app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
   const { type } = req.query
+  if (!type) {
+    res.status(400).json({
+      actionStatus: failed,
+      message: "Type not provide in the query parameter, it's required",
+    })
+  }
   const extension = "." + type?.split("/")[1]
   generatePublicUploadUrl(extension, type)
     .then((s3UrlData) => {
@@ -118,9 +125,17 @@ app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
 })
 
 // ADMIN PATHS
+/* 🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻 */
+/* comment after one time use */
+/* should use script to use superadmin, via api is very dangerous */
+// app.use("/api/admin/superadmin", superAdminRouter)
+/* 🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺 */
 app.use("/api/admin/permissions", adminPermissions)
 app.use("/api/admin/gifts", adminGiftRoutes)
 app.use("/api/admin/privatechat", privateChatRouter)
+app.use("/api/admin/coupon", couponAdminRouter)
+app.use("/api/admin/role", roleRouter)
+
 app.use("/test", testRouter)
 
 // EXPRESS ERROR HANDLER--->
