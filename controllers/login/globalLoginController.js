@@ -17,7 +17,9 @@ exports.loginHandler = (req, res, next) => {
 
   const { username, password } = req.body
   const { socketId } = req.query
+
   let theUser
+  let wasSocketUpdated = false
   User.findOne({
     username: username,
   })
@@ -44,17 +46,31 @@ exports.loginHandler = (req, res, next) => {
         error.statusCode = 422
         throw error
       }
-      User.updateOne(
-        { _id: theUser._id },
-        { lastLogin: new Date() }
-      )
+      User.updateOne({ _id: theUser._id }, { lastLogin: new Date() })
       const hours = 12
       console.debug("loggedIn")
 
-      /*  */
-      // this work should be handed to socket🔺🔺
-      /* const clientSocket = io.getIO().sockets.sockets.get(socketId)
-      clientSocket.join(theUser.relatedUser._id.toString()) */
+      /**
+       * my view is may be for some reason socketId may not be sent but,
+       * because of that right user should not be devoid of registration or login
+       * anyway i'am sending "wasSocketUpdated" so that if on server socket
+       * was not updated we can handover this task to the client
+       * their we can emit to update user info very easily
+       */
+      try {
+        const clientSocket = io.getIO().sockets.sockets.get(socketId)
+        if (theUser.userType === "Model") {
+          /* if model then put her in her private room */
+          clientSocket.join(`${theUser.relatedUser._id}-private`)
+        }
+        clientSocket.data.userId = theUser._id
+        clientSocket.data.relatedUserId = theUser.relatedUser._id
+        clientSocket.authed = true
+        clientSocket.userType = theUser.userType
+        wasSocketUpdated = true
+      } catch (error) {
+        wasSocketUpdated = false
+      }
 
       return res.status(200).json({
         actionStatus: "success",
@@ -63,6 +79,7 @@ exports.loginHandler = (req, res, next) => {
         relatedUserId: theUser.relatedUser._id,
         expiresIn: hours,
         user: theUser,
+        wasSocketUpdated: wasSocketUpdated,
         token: generateJwt({
           hours: hours,
           userId: theUser._id,

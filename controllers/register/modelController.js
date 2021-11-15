@@ -30,10 +30,14 @@ exports.createModel = (req, res, next) => {
     profileImage,
   } = req.body
 
+  const { socketId } = req.query
+
   let theWallet, theModel, theUserId
   const advRootUserId = new ObjectId()
   const advRelatedUserId = new ObjectId()
   const approvalId = new ObjectId()
+  let wasSocketUpdated = false
+
   Wallet({
     userType: "Model",
     currentAmount: 0,
@@ -85,7 +89,30 @@ exports.createModel = (req, res, next) => {
         userType: userDoc.userType,
         role: userDoc?.role?.roleName || "no-role",
       })
-      res.status(201).json({
+
+      /**
+       * my view is may be for some reason socketId may not be sent but,
+       * because of that right user should not be devoid of registration or login
+       * anyway i'am sending "wasSocketUpdated" so that if on server socket
+       * was not updated we can handover this task to the client
+       * their we can emit to update user info very easily
+       */
+      try {
+        const clientSocket = io.getIO().sockets.sockets.get(socketId)
+        /* add to the private room */
+        clientSocket.join(`${theUser.relatedUser._id}-private`)
+        /* update client info */
+        clientSocket.data.userId = theUser._id
+        clientSocket.data.relatedUserId = theUser.relatedUser._id
+        clientSocket.authed = true
+        clientSocket.userType = theUser.userType
+
+        wasSocketUpdated = true
+      } catch (error) {
+        wasSocketUpdated = false
+      }
+
+      return res.status(201).json({
         message: "model registered successfully",
         actionStatus: "success",
         user: userDoc,
@@ -94,6 +121,7 @@ exports.createModel = (req, res, next) => {
         wallet: theWallet,
         token: token,
         expiresIn: hours,
+        wasSocketUpdated: wasSocketUpdated,
       })
     })
     .catch((err) => {

@@ -18,14 +18,6 @@ app.use(express.static(__dirname + "/images"))
 app.use("/images/gifts", express.static(__dirname + "/images/gifts"))
 app.use("/images/model", express.static(__dirname + "/images/model"))
 
-/* SSL setup */
-const https = require("https")
-const fs = require("fs")
-const sslOptions = {
-  key: fs.readFileSync("./localhost-key.pem"),
-  cert: fs.readFileSync("./localhost.pem"),
-}
-
 // ❌❌❌❌
 /**
  * create new agora project for dreamgirl
@@ -40,7 +32,7 @@ const permissionRouter = require("./routes/rbac/permissionRoutes")
 const roleRouter = require("./routes/rbac/roleRoutes")
 const viewerRouter = require("./routes/register/viewerRoutes")
 const modelRouter = require("./routes/register/modelRoutes")
-const superAdminRouter = require("./routes/register/superadminRoutes")
+// const superAdminRouter = require("./routes/register/superadminRoutes")
 const globalLoginRoutes = require("./routes/login/globalLoginRoutes")
 const tokenBuilderRouter = require("./routes/agora/tokenBuilderRoutes")
 const testRouter = require("./routes/test/test")
@@ -109,7 +101,7 @@ app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
   const { type } = req.query
   if (!type) {
     res.status(400).json({
-      actionStatus: failed,
+      actionStatus: "failed",
       message: "Type not provide in the query parameter, it's required",
     })
   }
@@ -177,15 +169,13 @@ mongoose
   })
   .then(() => {
     console.log("============== CONNECTED TO MongoDB =============")
-    // const server = https.createServer(sslOptions, app)
-
     const server = app.listen(process.env.PORT || 8080, () =>
       console.log("Listening on : " + process.env.PORT)
     )
     const socketOptions = {
       cors: {
-        origin: "*",
-        methods: "*",
+        origin: ["https://dreamgirllive.com", "http://localhost:3000"],
+        methods: ["GET", "POST"],
       },
     }
     const io = socket.init(server, socketOptions)
@@ -202,9 +192,13 @@ mongoose
     // io.use(socketMiddlewares.pendingCallResolver)
 
     io.on("connection", (client) => {
-      if (client.handshake.query.userType === "Model") {
+      if (
+        client.handshake.query.userType === "Model" ||
+        client.handshake.query.userType === "Viewer"
+      ) {
         client.join(`${client.data.relatedUserId}-private`)
       }
+
       client.on("disconnect", () => {
         if (client?.isStreaming && client.authed) {
           /**
@@ -215,7 +209,7 @@ mongoose
             Stream.findById(client.streamId)
               .then((stream) => {
                 const duration =
-                  (Date.now() - new Date(stream.createdAt).getTime()) / 1000
+                  (Date.now() - new Date(stream.createdAt).getTime()) / 60000
                 stream.endReason =
                   "tab-close | window-reload | connection-error"
                 stream.status = "ended"
@@ -233,17 +227,18 @@ mongoose
               })
               .then((values) => {
                 const stream = values[0]
-                client.broadcast.emit(socketEvents.deleteStreamRoom, {
-                  modelId: client.data.relatedUserId,
-                })
+                io.in(`${client.streamId}-public`).emit(
+                  socketEvents.deleteStreamRoom,
+                  {
+                    modelId: client.data.relatedUserId,
+                  }
+                )
 
                 /* destroy the stream chat rooms */
                 io.in(`${client.streamId}-public`).socketsLeave(
                   `${client.streamId}-public`
                 )
-                io.in(`${client.data.relatedUserId}-private`).socketsLeave(
-                  `${client.data.relatedUserId}-private`
-                )
+
                 client.isStreaming = false
                 client.currentStream = null
               })
@@ -252,7 +247,7 @@ mongoose
             console.warn("The streaming status was not updated(closed)")
           }
         } else if (client?.onCall && !client.authed) {
-          if ((client.userType = "Model")) {
+          if (client.userType === "Model") {
             const callId = client.callId
             const callType = client.callType
 
@@ -477,12 +472,12 @@ mongoose
         } else if (client.authed) {
           for (let i = 0; i < rooms.length; i++) {
             if (rooms[i].endsWith("-private")) {
-              if (rooms[i] === `${client.data.relatedUserId}-private`) {
+              if (rooms[i].startsWith(client.data.relatedUserId)) {
                 /* join his private room */
                 client.join(rooms[i])
               }
               /* else joining "someone-"elses" room */
-            } else if (rooms[i].endsWith("-private")) {
+            } else if (rooms[i].endsWith("-public")) {
               /* put in public room */
               client.join(rooms[i])
             }
@@ -502,6 +497,42 @@ mongoose
         })
       })
 
+      client.on("update-client-info", (data) => {
+        /* action specific procedure */
+        switch (data.action) {
+          case "logout":
+            /* end streaming also */
+            if (client.isStreaming) {
+            }
+            /* end call properly */
+            if (client.onCall) {
+            }
+
+            /* leave all the rooms you were connected to as authed user */
+            Array.from(client.rooms).forEach((room) => {
+              client.leave(room)
+            })
+
+            /* clear the data set on the client object */
+            client.data = null
+            client.authed = false
+            client.userType = "UnAuthedViewer"
+            break
+          case "login":
+            client.data.relatedUserId = data.relatedUserId
+            client.data.userId = data.userId
+            client.authed = data.authed
+            client.userType = data.userType
+          default:
+            break
+        }
+      })
+
+      client.on("error", (err) => {
+        socket.emit("socket-err", err.message)
+        // socket.disconnect();
+      })
+
       console.log("👉", client.id, client.userType)
       if (client.userType === "UnAuthedViewer") {
         chatEventListeners.unAuthedViewerListeners(client)
@@ -510,19 +541,18 @@ mongoose
       } else if (client.userType === "Model") {
         chatEventListeners.modelListeners(client)
       }
-      // socketListeners(client)
     })
 
     io.of("/").adapter.on("join-room", (room, socketId) => {
-      console.log("someone joined a room >>", room)
       if (room.endsWith("-public") || room.endsWith("-private")) {
+        console.log("someone joined a room >>", room)
         io.sockets.sockets.get(socketId).emit("you-joined-a-room", room)
       }
     })
 
     io.of("/").adapter.on("leave-room", (room, socketId) => {
-      console.log("someone left a room >>", room)
       if (room.endsWith("-public") || room.endsWith("-private")) {
+        console.log("someone left a room >>", room)
         io.sockets.sockets.get(socketId).emit("you-left-a-room", room)
       }
     })

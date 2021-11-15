@@ -30,7 +30,7 @@ router.post(
 router.post(
   "/handle-public-video-upload",
   tokenVerify,
-  [body("newImageUrl").isURL({ require_host: true })],
+  [body("newVideoUrl").isURL({ require_host: true })],
   modelProfileData.handlePublicVideosUpload
 )
 

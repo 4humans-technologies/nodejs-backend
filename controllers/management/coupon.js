@@ -13,11 +13,14 @@ exports.redeemCouponCode = (req, res, next) => {
   }
 
   let theCoupon
+  let walletModified = false
+
   Coupon.findOne({
     code: code,
     redeemed: false,
     acknowledged: true,
   })
+    .lean()
     .then((coupon) => {
       if (coupon) {
         /**
@@ -40,7 +43,7 @@ exports.redeemCouponCode = (req, res, next) => {
               relatedUser: req.user.relatedUser._id,
             },
             {
-              $inc: { currentAmount: coupons.forCoins },
+              $inc: { currentAmount: coupon.forCoins },
             },
             {
               new: true,
@@ -53,9 +56,13 @@ exports.redeemCouponCode = (req, res, next) => {
       throw error
     })
     .then((values) => {
+      if (values[1]) {
+        walletModified = true
+      }
       if (values[0].n === 1) {
         return res.status(200).json({
           actionStatus: "success",
+          message: `${coupon.forCoins} coins were added successfully to your wallet`,
           wallet: values[1],
         })
       } else {
@@ -66,5 +73,7 @@ exports.redeemCouponCode = (req, res, next) => {
         throw error
       }
     })
-    .catch((err) => next(err))
+    .catch((err) => {
+      /* undo all other activity */
+    })
 }

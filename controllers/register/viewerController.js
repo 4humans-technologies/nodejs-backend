@@ -15,9 +15,12 @@ exports.createViewer = (req, res, next) => {
   errorCollector(req, "Invalid form details, please try again")
   const { username, password, name, email, gender } = req.body
 
+  const { socketId } = req.query
+
   const walletId = new ObjectId()
   const advRootUserId = new ObjectId()
   const advRelatedUserId = new ObjectId()
+  let wasSocketUpdated = false
 
   bcrypt
     .genSalt(5)
@@ -82,12 +85,32 @@ exports.createViewer = (req, res, next) => {
         role: "no-role",
       })
 
+      /**
+       * my view is may be for some reason socketId may not be sent but,
+       * because of that right user should not be devoid of registration or login
+       * anyway i'am sending "wasSocketUpdated" so that if on server socket
+       * was not updated we can handover this task to the client
+       * their we can emit to update user info very easily
+       */
+      try {
+        const clientSocket = io.getIO().sockets.sockets.get(socketId)
+        clientSocket.data = { ...clientSocket?.data }
+        clientSocket.data.userId = user._id
+        clientSocket.data.relatedUserId = user.relatedUser._id
+        clientSocket.authed = true
+        clientSocket.userType = "Viewer"
+        wasSocketUpdated = true
+      } catch (error) {
+        wasSocketUpdated = false
+      }
+
       res.status(201).json({
         message: "viewer registered successfully",
         actionStatus: "success",
         user: user,
         token: token,
         tokenExpireIn: hours,
+        wasSocketUpdated: wasSocketUpdated,
       })
     })
     .catch((err) => {

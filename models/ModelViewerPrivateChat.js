@@ -40,7 +40,7 @@ const modelViewerPrivateChatSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: new Date(),
+    default: () => new Date(),
   },
 })
 

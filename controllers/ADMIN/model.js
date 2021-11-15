@@ -84,7 +84,7 @@ exports.createModel = (req, res, next) => {
                 relatedUser: theModel,
                 needApproval: false,
                 meta: {
-                    lastLogin: new Date()
+                    lastLogin: () =>  new Date()
                 }
             }).save()
         })

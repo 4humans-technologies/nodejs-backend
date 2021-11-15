@@ -152,7 +152,8 @@ exports.handleEndStream = (req, res, next) => {
     Stream.findById(streamId)
       .then((stream) => {
         const duration =
-          (-new Date(stream.createdAt).getTime() + new Date().getTime()) / 1000
+          (new Date().getTime() - new Date(stream.createdAt).getTime()) /
+          60000 /* in minutes */
         stream.endReason = reason
         stream.status = "ended"
         stream.duration = duration
@@ -398,10 +399,11 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       /* MAKE ALL OTHER CLIENTS EXCEPT THE MOdEL AND THE VIEWER LEAVE PUBLIC CHANNEL & destroy private channel 
         but leaving will be done from client side, later can kick user out from server 🔺🔺
       */
-      io.getIO()
-        .in(`${req.user.relatedUser._id}-private`)
-        .except(socketId)
-        .socketsLeave(`${req.user.relatedUser._id}-private`)
+
+      // io.getIO()
+      //   .in(`${req.user.relatedUser._id}-private`)
+      //   .except(socketId)
+      //   .socketsLeave(`${req.user.relatedUser._id}-private`)
       /* not destorying public channel for token gift to work on call */
 
       return res.status(200).json({
@@ -416,6 +418,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
 exports.handleEndCallFromViewer = (req, res, next) => {
   const { callId, callType, endTimeStamp } = req.body
   let { socketId } = req.query
+
   if (!socketId) {
     socketId = Array.from(
       io
@@ -1191,6 +1194,7 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
 
   const { modelId } = req.body
   let { socketId } = req.query
+
   if (!socketId) {
     socketId = Array.from(
       io

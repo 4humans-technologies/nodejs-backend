@@ -246,7 +246,9 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
   // create unAuthed user and generate token
   const { modelId } = req.body
   const { socketId, unAuthedUserId } = req.query
+
   let theModel
+  let puttedInRooms
   Model.findById(modelId)
     .select(
       "currentStream isStreaming onCall tags rating profileImage publicImages hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions"
@@ -257,7 +259,6 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
     })
     .lean()
     .then((model) => {
-      console.log(model)
       theModel = model
       if (model.isStreaming) {
         /* 🔴 Dangerously 👆👆 removing currentstream check, only while developing */
@@ -282,16 +283,23 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
               )
               //way1:👉 io.in(theSocketId).socketsJoin("room1");
               //way2:👉 io.sockets.sockets.get(socketId)
+
               const streamRoom = `${model.currentStream}-public`
-              const clientSocket = io.getIO().sockets.sockets.get(socketId)
-              clientSocket.join(streamRoom)
-              const roomSize = io
-                .getIO()
-                .sockets.adapter.rooms.get(streamRoom).size
-              clientSocket.to(streamRoom).emit(socketEvents.viewerJoined, {
-                roomSize: roomSize,
-                message: "New user join the stream 🤩🤩",
-              })
+              try {
+                const clientSocket = io.getIO().sockets.sockets.get(socketId)
+                clientSocket.join(streamRoom)
+                const roomSize = io
+                  .getIO()
+                  .sockets.adapter.rooms.get(streamRoom).size
+                clientSocket.to(streamRoom).emit(socketEvents.viewerJoined, {
+                  roomSize: roomSize,
+                  message: "New user join the stream 🤩🤩",
+                })
+                puttedInRooms = true
+              } catch (err) {
+                puttedInRooms = false
+              }
+
               res.status(200).json({
                 actionStatus: "success",
                 unAuthedUserId: viewer._id,
@@ -300,6 +308,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                 newUnAuthedUserCreated: true,
                 streamRoom: streamRoom,
                 theModel: theModel,
+                puttedInRooms: puttedInRooms,
               })
             })
             .catch((err) => {
@@ -333,15 +342,20 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
               )
 
               const streamRoom = `${model.currentStream}-public`
-              const clientSocket = io.getIO().sockets.sockets.get(socketId)
-              clientSocket.join(streamRoom)
-              const roomSize = io
-                .getIO()
-                .sockets.adapter.rooms.get(streamRoom).size
-              io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
-                roomSize: roomSize,
-                message: "New user join the stream 🤩🤩",
-              })
+              try {
+                const clientSocket = io.getIO().sockets.sockets.get(socketId)
+                clientSocket.join(streamRoom)
+                const roomSize = io
+                  .getIO()
+                  .sockets.adapter.rooms.get(streamRoom).size
+                io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
+                  roomSize: roomSize,
+                  message: "New user join the stream 🤩🤩",
+                })
+                puttedInRooms = true
+              } catch (error) {
+                puttedInRooms = false
+              }
 
               res.status(200).json({
                 actionStatus: "success",
@@ -350,6 +364,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                 newUnAuthedUserCreated: false,
                 theModel: theModel,
                 streamId: theModel.currentStream._id,
+                puttedInRooms: puttedInRooms,
               })
             } else {
               /* means the un-authedUserId is invalid */
@@ -370,15 +385,23 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                   //way1:👉 io.in(theSocketId).socketsJoin("room1");
                   //way2:👉 io.sockets.sockets.get(socketId)
                   const streamRoom = `${model.currentStream}-public`
-                  const clientSocket = io.getIO().sockets.sockets.get(socketId)
-                  clientSocket.join(streamRoom)
-                  const roomSize = io
-                    .getIO()
-                    .sockets.adapter.rooms.get(streamRoom).size
-                  io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
-                    roomSize: roomSize,
-                    message: "New user join the stream 🤩🤩",
-                  })
+                  try {
+                    const clientSocket = io
+                      .getIO()
+                      .sockets.sockets.get(socketId)
+                    clientSocket.join(streamRoom)
+                    const roomSize = io
+                      .getIO()
+                      .sockets.adapter.rooms.get(streamRoom).size
+                    io.getIO().to(streamRoom).emit(socketEvents.viewerJoined, {
+                      roomSize: roomSize,
+                      message: "New user join the stream 🤩🤩",
+                    })
+                    puttedInRooms = true
+                  } catch (error) {
+                    puttedInRooms = false
+                  }
+
                   res.status(200).json({
                     actionStatus: "success",
                     unAuthedUserId: viewer._id,
@@ -387,6 +410,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                     newUnAuthedUserCreated: true,
                     theModel: theModel,
                     streamId: theModel.currentStream._id,
+                    puttedInRooms: puttedInRooms,
                   })
                 })
                 .catch((err) => {

@@ -23,10 +23,14 @@ module.exports = {
     */
     socket.on(chatEvents.viewer_private_message_emitted, (data) => {
       /* after emitting save the chats to the db */
-      ModelViewerPrivateChat.updateOne({
-        _id: data.dbId,
-        $push: { chats: data.chat },
-      })
+      ModelViewerPrivateChat.updateOne(
+        {
+          _id: data.dbId,
+        },
+        {
+          $push: { chats: data.chat },
+        }
+      )
         .then((result) => {
           if (result.n === 1) {
             socket

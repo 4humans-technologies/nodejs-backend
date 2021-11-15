@@ -61,4 +61,10 @@ router.post(
   streamController.processTipMenuRequest
 )
 
+router.post(
+  "/get-model-tipmenu-actions",
+  [body("modelId").notEmpty().isString()],
+  streamController.getTipMenuActions
+)
+
 module.exports = router

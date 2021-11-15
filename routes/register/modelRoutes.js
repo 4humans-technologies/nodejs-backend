@@ -16,7 +16,7 @@ router.post(
       .trim()
       .notEmpty()
       .isString()
-      .isLength({ min: 5, max: 24 })
+      .isLength({ max: 50 })
       .custom((value, { req }) => {
         return User.findOne({ username: req.body.username }).then((user) => {
           if (user) {
@@ -32,7 +32,7 @@ router.post(
     body("gender").notEmpty().isString(),
     body("profileImage").notEmpty().isURL(),
     body("languages").notEmpty().isString(),
-    // body("phone").notEmpty(),
+    body("phone").notEmpty(),
   ],
   modelController.createModel
 )
