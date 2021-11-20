@@ -1,4 +1,3 @@
-const verifyTokenFunction = require("../verifyTokenFunction")
 const jwt = require("jsonwebtoken")
 const Viewer = require("../../models/userTypes/Viewer")
 const Model = require("../../models/userTypes/Model")
@@ -25,10 +24,10 @@ module.exports = {
             }
           }
           if (decodedToken) {
-            client.data.userId = decodedToken.userId.toString()
-            client.data.relatedUserId = decodedToken.relatedUserId.toString()
+            client.data.userId = decodedToken.userId
+            client.data.relatedUserId = decodedToken.relatedUserId
             client.authed = true
-            client.userType = client.handshake.query.userType
+            client.userType = decodedToken.userType
             return next()
           }
         })

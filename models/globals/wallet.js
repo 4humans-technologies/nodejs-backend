@@ -35,7 +35,9 @@ walletSchema.methods.deductAmount = function (amount) {
   if (this.currentAmount >= amount) {
     return (this.currentAmount = this.currentAmount - amount)
   }
-  const error = new Error("don't have sufficient balance to perform this call")
+  const error = new Error(
+    "don't have sufficient balance to perform this Purchase"
+  )
   error.statusCode = 401
   throw error
 }

@@ -1,22 +1,23 @@
-const express = require("express")
-const mongoose = require("mongoose")
 require("dotenv").config()
-const app = express()
-app.use(express.json())
+const mongoose = require("mongoose")
+const firebase = require("./firebase")
+const express = require("express")
 const socket = require("./socket")
+const app = express()
 const socketMiddlewares = require("./utils/socket/socketMiddleware")
-const socketListeners = require("./utils/socket/socketEventListeners")
 const chatEventListeners = require("./utils/socket/chat/chatEventListeners")
-const { instrument } = require("@socket.io/admin-ui")
-// const cookieParser = require("cookie-parser");
-const path = require("path")
-const {
-  generatePublicUploadUrl,
-  deleteObjectFromS3,
-} = require("./utils/aws/s3")
-app.use(express.static(__dirname + "/images"))
-app.use("/images/gifts", express.static(__dirname + "/images/gifts"))
-app.use("/images/model", express.static(__dirname + "/images/model"))
+const onDisconnectStreamEndHandler = require("./utils/socket/disconnect/streamEndHandler")
+const onDisconnectCallEndHandler = require("./utils/socket/disconnect/callEndHandler")
+const updateClientInfo = require("./utils/socket/updateClientInfo")
+const { generatePublicUploadUrl } = require("./utils/aws/s3")
+const requestRoomHandlers = require("./utils/socket/requestedRoomHandlers")
+
+if (process.env.RUN_ENV !== "ubuntu") {
+  app.use(express.static(__dirname + "/images"))
+  app.use("/images/gifts", express.static(__dirname + "/images/gifts"))
+  app.use("/images/model", express.static(__dirname + "/images/model"))
+}
+app.use(express.json())
 
 // ❌❌❌❌
 /**
@@ -32,7 +33,7 @@ const permissionRouter = require("./routes/rbac/permissionRoutes")
 const roleRouter = require("./routes/rbac/roleRoutes")
 const viewerRouter = require("./routes/register/viewerRoutes")
 const modelRouter = require("./routes/register/modelRoutes")
-// const superAdminRouter = require("./routes/register/superadminRoutes")
+const superAdminRouter = require("./routes/register/superadminRoutes")
 const globalLoginRoutes = require("./routes/login/globalLoginRoutes")
 const tokenBuilderRouter = require("./routes/agora/tokenBuilderRoutes")
 const testRouter = require("./routes/test/test")
@@ -51,14 +52,6 @@ const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
 const privateChatRouter = require("./routes/ADMIN/privateChat")
 const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
-
-// Required Models
-const socketEvents = require("./utils/socket/socketEvents")
-const Viewer = require("./models/userTypes/Viewer")
-const Model = require("./models/userTypes/Model")
-const Stream = require("./models/globals/Stream")
-const AudioCall = require("./models/globals/audioCall")
-const VideoCall = require("./models/globals/videoCall")
 
 // CONNECT-URL--->
 let CONNECT_URL
@@ -179,10 +172,12 @@ mongoose
       },
     }
     const io = socket.init(server, socketOptions)
-    instrument(io, {
-      auth: false,
-    })
-
+    if (process.env.RUN_ENV !== "ubuntu") {
+      const { instrument } = require("@socket.io/admin-ui")
+      instrument(io, {
+        auth: false,
+      })
+    }
     // server.listen(process.env.PORT || 8080, () =>
     //   console.log("Listening on : " + process.env.PORT)
     // )
@@ -192,354 +187,57 @@ mongoose
     // io.use(socketMiddlewares.pendingCallResolver)
 
     io.on("connection", (client) => {
+      /**
+       * dont push this code in socket middleware it's causing weird behaviour
+       * by putting there 🚩🚩
+       */
       if (
-        client.handshake.query.userType === "Model" ||
-        client.handshake.query.userType === "Viewer"
+        (client.handshake.query.userType === "Model" ||
+          client.handshake.query.userType === "Viewer") &&
+        client.authed
       ) {
-        client.join(`${client.data.relatedUserId}-private`)
+        client.join(
+          `${client.data.relatedUserId}-private`
+        ) /* 🌼🌼🌼 works here only */
       }
 
       client.on("disconnect", () => {
-        if (client?.isStreaming && client.authed) {
-          /**
-           * client (model) disconnected in between of the stream
-           */
-          try {
-            console.log("🚩 a model left in between of streaming")
-            Stream.findById(client.streamId)
-              .then((stream) => {
-                const duration =
-                  (Date.now() - new Date(stream.createdAt).getTime()) / 60000
-                stream.endReason =
-                  "tab-close | window-reload | connection-error"
-                stream.status = "ended"
-                stream.duration = duration
-                return Promise.all([
-                  stream.save(),
-                  Model.updateOne(
-                    { _id: client.data.relatedUserId },
-                    {
-                      isStreaming: false,
-                      currentStream: null,
-                    }
-                  ),
-                ])
-              })
-              .then((values) => {
-                const stream = values[0]
-                io.in(`${client.streamId}-public`).emit(
-                  socketEvents.deleteStreamRoom,
-                  {
-                    modelId: client.data.relatedUserId,
-                  }
-                )
-
-                /* destroy the stream chat rooms */
-                io.in(`${client.streamId}-public`).socketsLeave(
-                  `${client.streamId}-public`
-                )
-
-                client.isStreaming = false
-                client.currentStream = null
-              })
-          } catch (error) {
-            /* log that stream was not closed */
-            console.warn("The streaming status was not updated(closed)")
-          }
-        } else if (client?.onCall && !client.authed) {
-          if (client.userType === "Model") {
-            const callId = client.callId
-            const callType = client.callType
-
-            /*  */
-            let theCall
-            let modelWallet
-            let amountToDeduct
-            let amountAdded
-            let viewerWallet
-
-            const initialQuery =
-              callType === "audioCall"
-                ? AudioCall.updateOne(
-                    {
-                      _id: callId,
-                    },
-                    {
-                      $addToSet: { concurrencyControl: 1 },
-                    }
-                  )
-                : VideoCall.updateOne(
-                    {
-                      _id: callId,
-                    },
-                    {
-                      $addToSet: { concurrencyControl: 1 },
-                    }
-                  )
-
-            initialQuery
-              .then((result) => {
-                if (result.n === 0) {
-                  /* no doc modified, model has ended tha call faster, return */
-                  res.status(200).json({
-                    actionStatus: "failed",
-                    wasFirst: "no" /* was first to put the call end request */,
-                    message:
-                      "viewer ended call before you, please wait while we are processing the transaction!",
-                  })
-                } else if (result.n > 0) {
-                  /* you have locked the db model cannot over-rite */
-                  const query =
-                    callType === "audioCall"
-                      ? Promise.all([
-                          AudioCall.findById(callId),
-                          Wallet.findOne({
-                            relatedUser: req.user.relatedUser._id,
-                          }),
-                        ])
-                      : Promise.all([
-                          VideoCall.findById(callId),
-                          Wallet.findOne({
-                            relatedUser: req.user.relatedUser._id,
-                          }),
-                        ])
-                  return query
-                }
-              })
-              .then((values) => {
-                theCall = values[0]
-                modelWallet = values[1]
-                if (theCall.endTimeStamp) {
-                  /* return bro */
-                  const error = new Error(
-                    "call doc updated even after locking, this should be impossible"
-                  )
-                  error.statusCode = 500
-                  throw error
-                } else {
-                  /* do the money transfer logic */
-                  theCall.endTimeStamp = endTimeStamp
-                  const totalCallDuration =
-                    (+endTimeStamp - theCall.startTimeStamp) /
-                    60000 /* convert milliseconds to seconds */
-                  if (totalCallDuration <= theCall.minCallDuration) {
-                    amountToDeduct = 0
-                  } else {
-                    const billableCallDuration = Math.ceil(
-                      totalCallDuration - theCall.minCallDuration
-                    ) /* in minutes */
-                    amountToDeduct = billableCallDuration * theCall.chargePerMin
-                  }
-                  amountAdded =
-                    amountToDeduct * (req.user.relatedUser.sharePercent / 100)
-                  modelWallet.addAmount(amountAdded)
-                  /* for admin account */
-                  // adminWallet.addAmount(amountToDeduct * ((100 - sharePercent) / 100))
-                  return Promise.all([
-                    modelWallet.save(),
-                    theCall.save(),
-                    Wallet.findOne({ relatedUser: theCall.viewer._id }),
-                  ])
-                }
-              })
-              .then((values) => {
-                /* assign the latest values to theCall */
-                theCall = values[1]
-                viewerWallet = values[2]
-                viewerWallet.deductAmount(amountToDeduct)
-                return viewerWallet.save()
-              })
-              .then((wallet) => {
-                /* now remove the pending calls from model & viewer */
-                const viewerPr = Viewer.findOneAndUpdate(
-                  {
-                    _id: theCall.viewer._id,
-                  },
-                  {
-                    pendingCall: null,
-                  }
-                )
-                  .select("name rootUser profileImage")
-                  .populate({
-                    path: "rootUser",
-                    select: "username",
-                  })
-                  .lean()
-                let modelPr
-
-                if (callType === "audioCall") {
-                  modelPr = Model.findOneAndUpdate(
-                    {
-                      _id: theCall.model._id,
-                    },
-                    {
-                      $pull: {
-                        "pendingCalls.audioCalls": theCall._id,
-                      },
-                    },
-                    { runValidators: true }
-                  )
-                    .select("name rootUser profileImage")
-                    .populate({
-                      path: "rootUser",
-                      select: "username",
-                    })
-                    .lean()
-                } else {
-                  modelPr = Model.findOneAndUpdate(
-                    {
-                      _id: theCall.model._id,
-                    },
-                    {
-                      $pull: { "pendingCalls.videoCalls": theCall._id },
-                    },
-                    { runValidators: true }
-                  )
-                    .select("name rootUser profileImage")
-                    .populate({
-                      path: "rootUser",
-                      select: "username",
-                    })
-                    .lean()
-                }
-
-                return Promise.all([viewerPr, modelPr])
-              })
-              .then((values) => {
-                const viewer = viewer
-                const model = values[1]
-
-                if (viewer._id && model._id) {
-                  io.getIO()
-                    .in(`${theCall.stream._id.toString()}-public`)
-                    .emit(chatEvents.model_call_end_request_finished, {
-                      theCall: theCall,
-                      callDuration: (theCall.startTimeStamp =
-                        theCall.endTimeStamp),
-                      callType: theCall.callType,
-                      name: req.user.relatedUser.name,
-                      username: req.user.username,
-                      profileImage: req.user.relatedUser.profileImage,
-                      dateTime: theCall.startedAt,
-                      currentAmount: viewerWallet.currentAmount,
-                      amountDeducted: amountToDeduct,
-                      ended: "ok",
-                    })
-                  /* clear client */
-
-                  clientSocket.onCall = false
-                  client.callId = null
-                  clientSocket.callType = null
-
-                  res.status(200).json({
-                    // theCall: theCall,
-                    callDuration: (theCall.startTimeStamp =
-                      theCall.endTimeStamp),
-                    callType: theCall.callType,
-                    name: viewer.name,
-                    dateTime: theCall.startedAt,
-                    currentAmount: modelWallet.currentAmount,
-                    amountAdded: amountAdded,
-                    totalCharges: amountToDeduct,
-                    actionStatus: "success",
-                    message: "call was ended successfully",
-                    wasFirst: "yes" /* was first to put the call end request */,
-                  })
-                } else {
-                  const error = new Error(
-                    "pending calls were not removed successfully"
-                  )
-                  error.statusCode = 500
-                  throw error
-                }
-              })
-              .catch((err) => next(err))
-          } else {
-          }
+        if (
+          client.userType === "Model" &&
+          client?.isStreaming &&
+          client.authed
+        ) {
+          /* check if the disconnecting model was streaming */
+          onDisconnectStreamEndHandler(client)
+        } else if (client.authed && client?.onCall) {
+          /* check if the disconnecting "user" was on call */
+          onDisconnectCallEndHandler(client)
         }
       })
 
-      client.on("putting-me-in-these-rooms", (rooms, callback) => {
-        console.log("put in rooms >> ", rooms)
-        if (client.userType === "UnAuthedViewer") {
-          if (rooms.length === 1 && rooms[0].endsWith("-public")) {
-            /* un-authed user can only join public room */
-            client.join(rooms[0])
-            callback({
-              status: "ok",
-            })
-          }
-        } else if (client.authed) {
-          for (let i = 0; i < rooms.length; i++) {
-            if (rooms[i].endsWith("-private")) {
-              if (rooms[i].startsWith(client.data.relatedUserId)) {
-                /* join his private room */
-                client.join(rooms[i])
-              }
-              /* else joining "someone-"elses" room */
-            } else if (rooms[i].endsWith("-public")) {
-              /* put in public room */
-              client.join(rooms[i])
-            }
-          }
-          callback({
-            status: "ok",
-          })
-        }
-      })
+      /* room handlers */
+      requestRoomHandlers(client)
 
-      client.on("take-me-out-of-these-rooms", (rooms, callback) => {
-        for (let i = 0; i < rooms.length; i++) {
-          client.leave(rooms[i])
-        }
-        callback({
-          status: "ok",
-        })
-      })
-
-      client.on("update-client-info", (data) => {
-        /* action specific procedure */
-        switch (data.action) {
-          case "logout":
-            /* end streaming also */
-            if (client.isStreaming) {
-            }
-            /* end call properly */
-            if (client.onCall) {
-            }
-
-            /* leave all the rooms you were connected to as authed user */
-            Array.from(client.rooms).forEach((room) => {
-              client.leave(room)
-            })
-
-            /* clear the data set on the client object */
-            client.data = null
-            client.authed = false
-            client.userType = "UnAuthedViewer"
-            break
-          case "login":
-            client.data.relatedUserId = data.relatedUserId
-            client.data.userId = data.userId
-            client.authed = data.authed
-            client.userType = data.userType
-          default:
-            break
-        }
-      })
+      /* update client info on viewers request */
+      updateClientInfo(client)
 
       client.on("error", (err) => {
         socket.emit("socket-err", err.message)
-        // socket.disconnect();
       })
 
       console.log("👉", client.id, client.userType)
-      if (client.userType === "UnAuthedViewer") {
-        chatEventListeners.unAuthedViewerListeners(client)
-      } else if (client.userType === "Viewer") {
-        chatEventListeners.authedViewerListeners(client)
-      } else if (client.userType === "Model") {
-        chatEventListeners.modelListeners(client)
+      switch (client.userType) {
+        case "Model":
+          chatEventListeners.modelListeners(client)
+          break
+        case "Viewer":
+          chatEventListeners.authedViewerListeners(client)
+          break
+        case "UnAuthedViewer":
+          chatEventListeners.unAuthedViewerListeners(client)
+          break
+        default:
+          break
       }
     })
 

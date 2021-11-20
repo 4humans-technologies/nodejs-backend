@@ -7,6 +7,8 @@ const bcrypt = require("bcrypt")
 const ObjectId = require("mongodb").ObjectId
 const generateJwt = require("../../utils/generateJwt")
 const Document = require("../../models/globals/modelDocuments")
+const io = require("../../socket")
+const chatEventListeners = require("../../utils/socket/chat/chatEventListeners")
 
 function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
@@ -99,14 +101,25 @@ exports.createModel = (req, res, next) => {
        */
       try {
         const clientSocket = io.getIO().sockets.sockets.get(socketId)
-        /* add to the private room */
-        clientSocket.join(`${theUser.relatedUser._id}-private`)
-        /* update client info */
-        clientSocket.data.userId = theUser._id
-        clientSocket.data.relatedUserId = theUser.relatedUser._id
-        clientSocket.authed = true
-        clientSocket.userType = theUser.userType
+        /* remove all previous listeners */
+        clientSocket.removeAllListeners(
+          chatEventListeners.unAuthedViewerEventList
+        )
 
+        /* add to the private room */
+        clientSocket.join(`${userDoc.relatedUser._id}-private`)
+
+        /* add socket listeners for the specific userType */
+        chatEventListeners.modelListeners(clientSocket)
+
+        /* update client info */
+        clientSocket.data = {
+          ...clientSocket.data,
+          userId: userDoc._id.toString(),
+          relatedUserId: userDoc.relatedUser._id.toString(),
+        }
+        clientSocket.authed = true
+        clientSocket.userType = userDoc.userType
         wasSocketUpdated = true
       } catch (error) {
         wasSocketUpdated = false
@@ -139,19 +152,21 @@ exports.createModel = (req, res, next) => {
         .then((results) => {
           if (err?.name === "MongoError") {
             switch (err.code) {
-              case 11000:
+              case 11000: {
                 const field = Object.keys(err.keyValue)[0]
                 const fieldValue = err.keyValue[field]
-                errMessage = `${field} "${fieldValue}", is already used.`
+                const errMessage = `${field} "${fieldValue}", is already used.`
                 const error = new Error(errMessage)
                 error.statusCode = 400
                 throw error
-              default:
+              }
+              default: {
                 const error_default = new Error(
                   err.message || "viewer not registered"
                 )
                 error_default.statusCode = err.statusCode || 500
                 throw error_default
+              }
             }
           } else {
             const error = new Error(err.message || "Model was not registered")

@@ -28,6 +28,7 @@ const audioCallSchema = new mongoose.Schema({
       "model-accepted-stream-ended",
       "ongoing",
       "completed",
+      "completed-and-billed",
       "viewer-call-not-received",
     ],
   },
@@ -54,6 +55,11 @@ const audioCallSchema = new mongoose.Schema({
     default: [0],
   },
 })
+
+/* 
+  🔺🔺 later can save the share percent also in the call Doc itself
+  ans modify the billing logic also
+*/
 
 const AudioCall = mongoose.model("AudioCall", audioCallSchema)
 module.exports = AudioCall

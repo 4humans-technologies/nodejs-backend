@@ -1,21 +1,35 @@
 const io = require("../../../socket")
 const chatEvents = require("../chat/chatEvents")
 const ModelViewerPrivateChat = require("../../../models/ModelViewerPrivateChat")
+const { getDatabase } = require("firebase-admin/database")
+
+const realtimeDb = getDatabase()
 
 module.exports = {
   authedViewerListeners: (socket) => {
     /* public message emitter */
-    socket.on(chatEvents.viewer_message_public_emitted, (data) => {
-      io.getIO()
-        .in(data.room)
-        .emit(chatEvents.viewer_message_public_received, data)
-    })
 
-    /* public super chat listener */
-    socket.on(chatEvents.viewer_super_message_public_emitted, (data) => {
-      socket
-        .in(data.room)
-        .emit(chatEvents.viewer_super_message_public_received, data)
+    /* can get this message payload as string and streamId as other parameter😀 */
+    socket.on(chatEvents.viewer_message_public_emitted, (data) => {
+      realtimeDb
+        .ref("publicChats")
+        .child(data.room.split("-")[0])
+        .child("chats")
+        .push({
+          type: "normal-public-message",
+          ...data,
+        })
+        .then(() => {
+          io.getIO()
+            .in(data.room)
+            .emit(chatEvents.viewer_message_public_received, data)
+        })
+        .catch(() => {
+          /* even if error emmit the message */
+          io.getIO()
+            .in(data.room)
+            .emit(chatEvents.viewer_message_public_received, data)
+        })
     })
 
     /* only viewers who have private chat plan will use this, for others it is just wastage of resources 
@@ -49,29 +63,41 @@ module.exports = {
         .emit(chatEvents.viewer_call_end_request_init_received, data)
     })
   },
-  unAuthedViewerListeners: (socket) => {
-    /* un-authed public chat emitter */
-    socket.on(chatEvents.viewer_message_public_emitted, (data) => {
-      io.getIO()
-        .in(data.room)
-        .emit(chatEvents.viewer_message_public_received, data)
-    })
-  },
   modelListeners: (socket) => {
     /* model public chat emitter */
     socket.on(chatEvents.model_message_public_emitted, (data) => {
-      io.getIO()
-        .in(data.room)
-        .emit(chatEvents.model_message_public_received, data)
+      realtimeDb
+        .ref("publicChats")
+        .child(data.room.split("-")[0])
+        .child("chats")
+        .push({
+          type: "model-public-message",
+          ...data,
+        })
+        .then(() => {
+          io.getIO()
+            .in(data.room)
+            .emit(chatEvents.model_message_public_received, data)
+        })
+        .catch(() => {
+          /* even if error emmit the message */
+          io.getIO()
+            .in(data.room)
+            .emit(chatEvents.viewer_message_public_received, data)
+        })
     })
 
     /* model private chat emitter */
     socket.on(chatEvents.model_private_message_emitted, (data) => {
       /* after emitting save the chats to the db */
-      ModelViewerPrivateChat.updateOne({
-        _id: data.dbId,
-        $push: { chats: data.chat },
-      })
+      ModelViewerPrivateChat.updateOne(
+        {
+          _id: data.dbId,
+        },
+        {
+          $push: { chats: data.chat },
+        }
+      )
         .then((result) => {
           if (result.n === 1) {
             socket
@@ -89,4 +115,41 @@ module.exports = {
         .emit(chatEvents.model_call_end_request_init_received, data)
     })
   },
+  unAuthedViewerListeners: (socket) => {
+    /* un-authed public chat emitter */
+    socket.on(chatEvents.viewer_message_public_emitted, (data) => {
+      realtimeDb
+        .ref("publicChats")
+        .child(data.room.split("-")[0])
+        .child("chats")
+        .push({
+          type: "normal-public-message",
+          ...data,
+        })
+        .then(() => {
+          io.getIO()
+            .in(data.room)
+            .emit(chatEvents.viewer_message_public_received, data)
+        })
+        .catch(() => {
+          /* even if error emmit the message */
+          io.getIO()
+            .in(data.room)
+            .emit(chatEvents.viewer_message_public_received, data)
+        })
+    })
+  },
+
+  authedUserEventList: [
+    chatEvents.viewer_message_public_emitted,
+    chatEvents.viewer_super_message_public_emitted,
+    chatEvents.viewer_private_message_emitted,
+    chatEvents.viewer_call_end_request_init_emitted,
+  ],
+  unAuthedViewerEventList: [chatEvents.viewer_message_public_emitted],
+  modelEventList: [
+    chatEvents.viewer_message_public_emitted,
+    chatEvents.model_private_message_emitted,
+    chatEvents.model_call_end_request_init_emitted,
+  ],
 }

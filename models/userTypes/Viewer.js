@@ -1,5 +1,4 @@
 const mongoose = require("mongoose")
-const User = require("../User")
 
 const viewerSchema = new mongoose.Schema({
   rootUser: {
@@ -89,13 +88,19 @@ const viewerSchema = new mongoose.Schema({
       ref: "audioCall",
     },
   ],
-  pendingCallType: {
-    type: String,
-    enum: ["AudioCall", "VideoCall"],
-  },
-  pendingCall: {
-    type: mongoose.Schema.Types.ObjectId,
-    refPath: "pendingCallType",
+  pendingCalls: {
+    audioCalls: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "AudioCall",
+      },
+    ],
+    videoCalls: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "VideoCall",
+      },
+    ],
   },
   privateChats: [
     {

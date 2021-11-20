@@ -8,11 +8,20 @@ const jwt = require("jsonwebtoken")
 const jwtGenerator = require("../../utils/generateJwt")
 const generateJwt = require("../../utils/generateJwt")
 const io = require("../../socket")
+const chatEventListeners = require("../../utils/socket/chat/chatEventListeners")
 
 exports.loginHandler = (req, res, next) => {
   /**
    * login route for Model and Viewer only
    */
+
+  if (req.user) {
+    return res.status(200).json({
+      actionStatus: "failed",
+      message: "You are already logged in.",
+    })
+  }
+
   errorCollector(req, "Username of Password is incorrect, please try again!")
 
   const { username, password } = req.body
@@ -48,8 +57,6 @@ exports.loginHandler = (req, res, next) => {
       }
       User.updateOne({ _id: theUser._id }, { lastLogin: new Date() })
       const hours = 12
-      console.debug("loggedIn")
-
       /**
        * my view is may be for some reason socketId may not be sent but,
        * because of that right user should not be devoid of registration or login
@@ -59,12 +66,27 @@ exports.loginHandler = (req, res, next) => {
        */
       try {
         const clientSocket = io.getIO().sockets.sockets.get(socketId)
-        if (theUser.userType === "Model") {
-          /* if model then put her in her private room */
-          clientSocket.join(`${theUser.relatedUser._id}-private`)
+        clientSocket.removeAllListeners(
+          chatEventListeners.unAuthedViewerEventList
+        )
+        /* add socket listeners for the specific userType */
+        switch (theUser.userType) {
+          case "Model":
+            chatEventListeners.modelListeners(clientSocket)
+            break
+          case "Viewer":
+            chatEventListeners.authedViewerListeners(clientSocket)
+            break
+          default:
+            break
         }
-        clientSocket.data.userId = theUser._id
-        clientSocket.data.relatedUserId = theUser.relatedUser._id
+        /* put any logged in user in his/her private room */
+        clientSocket.join(`${theUser.relatedUser._id}-private`)
+        clientSocket.data = {
+          ...clientSocket.data,
+          userId: theUser._id,
+          relatedUserId: theUser.relatedUser._id,
+        }
         clientSocket.authed = true
         clientSocket.userType = theUser.userType
         wasSocketUpdated = true

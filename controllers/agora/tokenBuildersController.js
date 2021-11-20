@@ -7,28 +7,8 @@ const { Types } = require("mongoose")
 const Viewer = require("../../models/userTypes/Viewer")
 const io = require("../../socket")
 const socketEvents = require("../../utils/socket/socketEvents")
-const UniqueChatUserId = require("../../models/twilio/UniqueChatUserId")
-
-const findAvailableTwilioChatUserId = () => {
-  return UniqueChatUserId.findOne({ isAvailable: true }).then((id) => {
-    if (!id) {
-      return UniqueChatUserId({})
-        .save()
-        .then((newId) => {
-          return newId._id
-        })
-    }
-    UniqueChatUserId.updateOne(
-      { _id: id._id },
-      {
-        $inc: {
-          numUsersServed: 1,
-        },
-      }
-    )
-    return id
-  })
-}
+const { getDatabase } = require("firebase-admin/database")
+const realtimeDb = getDatabase()
 
 exports.createStreamAndToken = (req, res, next) => {
   // create stream and generate token for model
@@ -47,13 +27,15 @@ exports.createStreamAndToken = (req, res, next) => {
   // by making a new model approval checker
 
   /* 🔺🔺 commented for presentation only 🔻🔻 */
-  /* if (req.user.relatedUser.isStreaming || req.user.relatedUser.onCall) {
-    return res.status(400).json({
-      actionStatus: "failed",
-      message:
-        "You are streaming or taking call, already from another account, streaming from two devices is not currently supported!",
-    })
-  } */
+  if (process.env.RUN_ENV === "ubuntu") {
+    if (req.user.relatedUser.isStreaming || req.user.relatedUser.onCall) {
+      return res.status(400).json({
+        actionStatus: "failed",
+        message:
+          "You are streaming or taking call, already from another account, streaming from two devices is not currently supported!",
+      })
+    }
+  }
 
   let theStream
   Stream({
@@ -63,13 +45,23 @@ exports.createStreamAndToken = (req, res, next) => {
     .save()
     .then((stream) => {
       theStream = stream
+      const publicChats = realtimeDb
+        .ref("publicChats")
+        .child(theStream._id.toString())
+      return publicChats.set({
+        model: { ...req.user },
+        chats: ["hello"],
+      })
+    })
+    .then((returnValue) => {
+      console.log("Value returned from firebase >> ", returnValue)
       return Model.findOneAndUpdate(
         { _id: req.user.relatedUser._id },
         {
           isStreaming: true,
-          currentStream: stream._id,
-          /* 👇👇 how to ensure same stream is not added again */
-          $push: { streams: stream },
+          currentStream: theStream._id,
+          /* 👇👇 how to ensure same theStream is not added again */
+          $push: { streams: theStream },
         }
       )
         .writeConcern({
@@ -103,15 +95,16 @@ exports.createStreamAndToken = (req, res, next) => {
       clientSocket.isStreaming = true
       clientSocket.streamId = theStream._id.toString()
       clientSocket.join(streamRoomPublic)
-      clientSocket.join(String(req.user.relatedUser._id))
 
       /* 👇👇 broadcast to all who are not in any room */
       // io.getIO().except(io.getIO().sockets.adapter.rooms)
       clientSocket.broadcast.emit(socketEvents.streamCreated, {
         modelId: req.user.relatedUser._id,
         profileImage: model.profileImage,
+        streamId: theStream._id.toString(),
       })
-      res.status(200).json({
+
+      return res.status(200).json({
         actionStatus: "success",
         rtcToken: rtcToken,
         privilegeExpiredTs: privilegeExpiredTs,
@@ -142,8 +135,16 @@ exports.genRtcTokenViewer = (req, res, next) => {
   let theModel
   Model.findById(modelId)
     .select(
-      "currentStream isStreaming onCall tags rating profileImage publicImages hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions"
+      "currentStream isStreaming onCall tags rating profileImage publicImages hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
     )
+    .populate({
+      path: "rootUser",
+      select: "username",
+    })
+    .populate({
+      path: "tags",
+      select: "name",
+    })
     .lean()
     .then((model) => {
       theModel = model
@@ -251,11 +252,15 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
   let puttedInRooms
   Model.findById(modelId)
     .select(
-      "currentStream isStreaming onCall tags rating profileImage publicImages hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions"
+      "currentStream isStreaming onCall tags rating profileImage publicImages hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
     )
     .populate({
       path: "tags",
       select: "name",
+    })
+    .populate({
+      path: "rootUser",
+      select: "username",
     })
     .lean()
     .then((model) => {
@@ -306,7 +311,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                 rtcToken: rtcToken,
                 privilegeExpiredTs: privilegeExpiredTs,
                 newUnAuthedUserCreated: true,
-                streamRoom: streamRoom,
+                streamId: model.currentStream._id,
                 theModel: theModel,
                 puttedInRooms: puttedInRooms,
               })

@@ -18,11 +18,19 @@ router.post(
       .isString()
       .isLength({ max: 50 })
       .custom((value, { req }) => {
-        return User.findOne({ username: req.body.username }).then((user) => {
+        return User.findOne({ username: value }).then((user) => {
           if (user) {
             return Promise.reject("User name already exists")
           }
         })
+      })
+      .custom((value, _req) => {
+        if (value.includes("_")) {
+          const error = new Error("Space(s) is not allowed in username")
+          error.statusCode = 400
+          throw error
+        }
+        return true
       })
       .toLowerCase(),
     body("password").notEmpty().isString(),
@@ -32,7 +40,9 @@ router.post(
     body("gender").notEmpty().isString(),
     body("profileImage").notEmpty().isURL(),
     body("languages").notEmpty().isString(),
-    body("phone").notEmpty(),
+    body("phone")
+      .notEmpty()
+      .isMobilePhone(["en-IN", "en-PK", "bn-BD", "ne-NP", "th-TH"]),
   ],
   modelController.createModel
 )

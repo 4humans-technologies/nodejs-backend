@@ -2,6 +2,14 @@ const Coupon = require("../../models/management/coupon")
 
 exports.generateNewCouponCode = (req, res, next) => {
   const { forCoins } = req.body
+
+  if (forCoins < 10) {
+    return res.status(400).json({
+      actionStatus: "failed",
+      message: "Please enter a value greater than or equal to 10",
+    })
+  }
+
   Coupon({
     generatedBy: req.user.relatedUser,
     forCoins: +forCoins,

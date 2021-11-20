@@ -52,22 +52,92 @@ const modelSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  languages: [String],
+  languages: {
+    type: [String],
+    default: ["Hindi"],
+  },
   bio: {
     type: String,
     minlength: 20,
     maxlength: 512,
+    default: "I'am a super cool girl 😘😘💘",
   },
   hobbies: {
     type: [String],
+    default: [],
   },
-  tipMenuActions: {
-    actions: [
+  tags: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Tag",
+    },
+  ],
+  ethnicity: {
+    type: String,
+    default: "Indian",
+  },
+  hairColor: {
+    type: String,
+    index: true,
+    default: "",
+  },
+  eyeColor: {
+    type: String,
+    index: true,
+    default: "",
+  },
+  country: {
+    type: String,
+    index: true,
+    default: "",
+  },
+  bodyType: {
+    type: String,
+    index: true,
+    default: "",
+  },
+  skinColor: {
+    type: String,
+    index: true,
+    default: "",
+  },
+  topic: {
+    type: String,
+    default: "Hello guys, today's stream will be super, so dont't go away",
+  },
+  privateCallActivity: {
+    type: [String],
+    default: [],
+  },
+  dynamicFields: {
+    type: [
       {
-        action: String,
-        price: Number,
+        name: {
+          type: String,
+          required: true,
+        },
+        displayName: {
+          type: String,
+          required: true,
+        },
+        value: {
+          type: String,
+          required: true,
+        },
       },
     ],
+    default: [],
+  },
+  tipMenuActions: {
+    actions: {
+      type: [
+        {
+          action: String,
+          price: Number,
+        },
+      ],
+      default: [],
+    },
     lastUpdated: {
       type: Date,
     },
@@ -161,19 +231,19 @@ const modelSchema = new mongoose.Schema({
   },
   backGroundImage: String,
   coverImage: String,
-  privateImages: {
-    type: Map,
-    of: new mongoose.Schema({
-      images: {
-        type: [String],
-        required: true,
-      },
-      price: {
-        type: Number,
-        required: true,
-      },
-    }),
-  },
+  // privateImages: {
+  //   type: Map,
+  //   of: new mongoose.Schema({
+  //     images: {
+  //       type: [String],
+  //       required: true,
+  //     },
+  //     price: {
+  //       type: Number,
+  //       required: true,
+  //     },
+  //   }),
+  // },
   streams: [
     {
       type: mongoose.Schema.Types.ObjectId,
@@ -213,28 +283,12 @@ const modelSchema = new mongoose.Schema({
       netIncome: Number,
     },
   ],
-  tags: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Tag",
-    },
-  ],
   wallet: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: "Wallet",
     unique: true,
     index: true,
-  },
-  ethnicity: {
-    type: String,
-    default: "Indian",
-  },
-  dynamicFields: {
-    "hair color": String,
-    "eye color": String,
-    "body type": String,
-    country: String,
   },
   privateChats: [
     {
@@ -249,7 +303,7 @@ modelSchema.index(
     name: "text",
     userName: "text",
     bio: "text",
-    hobbies: "text",
+    ethnicity: "text",
   },
   {
     name: "ModelSearch index",

@@ -51,18 +51,20 @@ exports.redeemCouponCode = (req, res, next) => {
           ).lean(),
         ])
       }
-      const error = new Error("Your coupon code was not redeemed!")
+      const error = new Error(
+        "Your coupon code was not redeemed!, The code was invalid."
+      )
       error.statusCode = 400
       throw error
     })
     .then((values) => {
-      if (values[1]) {
+      if (values?.[1]) {
         walletModified = true
       }
       if (values[0].n === 1) {
         return res.status(200).json({
           actionStatus: "success",
-          message: `${coupon.forCoins} coins were added successfully to your wallet`,
+          message: `${theCoupon.forCoins} coins were added successfully to your wallet`,
           wallet: values[1],
         })
       } else {
@@ -75,5 +77,41 @@ exports.redeemCouponCode = (req, res, next) => {
     })
     .catch((err) => {
       /* undo all other activity */
+      if (theCoupon) {
+        /* ========= */
+        Promise.all([
+          Coupon.updateOne(
+            {
+              _id: theCoupon._id,
+            },
+            {
+              redeemed: false,
+              redeemedBy: null,
+              redeemDate: null,
+            }
+          ),
+          Wallet.updateOne(
+            {
+              relatedUser: req.user.relatedUser._id,
+            },
+            {
+              $inc: { currentAmount: walletModified ? -theCoupon.forCoins : 0 },
+            }
+          ),
+        ])
+          .then((result) => {
+            if (result[0].n + result[1].n) {
+              console.error("Code redeem failed, error in rolling back")
+            }
+            return next(err)
+          })
+          .catch(() => next(err))
+      } else {
+        /* no coupon was found */
+        return res.status(err.statusCode).json({
+          actionStatus: "failed",
+          message: err.message,
+        })
+      }
     })
 }

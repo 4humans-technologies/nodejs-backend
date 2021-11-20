@@ -2,6 +2,7 @@ const Model = require("../../models/userTypes/Model")
 const User = require("../../models/User")
 const bcrypt = require("bcrypt")
 const Approval = require("../../models/management/approval")
+const TokenGiftHistory = require("../../models/globals/tokenGiftHistory")
 
 exports.getModelProfileData = (req, res, next) => {
   Model.findById(req.user.relatedUser._id)
@@ -16,7 +17,7 @@ exports.getModelProfileData = (req, res, next) => {
     .populate("pendingCalls.videoCalls")
     .populate("Tags")
     .populate("wallet")
-    .select("-streams ")
+    .select("-streams")
     .then((model) => {
       res.status(200).json({
         actionStatus: "success",
@@ -211,6 +212,82 @@ exports.handlePublicVideosUpload = (req, res, next) => {
           actionStatus: "failed",
         })
       }
+    })
+    .catch((err) => next(err))
+}
+
+exports.updateInfoFields = (req, res, next) => {
+  /* *
+   * req.body = [{
+   *  field:"name",
+   *  value:"my new name" <=== the new name
+   * },
+   * {
+   *  field:"username",
+   *  value:"my new username" <=== the new username
+   * }] */
+
+  let fieldsToUpdate = {}
+
+  req.body.forEach((field) => {
+    // if (field.field.includes(".")) {
+    //   const key = field.field
+    //   fieldsToUpdate = {
+    //     ...fieldsToUpdate,
+    //     [key]: field.value,
+    //   }
+    // } else {
+    fieldsToUpdate[field.field] = field.value
+    // }
+  })
+
+  Model.updateOne(
+    {
+      _id: req.user.relatedUser._id,
+    },
+    { $set: fieldsToUpdate },
+    { runValidators: true }
+  )
+    .then((_model) => {
+      return res.status(200).json({
+        actionStatus: "success",
+        updatedFields: Object.keys(fieldsToUpdate),
+      })
+    })
+    .catch((err) => next(err))
+}
+
+exports.getAskedFields = (req, res, next) => {
+  const { fetchFields } = req.body
+
+  Model.findById({
+    _id: req.user.relatedUser._id,
+  })
+    .lean()
+    .select(fetchFields)
+    .then((fields) => {
+      return res.status(200).json({
+        actionStatus: "success",
+        fields: fields,
+      })
+    })
+    .catch((err) => next(err))
+}
+
+exports.getTokenHistoryOfModel = (req, res, next) => {
+  TokenGiftHistory.find({
+    forModel: req.user.relatedUser._id,
+  })
+    .populate({
+      path: "by",
+      select: "name profileImage",
+    })
+    .lean()
+    .then((history) => {
+      return res.status(200).json({
+        actionStatus: "success",
+        results: history,
+      })
     })
     .catch((err) => next(err))
 }

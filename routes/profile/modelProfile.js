@@ -34,4 +34,33 @@ router.post(
   modelProfileData.handlePublicVideosUpload
 )
 
+router.post(
+  "/update-info-fields",
+  tokenVerify,
+  [
+    body("name").notEmpty().isString(),
+    body("ethnicity").notEmpty().isString(),
+    body("hairColor").notEmpty().isString(),
+    body("eyeColor").notEmpty().isString(),
+    body("country").notEmpty().isString(),
+    body("bodyType").notEmpty().isString(),
+    body("skinColor").notEmpty().isString(),
+    body("dynamicFields").notEmpty().isArray(),
+  ],
+  modelProfileData.updateInfoFields
+)
+
+router.post(
+  "/get-asked-fields",
+  tokenVerify,
+  [body("fetchFields").isArray()],
+  modelProfileData.getAskedFields
+)
+
+router.post(
+  "/get-model-token-history",
+  tokenVerify,
+  modelProfileData.getTokenHistoryOfModel
+)
+
 module.exports = router

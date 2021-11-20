@@ -6,6 +6,8 @@ const errorCollector = require("../../utils/controllerErrorCollector")
 const bcrypt = require("bcrypt")
 const ObjectId = require("mongodb").ObjectId
 const generateJwt = require("../../utils/generateJwt")
+const io = require("../../socket")
+const chatEventListeners = require("../../utils/socket/chat/chatEventListeners")
 
 function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
@@ -35,9 +37,6 @@ exports.createViewer = (req, res, next) => {
           currentAmount: 10000,
           rootUser: advRootUserId,
           relatedUser: advRelatedUserId,
-        }).save({
-          w: 1,
-          j: false,
         }),
         Viewer({
           _id: advRelatedUserId,
@@ -46,9 +45,6 @@ exports.createViewer = (req, res, next) => {
           email: email,
           gender: capitalizeFirstLetter(gender),
           wallet: walletId,
-        }).save({
-          w: 1,
-          j: false,
         }),
         User({
           _id: advRootUserId,
@@ -61,9 +57,6 @@ exports.createViewer = (req, res, next) => {
           meta: {
             lastLogin: new Date(),
           },
-        }).save({
-          w: 1,
-          j: false,
         }),
       ])
     })
@@ -94,9 +87,16 @@ exports.createViewer = (req, res, next) => {
        */
       try {
         const clientSocket = io.getIO().sockets.sockets.get(socketId)
-        clientSocket.data = { ...clientSocket?.data }
-        clientSocket.data.userId = user._id
-        clientSocket.data.relatedUserId = user.relatedUser._id
+        clientSocket.removeAllListeners(
+          chatEventListeners.unAuthedViewerEventList
+        )
+        chatEventListeners.authedViewerListeners(clientSocket)
+        clientSocket.data = {
+          ...clientSocket.data,
+          userId: user._id.toString(),
+          relatedUserId: user.relatedUser._id.toString(),
+        }
+        clientSocket.join(`${user.relatedUser._id}-private`)
         clientSocket.authed = true
         clientSocket.userType = "Viewer"
         wasSocketUpdated = true
@@ -104,7 +104,7 @@ exports.createViewer = (req, res, next) => {
         wasSocketUpdated = false
       }
 
-      res.status(201).json({
+      return res.status(201).json({
         message: "viewer registered successfully",
         actionStatus: "success",
         user: user,
@@ -119,23 +119,25 @@ exports.createViewer = (req, res, next) => {
         Viewer.deleteOne({ _id: advRelatedUserId }),
         User.deleteOne({ _id: advRootUserId }),
       ])
-        .then((deleteResult) => {
+        .then((_deleteResult) => {
           /* error generating salt password */
           if (err?.name === "MongoError") {
             switch (err.code) {
-              case 11000:
+              case 11000: {
                 const field = Object.keys(err.keyValue)[0]
                 const fieldValue = err.keyValue[field]
-                errMessage = `${field} "${fieldValue}", is already used.`
+                const errMessage = `${field} "${fieldValue}", is already used.`
                 const error = new Error(errMessage)
                 error.statusCode = 400
                 throw error
-              default:
+              }
+              default: {
                 const error_default = new Error(
                   err.message || "viewer not registered"
                 )
                 error_default.statusCode = err.statusCode || 500
                 throw error_default
+              }
             }
           } else {
             const error = new Error(err.message + " viewer not registered")

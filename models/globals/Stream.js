@@ -22,13 +22,7 @@ const streamSchema = new mongoose.Schema({
     type: String,
     required: true,
     default: "Error",
-    enum: [
-      "AudioCall",
-      "VideoCall",
-      "Manual",
-      "Error",
-      "tab-close | window-reload | connection-error",
-    ],
+    enum: ["AudioCall", "VideoCall", "Manual", "Error", "socket-disconnect"],
   },
   meta: {
     duration: Number,
@@ -40,12 +34,6 @@ const streamSchema = new mongoose.Schema({
       type: Number,
       default: 0,
     },
-    gifts: [
-      {
-        type: Map,
-        of: String,
-      },
-    ],
   },
   // meta: {
   //     type: new mongoose.Schema({
