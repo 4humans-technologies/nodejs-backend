@@ -25,7 +25,7 @@ exports.createViewer = (req, res, next) => {
   let wasSocketUpdated = false
 
   /* 🥇🥇 */
-  const DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER = 1000
+  const DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER = 999999
 
   bcrypt
     .genSalt(5)
