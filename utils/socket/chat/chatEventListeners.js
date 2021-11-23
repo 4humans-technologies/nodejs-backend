@@ -114,6 +114,14 @@ module.exports = {
         .to(data.room)
         .emit(chatEvents.model_call_end_request_init_received, data)
     })
+
+    /* when model declines the call */
+    /* should later add this event listener when the viewer requests the call, and with .once rule */
+    socket.on(chatEvents.model_call_request_response_emitted, (data) => {
+      socket
+        .to(data.room)
+        .emit(chatEvents.model_call_request_response_received, data)
+    })
   },
   unAuthedViewerListeners: (socket) => {
     /* un-authed public chat emitter */

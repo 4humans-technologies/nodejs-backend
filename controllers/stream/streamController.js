@@ -250,15 +250,16 @@ exports.handleViewerCallRequest = (req, res, next) => {
   // viewer must be authenticated
   // must have money >= min required
 
-  const { modelId, streamId, callType, walletCoins, relatedUserId } = req.body
+  const { modelId, streamId, callType, walletCoins, relatedUserId, username } =
+    req.body
 
-  /* this data will be sent to the viewers */
-
+  let theViewer
   const { socketId } = req.query
 
   /**
    * 🔻🔻 check for any pendingcall in viewer 🔺🔺
    */
+
   /* if (req.user.relatedUser.pendingCall) {
     return res.status(400).json({
       actionStatus: "failed",
@@ -271,10 +272,23 @@ exports.handleViewerCallRequest = (req, res, next) => {
     Model.findById(modelId)
       .select("charges minCallDuration isStreaming")
       .lean(),
+    Viewer.findById(req.user.relatedUser._id)
+      .select(
+        "-streams -pendingCalls -privateChats -previousChatPlans -videoCallHistory -audioCallHistory"
+      )
+      .populate({
+        path: "rootUser",
+        select: "username",
+      })
+      .populate({
+        path: "wallet",
+      })
+      .lean(),
   ])
     .then((values) => {
       const wallet = values[0]
       const model = values[1]
+      theViewer = values[2]
       let minBalance
 
       if (callType === "audioCall") {
@@ -300,7 +314,8 @@ exports.handleViewerCallRequest = (req, res, next) => {
             .emit(`${chatEvents.viewer_requested_for_call_received}-private`, {
               callType: callType,
               username: req.user.username,
-              viewer: req.user,
+              /* later can also send viewers populated call history */
+              viewer: theViewer,
             })
 
           return res.status(201).json({
@@ -352,8 +367,15 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       response: response 
       callType: callType,
       relatedUserId: relatedUserId
+      // by adding extra fields here
+      username
+      profileImage
     }
+    
   */
+  const callingViewerSocketData = {
+    ...socketData,
+  }
 
   const viewerId = req.body.socketData.relatedUserId
   const callType = req.body.socketData.callType
@@ -361,7 +383,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
   let theCall = callType === "audioCall" ? AudioCall : VideoCall
   let callDoc
   const callStartTimeStamp = Date.now() + 0
-  socketData.callStartTs = callStartTimeStamp
+  callingViewerSocketData.callStartTs = callStartTimeStamp
 
   /* create the call entry in DB */
   Promise.all([
@@ -375,6 +397,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
           ? req.user.relatedUser.charges.audioCall
           : req.user.relatedUser.charges.videoCall,
       minCallDuration: req.user.relatedUser.minCallDuration,
+      sharePercent: req.user.relatedUser.sharePercent,
       startTimeStamp: callStartTimeStamp /* plus five seconds */,
     }),
     Wallet.findOne({
@@ -385,7 +408,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
     .then(([call, modelWallet, viewerWallet]) => {
       /* deduct min charges from viewer and add to model wallet */
       callDoc = call
-      socketData.callId = callDoc._id.toString()
+      callingViewerSocketData.callId = callDoc._id.toString()
       const minCharges = callDoc.chargePerMin * callDoc.minCallDuration
       try {
         viewerWallet.deductAmount(minCharges)
@@ -400,7 +423,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       return Promise.all([modelWallet.save(), viewerWallet.save()])
     })
     .then(([modelWallet, viewerWallet]) => {
-      /* add the call as pending call for both model and viewer */
+      /* update the local wallet of model */
       io.getIO()
         .in(`${req.user.relatedUser._id}-private`)
         .emit("model-wallet-updated", {
@@ -408,6 +431,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
           operation: "set",
           amount: modelWallet.currentAmount,
         })
+      /* add the call as pending call for both model and viewer */
       return Promise.all([
         Viewer.findOneAndUpdate(
           { _id: callDoc.viewer },
@@ -418,6 +442,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
                 : { "pendingCalls.videoCalls": callDoc._id },
           }
         )
+          .select("profileImage name")
           .populate({
             path: "rootUser",
             select: "username",
@@ -463,17 +488,35 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
             )[0]
           )
       }
+
       delete clientSocket.isStreaming
       delete clientSocket.streamId
 
+      /* all the necessary details to do the billing in case of a disconnect */
       clientSocket.onCall = true
       clientSocket.callId = callDoc._id.toString()
       clientSocket.callType = callDoc.callType
       clientSocket.sharePercent = +req.user.relatedUser.sharePercent
 
+      /* don't emit to the model and viewer */
       io.getIO()
         .in(`${streamId}-public`)
-        .emit(chatEvents.model_call_request_response_received, socketData)
+        .except(`${viewerId}-private`)
+        .except(`${req.user.relatedUser._id}-private`)
+        .emit(chatEvents.model_call_request_response_received, {
+          ...socketData,
+          username: viewer.rootUser.username,
+          profileImage: viewer.profileImage,
+        })
+
+      /* emit to the viewer */
+      callingViewerSocketData.username = viewer.rootUser.username
+      io.getIO()
+        .in(`${viewerId}-private`)
+        .emit(
+          chatEvents.model_call_request_response_received,
+          callingViewerSocketData
+        )
 
       /* MAKE ALL OTHER CLIENTS EXCEPT THE MOdEL AND THE VIEWER LEAVE PUBLIC CHANNEL & destroy private channel 
         but leaving will be done from client side, later can kick user out from server 🔺🔺
@@ -541,24 +584,13 @@ exports.handleEndCallFromViewer = (req, res, next) => {
           message:
             "model ended call before you, please wait while we are processing the transaction!",
         })
+        return Promise.reject("Model ended before")
       } else if (result.n > 0) {
         /* you have locked the db model cannot over-rite */
         const query =
           callType === "audioCall"
             ? Promise.all([
-                AudioCall.findById(callId)
-                  .populate({
-                    path: "model",
-                    select: "name username profileImage",
-                  })
-                  .populate({
-                    path: "viewer",
-                    select: "name wallet",
-                    populate: {
-                      path: "wallet",
-                      select: "currentAmount",
-                    },
-                  }),
+                AudioCall.findById(callId),
                 Wallet.findOne({ relatedUser: req.user.relatedUser._id }),
               ])
             : Promise.all([
@@ -581,6 +613,8 @@ exports.handleEndCallFromViewer = (req, res, next) => {
       } else {
         /* do the money transfer logic */
         theCall.endTimeStamp = endTimeStamp
+        theCall.endReason = "viewer-ended"
+        theCall.callDuration = (+endTimeStamp - theCall.startTimeStamp) / 1000
         const totalCallDuration =
           (+endTimeStamp - theCall.startTimeStamp) /
           60000 /* convert milliseconds to minutes */
@@ -594,6 +628,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
           amountToDeduct = billableCallDuration * theCall.chargePerMin
         }
         viewerWallet.deductAmount(amountToDeduct)
+
         return Promise.all([
           viewerWallet.save(),
           theCall.save(),
@@ -617,7 +652,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
       /* now remove the pending calls from model & viewer */
       const viewerPr = Viewer.updateOne(
         {
-          _id: req.user.relatedUser._id,
+          _id: theCall.viewer._id,
         },
         {
           $addToSet:
@@ -632,7 +667,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
         { runValidators: true }
       )
 
-      const modelPr = Model.findOneAndUpdate(
+      const modelPr = Model.updateOne(
         {
           _id: theCall.model._id,
         },
@@ -653,9 +688,43 @@ exports.handleEndCallFromViewer = (req, res, next) => {
       return Promise.all([viewerPr, modelPr])
     })
     .then((values) => {
-      if (values[0].n === 1) {
-        /* have to show the model, model already have viewers detail */
+      if (values[1].n + values[0].n === 2) {
+        let modelSocketCleared = false /* model socket */
+        let socketCleared = false /* for viewer socket */
 
+        try {
+          /* try to clear models socket client also */
+          const modelSocket = io
+            .getIO()
+            .sockets.sockets.get(
+              Array.from(
+                io
+                  .getIO()
+                  .sockets.adapter.rooms.get(
+                    `${theCall.model._id.toString()}-private`
+                  )
+              )[0]
+            )
+
+          delete modelSocket.onCall
+          delete modelSocket.callId
+          delete modelSocket.callType
+
+          modelSocketCleared = true
+        } catch (e) {
+          modelSocketCleared = false
+        }
+
+        /* update models local wallet  */
+        io.getIO()
+          .in(`${theCall.model._id.toString()}-private`)
+          .emit("model-wallet-updated", {
+            modelId: theCall.model._id,
+            operation: "add",
+            amount: amountAdded,
+          })
+
+        /* not have to show call end details of the  model, model already have viewers detail */
         io.getIO()
           .in(`${theCall.stream._id.toString()}-public`)
           .emit(chatEvents.viewer_call_end_request_finished, {
@@ -664,26 +733,33 @@ exports.handleEndCallFromViewer = (req, res, next) => {
             totalCharges: amountToDeduct,
             message: "Call was ended successfully by the model",
             ended: "ok",
+            modelSocketCleared: modelSocketCleared,
           })
 
-        /* clear the viewer's socket */
-        let clientSocket = io.getIO().sockets.sockets.get(socketId)
-        if (!clientSocket) {
-          clientSocket = io
-            .getIO()
-            .sockets.sockets.get(
-              Array.from(
-                io
-                  .getIO()
-                  .sockets.adapter.rooms.get(
-                    `${req.user.relatedUser._id}-private`
-                  )
-              )[0]
-            )
+        try {
+          /* try to clear the viewer's socket */
+          let clientSocket = io.getIO().sockets.sockets.get(socketId)
+          if (!clientSocket) {
+            clientSocket = io
+              .getIO()
+              .sockets.sockets.get(
+                Array.from(
+                  io
+                    .getIO()
+                    .sockets.adapter.rooms.get(
+                      `${req.user.relatedUser._id}-private`
+                    )
+                )[0]
+              )
+          }
+          delete clientSocket.onCall
+          delete clientSocket.callId
+          delete clientSocket.callType
+
+          socketCleared = true
+        } catch (e) {
+          socketCleared = false
         }
-        clientSocket.onCall = false
-        clientSocket.callId = null
-        clientSocket.callType = null
 
         return res.status(200).json({
           theCall: theCall,
@@ -692,6 +768,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
           actionStatus: "success",
           message: "call was ended successfully",
           wasFirst: "yes" /* was first to put the call end request */,
+          socketCleared: socketCleared,
         })
       } else {
         const error = new Error("pending calls were not removed successfully")
@@ -699,7 +776,11 @@ exports.handleEndCallFromViewer = (req, res, next) => {
         throw error
       }
     })
-    .catch((err) => next(err))
+    .catch((err) => {
+      if (typeof err !== "string") {
+        return next(err)
+      }
+    })
 
   /**
    * 1. remove this call from pending calls of viewer & model
@@ -762,6 +843,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
           message:
             "viewer ended call before you, please wait while we are processing the transaction!",
         })
+        return Promise.reject("Viewer ended before")
       } else if (result.n > 0) {
         /* you have locked the db model cannot over-rite */
         const query =
@@ -780,6 +862,79 @@ exports.handleEndCallFromModel = (req, res, next) => {
     .then((values) => {
       theCall = values[0]
       modelWallet = values[1]
+
+      if (theCall.status !== "ongoing") {
+        /* means the call was not setup */
+        /* now refund the money of the user */
+        theCall.status = "completed-and-billed"
+        theCall.endReason = "viewer-network-error"
+        const amountToRefund = theCall.minCallDuration * theCall.chargePerMin
+        const amtToDeductFromModel =
+          amountToRefund * (theCall.sharePercent / 100)
+        Promise.all([
+          theCall.save(),
+          Wallet.updateOne(
+            {
+              relatedUser: theCall.viewer._id,
+            },
+            {
+              $inc: { currentAmount: amountToRefund },
+            }
+          ),
+          Wallet.updateOne(
+            {
+              relatedUser: theCall.model._id,
+            },
+            {
+              $inc: { currentAmount: -amtToDeductFromModel },
+            }
+          ),
+          Viewer.updateOne(
+            {
+              _id: theCall.viewer._id,
+            },
+            {
+              $pull:
+                callType === "audioCall"
+                  ? { "pendingCalls.audioCalls": theCall._id }
+                  : { "pendingCalls.videoCalls": theCall._id },
+            }
+          ),
+          Model.updateOne(
+            {
+              _id: theCall.model._id,
+            },
+            {
+              $pull:
+                callType === "audioCall"
+                  ? { "pendingCalls.audioCalls": theCall._id }
+                  : { "pendingCalls.videoCalls": theCall._id },
+            }
+          ),
+        ])
+          .then((result) => {
+            if (result[1].n + result[2].n + result[3].n + result[4].n === 4) {
+              io.getIO()
+                .in(`${theCall.model._id}-private`)
+                .emit("model-wallet-updated", {
+                  modelId: theCall.model._id,
+                  operation: "dec",
+                  amount: amtToDeductFromModel,
+                })
+              return res.status(200).json({
+                actionStatus: "success",
+                wasFirst: "yes",
+                callWasNotSetupProperly: true,
+              })
+            } else {
+              throw new Error("Something was not updated!")
+            }
+          })
+          .catch((err) => next(err))
+        /* break out of the below promise chain */
+        return Promise.reject("The call was not ongoing")
+      }
+
       if (theCall.endTimeStamp) {
         /* return bro */
         const error = new Error(
@@ -790,6 +945,8 @@ exports.handleEndCallFromModel = (req, res, next) => {
       } else {
         /* do the money transfer logic */
         theCall.endTimeStamp = endTimeStamp
+        theCall.callDuration = (+endTimeStamp - theCall.startTimeStamp) / 1000
+        theCall.endReason = "model-ended"
         const totalCallDuration =
           (+endTimeStamp - theCall.startTimeStamp) /
           60000 /* convert milliseconds to seconds */
@@ -819,7 +976,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
       viewerWallet.deductAmount(amountToDeduct)
       return viewerWallet.save()
     })
-    .then((wallet) => {
+    .then(() => {
       /* now remove the pending calls from model & viewer */
       const viewerPr = Viewer.updateOne(
         {
@@ -838,7 +995,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
         { runValidators: true }
       )
 
-      const modelPr = Model.findOneAndUpdate(
+      const modelPr = Model.updateOne(
         {
           _id: theCall.model._id,
         },
@@ -857,8 +1014,40 @@ exports.handleEndCallFromModel = (req, res, next) => {
       return Promise.all([viewerPr, modelPr])
     })
     .then((values) => {
-      if (values[1].n === 1) {
-        /*this  will help the viewer to get the call end details */
+      if (values[1].n + values[0].n === 2) {
+        let viewerSocketCleared = false
+        let socketCleared = false
+
+        try {
+          /* try to clear viewers socket */
+          const viewerSocket = io
+            .getIO()
+            .sockets.sockets.get(
+              Array.from(
+                io
+                  .getIO()
+                  .sockets.adapter.rooms.get(`${theCall.viewer._id}-private`)
+              )[0]
+            )
+
+          delete viewerSocket.onCall
+          delete viewerSocket.callId
+          delete viewerSocket.callType
+          viewerSocketCleared = true
+        } catch (e) {
+          viewerSocketCleared = false
+        }
+
+        /* update models local wallet */
+        io.getIO()
+          .in(`${theCall.model._id.toString()}-private`)
+          .emit("model-wallet-updated", {
+            modelId: theCall.model._id,
+            operation: "add",
+            amount: amountAdded,
+          })
+
+        /* this  will help the viewer to get the call end details */
         io.getIO()
           .in(`${theCall.stream._id.toString()}-public`)
           .emit(chatEvents.model_call_end_request_finished, {
@@ -867,28 +1056,35 @@ exports.handleEndCallFromModel = (req, res, next) => {
             totalCharges: amountToDeduct,
             message: "Call was ended successfully by the model",
             ended: "ok",
+            viewerSocketCleared: viewerSocketCleared,
           })
 
-        /* clear model's socket client */
-        let clientSocket = io.getIO().sockets.sockets.get(socketId)
-        if (!clientSocket) {
-          clientSocket = io
-            .getIO()
-            .sockets.sockets.get(
-              Array.from(
-                io
-                  .getIO()
-                  .sockets.adapter.rooms.get(
-                    `${req.user.relatedUser._id}-private`
-                  )
-              )[0]
-            )
-        }
-        clientSocket.onCall = false
-        clientSocket.callId = null
-        clientSocket.callType = null
+        try {
+          /* clear model's socket client */
+          let clientSocket = io.getIO().sockets.sockets.get(socketId)
+          if (!clientSocket) {
+            clientSocket = io
+              .getIO()
+              .sockets.sockets.get(
+                Array.from(
+                  io
+                    .getIO()
+                    .sockets.adapter.rooms.get(
+                      `${req.user.relatedUser._id}-private`
+                    )
+                )[0]
+              )
+          }
 
-        res.status(200).json({
+          delete clientSocket.onCall
+          delete clientSocket.callId
+          delete clientSocket.callType
+          socketCleared = true
+        } catch (e) {
+          socketCleared = false
+        }
+
+        return res.status(200).json({
           theCall: theCall,
           currentAmount: modelWallet.currentAmount,
           modelGot: amountAdded,
@@ -896,14 +1092,20 @@ exports.handleEndCallFromModel = (req, res, next) => {
           actionStatus: "success",
           message: "call was ended successfully",
           wasFirst: "yes" /* was first to put the call end request */,
+          socketCleared: socketCleared,
         })
       } else {
+        /* should not through err as it means the call was not setup correctly, hence roll back everything */
         const error = new Error("pending calls were not removed successfully")
         error.statusCode = 500
         throw error
       }
     })
-    .catch((err) => next(err))
+    .catch((err) => {
+      if (typeof err !== "string") {
+        return next(err)
+      }
+    })
 
   /**
    * 1. remove this call from pending calls of viewer & model
@@ -912,6 +1114,74 @@ exports.handleEndCallFromModel = (req, res, next) => {
    * 4. change model status
    * 5. destroy chat channels
    */
+}
+
+exports.setCallOngoing = (req, res, next) => {
+  /**
+   * set the status of the call as ongoing
+   */
+
+  const { callId, callType } = req.body
+
+  const query =
+    callType === "audioCall"
+      ? AudioCall.findById(callId)
+          .select("viewer status endTimeStamp concurrencyControl")
+          .lean()
+      : VideoCall.findById(callId)
+          .select("viewer status endTimeStamp concurrencyControl")
+          .lean()
+
+  query
+    .then((call) => {
+      if (call) {
+        if (
+          call.viewer._id.toString() === req.user.relatedUser._id.toString() &&
+          !call.endTimeStamp &&
+          call.status !== "ongoing" &&
+          !call.concurrencyControl.includes(1)
+        ) {
+          /* if the same viewers as embeded in the call doc */
+          return callType === "audioCall"
+            ? AudioCall.findById(callId).updateOne(
+                {
+                  _id: callId,
+                },
+                {
+                  status: "ongoing",
+                }
+              )
+            : VideoCall.findById(callId).updateOne(
+                {
+                  _id: callId,
+                },
+                {
+                  status: "ongoing",
+                }
+              )
+        } else {
+          /* if someone else  */
+          const err = new Error(
+            "This call does not belongs to you or is already completed, or if you think this is a problem from our side contact the admin."
+          )
+          err.statusCode = 400
+          throw err
+        }
+      }
+      /* if call doc does not exists */
+      const err = new Error("Call does not exist.")
+      err.statusCode = 400
+      throw err
+    })
+    .then((result) => {
+      if (result.n === 1) {
+        /* if only the status was updated */
+        return res.status(200).json({
+          actionStatus: "success",
+        })
+      }
+    })
+    .catch((err) => next(err))
 }
 
 exports.setOngoing = (req, res, next) => {
@@ -1070,7 +1340,11 @@ exports.processTokenGift = (req, res, next) => {
     })
     .then((model) => {
       sharePercent = model?.sharePercent
-      streamId = model.currentStream._id.toString()
+      try {
+        streamId = model.currentStream._id.toString()
+      } catch (e) {
+        /* model not streaming */
+      }
       if (!sharePercent) {
         sharePercent = 60
       }
@@ -1097,18 +1371,29 @@ exports.processTokenGift = (req, res, next) => {
     })
     .then(() => {
       /* save data in firebase */
-      const path = `publicChats/${streamId}`
-      return realtimeDb.ref(path).child("chats").push(socketData)
+      if (streamId) {
+        const path = `publicChats/${streamId}`
+        return realtimeDb.ref(path).child("chats").push(socketData)
+      } else {
+        return Promise.resolve("Model not streaming")
+      }
     })
-    .then(() => {
+    .then((value) => {
       // const clientSocket = io.getIO().sockets.sockets.get(socketId)
-      io.getIO()
-        .in(socketData.room)
-        .emit(chatEvents.viewer_super_message_public_received, socketData)
-      res.status(200).json({
-        actionStatus: "success",
-        viewerNewWalletAmount: viewerNewWalletAmount,
-      })
+      if (value !== "Model not streaming") {
+        io.getIO()
+          .in(socketData.room)
+          .emit(chatEvents.viewer_super_message_public_received, socketData)
+        return res.status(200).json({
+          actionStatus: "success",
+          viewerNewWalletAmount: viewerNewWalletAmount,
+        })
+      } else {
+        return res.status(200).json({
+          actionStatus: "success",
+          viewerNewWalletAmount: viewerNewWalletAmount,
+        })
+      }
     })
     .catch((error) => next(error))
 }
@@ -1141,7 +1426,7 @@ exports.processTipMenuRequest = (req, res, next) => {
     })
     .then((model) => {
       sharePercent = model?.sharePercent
-      streamId = model.currentStream._id
+      streamId = model?.currentStream?._id
       if (!sharePercent) {
         sharePercent = 60
       }
@@ -1167,9 +1452,11 @@ exports.processTipMenuRequest = (req, res, next) => {
       }).save()
     })
     .then(() => {
-      /* save data in firebase */
-      const path = `publicChats/${streamId}`
-      return realtimeDb.ref(path).child("chats").push(socketData)
+      if (streamId) {
+        /* save data in firebase */
+        const path = `publicChats/${streamId}`
+        return realtimeDb.ref(path).child("chats").push(socketData)
+      }
     })
     .then(() => {
       // const clientSocket = io.getIO().sockets.sockets.get(socketId)

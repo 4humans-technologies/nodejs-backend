@@ -46,13 +46,14 @@ module.exports = (req, _res, next) => {
           select =
             "-followers -hobbies -bio -privateImages -streams -videoCallHistory -audioCallHistory -pendingCalls -dailyIncome -tags"
         } else if (decodedToken.userType === "Viewer") {
-          select = "-hobbies -following -streams"
+          select =
+            "-hobbies -following -streams -bio -pendingCalls -audioCallHistory -videoCallHistory"
         } else {
           select = ""
         }
         User.findById(
           decodedToken.userId,
-          "role permissions userType needApproval relatedUser"
+          "role permissions userType needApproval relatedUser username"
         )
           .populate({
             path: "relatedUser",

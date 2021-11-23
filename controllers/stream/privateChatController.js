@@ -217,10 +217,12 @@ exports.buyChatPlanForViewer = (req, res, next) => {
 
   const { planId } = req.body
 
+  let thePlan
   PrivateChatPlan.findById(planId)
-    .select("name status price ")
+    .select("name status price validityDays")
     .lean()
     .then((plan) => {
+      thePlan = plan
       if (plan && plan.status === "active") {
         if (req.user.relatedUser.wallet.currentAmount >= plan.price) {
           return Promise.all([
@@ -238,9 +240,10 @@ exports.buyChatPlanForViewer = (req, res, next) => {
         } else {
           /* not have suffecient ammt of money */
           const error = new Error(
-            "You don't have suffecient coins in wallet to purchase this plan"
+            "You don't have sufficient coins in wallet to purchase this plan"
           )
           error.statusCode = 400
+          error.reasonCode = "low balance" /* for use in frontend */
           throw error
         }
       } else {
@@ -251,8 +254,8 @@ exports.buyChatPlanForViewer = (req, res, next) => {
     })
     .then((values) => {
       if (values[0].n === 1) {
-        /* buy plan  */
-        return Viewer.FindOneAndUpdate(
+        /* buy plan add to the viewer doc  */
+        return Viewer.findOneAndUpdate(
           {
             _id: req.user.relatedUser,
           },
@@ -260,7 +263,9 @@ exports.buyChatPlanForViewer = (req, res, next) => {
             isChatPlanActive: true,
             currentChatPlan: {
               planId: planId,
-              willExpireOn: validityDays * 24 * 3600 * 1000 + Date.now(),
+              willExpireOn:
+                thePlan.validityDays * 24 * 3600 * 1000 +
+                Date.now() /* timestamp */,
               purchasedOn: new Date(),
             },
           },
@@ -271,10 +276,14 @@ exports.buyChatPlanForViewer = (req, res, next) => {
       }
     })
     .then((updatedViewer) => {
-      return res.status(200).json({
-        actionStatus: "success",
-        updatedViewer: updatedViewer,
-      })
+      if (updatedViewer) {
+        return res.status(200).json({
+          actionStatus: "success",
+          updatedViewer: updatedViewer,
+        })
+      } else {
+        throw new Error("Internal server error!")
+      }
     })
     .catch((err) => next(err))
 }

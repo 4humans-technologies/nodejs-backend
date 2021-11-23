@@ -85,7 +85,7 @@ app.use("/api/website/management/tags", tagRouter)
 app.use("/api/website/token-builder", tokenBuilderRouter)
 app.use("/api/website/gifts", giftsRouter)
 app.use("/api/website/stream", streamRouter)
-app.use("/api/website/private-chat", privateChatsRouter)
+app.use("/api/website/stream/private-chat", privateChatsRouter)
 app.use("/api/website/profile", modelProfileRouter)
 app.use("/api/website/coupon", couponRouter)
 

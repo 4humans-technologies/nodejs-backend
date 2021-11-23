@@ -25,7 +25,6 @@ const audioCallSchema = new mongoose.Schema({
       "model-accepted",
       "model-declined",
       "model-accepted-will-end-stream",
-      "model-accepted-stream-ended",
       "ongoing",
       "completed",
       "completed-and-billed",
@@ -45,8 +44,21 @@ const audioCallSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  tokenGifted: {
-    type: [Number],
+  sharePercent: {
+    type: Number,
+    default: 60,
+  },
+  endReason: {
+    type: String,
+    default: "network-error",
+    enum: [
+      "viewer-ended",
+      "model-ended",
+      "low-balance",
+      "viewer-network-error",
+      "model-network-error",
+      "network-error",
+    ],
   },
   startTimeStamp: Number,
   endTimeStamp: Number,

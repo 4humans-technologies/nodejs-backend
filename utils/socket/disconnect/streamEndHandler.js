@@ -31,7 +31,7 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         const publicRoom = `${stream._id.toString()}-public`
 
         /* should only send this to the users who are in home page & this models stream */
-        client.emit(socketEvents.deleteStreamRoom, {
+        io.getIO().emit(socketEvents.deleteStreamRoom, {
           modelId: client.data.relatedUserId,
         })
 
@@ -41,7 +41,7 @@ module.exports = function onDisconnectStreamEndHandler(client) {
            will defenitely look to improve this statergy in future
         */
         setTimeout(() => {
-          client.to(publicRoom).socketsLeave(publicRoom)
+          io.getIO().in(publicRoom).socketsLeave(publicRoom)
         }, 600)
 
         /* i guess no need to update client as it will be destroyed automatically */

@@ -24,6 +24,9 @@ exports.createViewer = (req, res, next) => {
   const advRelatedUserId = new ObjectId()
   let wasSocketUpdated = false
 
+  /* 🥇🥇 */
+  const DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER = 1000
+
   bcrypt
     .genSalt(5)
     .then((salt) => {
@@ -34,10 +37,10 @@ exports.createViewer = (req, res, next) => {
         Wallet({
           _id: walletId,
           userType: "Viewer",
-          currentAmount: 10000,
+          currentAmount: DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER,
           rootUser: advRootUserId,
           relatedUser: advRelatedUserId,
-        }),
+        }).save(),
         Viewer({
           _id: advRelatedUserId,
           rootUser: advRootUserId,
@@ -45,7 +48,7 @@ exports.createViewer = (req, res, next) => {
           email: email,
           gender: capitalizeFirstLetter(gender),
           wallet: walletId,
-        }),
+        }).save(),
         User({
           _id: advRootUserId,
           username: username,
@@ -57,7 +60,7 @@ exports.createViewer = (req, res, next) => {
           meta: {
             lastLogin: new Date(),
           },
-        }),
+        }).save(),
       ])
     })
     .then((values) => {
@@ -109,7 +112,7 @@ exports.createViewer = (req, res, next) => {
         actionStatus: "success",
         user: user,
         token: token,
-        tokenExpireIn: hours,
+        expiresIn: hours,
         wasSocketUpdated: wasSocketUpdated,
       })
     })

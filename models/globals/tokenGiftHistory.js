@@ -3,7 +3,7 @@ const mongoose = require("mongoose")
 const tokenGiftHistorySchema = new mongoose.Schema({
   time: {
     type: Date,
-    default: () =>  new Date(),
+    default: () => new Date(),
   },
   tokenAmount: {
     type: Number,
@@ -18,6 +18,21 @@ const tokenGiftHistorySchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Viewer",
     required: true,
+  },
+  givenFor: {
+    type: String,
+    // enum: [
+    //   "audioCall-booking",
+    //   "audioCall-completion",
+    //   "videoCall-booking",
+    //   "videoCall-completion",
+    //   "on-stream-coins",
+    //   "on-call-coins",
+    //   "on-stream-activity",
+    //   "on-call-activity",
+    //   "viewer-refund" /* done by system/admin */,
+    //   "system-admin" /* system or admin */,
+    // ],
   },
 })
 

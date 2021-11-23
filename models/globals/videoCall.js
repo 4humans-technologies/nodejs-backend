@@ -20,18 +20,16 @@ const videoCallSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    default: "model-accept-pending",
     enum: [
       "model-accept-pending",
       "model-accepted",
       "model-declined",
       "model-accepted-will-end-stream",
-      "model-accepted-stream-ended",
       "ongoing",
       "completed",
+      "completed-and-billed",
       "viewer-call-not-received",
     ],
-    index: true,
   },
   callDuration: {
     type: Number,
@@ -46,18 +44,21 @@ const videoCallSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
-  tokenGifted: {
-    type: [Number],
-  },
-  lastPolled: Date,
-  startedAt: {
-    type: Date,
-    default: null,
+  sharePercent: {
+    type: Number,
+    default: 60,
   },
   endReason: {
     type: String,
     default: "network-error",
-    enum: ["manual", "low-balance", "network-error"],
+    enum: [
+      "viewer-ended",
+      "model-ended",
+      "low-balance",
+      "viewer-network-error",
+      "model-network-error",
+      "network-error",
+    ],
   },
   startTimeStamp: Number,
   endTimeStamp: Number,

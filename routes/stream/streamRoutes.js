@@ -9,6 +9,8 @@ router.get(
   tokenVerify,
   streamController.withOutTokenStreamStart
 )
+
+router.post("/set-call-ongoing", tokenVerify, streamController.setCallOngoing)
 router.post("/handle-stream-end", tokenVerify, streamController.handleEndStream)
 router.post("/set-ongoing", streamController.setOngoing)
 router.post("/get-private-chat-plans", streamController.setOngoing)
@@ -66,5 +68,8 @@ router.post(
   [body("modelId").notEmpty().isString()],
   streamController.getTipMenuActions
 )
+
+router.get("/get-active-chat-plans", streamController.getChatPlans)
+router.post("/buy-chat-plan", tokenVerify, streamController.buyChatPlan)
 
 module.exports = router
