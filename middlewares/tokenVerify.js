@@ -59,6 +59,10 @@ module.exports = (req, _res, next) => {
             path: "relatedUser",
             select: select,
           })
+          .populate({
+            path: "wallet",
+            select: "currentAmount",
+          })
           .lean()
           .then((user) => {
             req.user = user

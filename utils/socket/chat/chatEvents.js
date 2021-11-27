@@ -1,4 +1,7 @@
 module.exports = {
+  call_end: "a-call-ended",
+  viewer_left_emitted: "viewer-left-stream-emitted",
+  viewer_left_received: "viewer-left-stream-received",
   viewer_request_to_have_private_listeners:
     "viewer-request-to-have-private-listeners",
   viewer_private_message_emitted: "viewer-private-message-emitted",

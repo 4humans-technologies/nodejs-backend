@@ -217,6 +217,13 @@ exports.buyChatPlanForViewer = (req, res, next) => {
 
   const { planId } = req.body
 
+  if (req.user.relatedUser?.isChatPlanActive) {
+    return res.status(200).json({
+      actionStatus: "failed",
+      message: "already active",
+    })
+  }
+
   let thePlan
   PrivateChatPlan.findById(planId)
     .select("name status price validityDays")
@@ -280,6 +287,7 @@ exports.buyChatPlanForViewer = (req, res, next) => {
         return res.status(200).json({
           actionStatus: "success",
           updatedViewer: updatedViewer,
+          planPrice: thePlan.price,
         })
       } else {
         throw new Error("Internal server error!")

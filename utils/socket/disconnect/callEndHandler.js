@@ -7,6 +7,7 @@ const chatEvents = require("../chat/chatEvents")
 const io = require("../../../socket")
 
 module.exports = function (client) {
+  io.getIO.emit(chatEvents.call_end, io.decreaseLiveCount())
   if (client.userType === "Model") {
     const callId = client.callId
     const callType = client.callType

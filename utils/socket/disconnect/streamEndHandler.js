@@ -33,6 +33,7 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         /* should only send this to the users who are in home page & this models stream */
         io.getIO().emit(socketEvents.deleteStreamRoom, {
           modelId: client.data.relatedUserId,
+          liveNow: io.decreaseLiveCount(),
         })
 
         /* destroy the stream chat rooms, 

@@ -5,9 +5,13 @@ const Wallet = require("../../models/globals/wallet")
 const errorCollector = require("../../utils/controllerErrorCollector")
 const bcrypt = require("bcrypt")
 const ObjectId = require("mongodb").ObjectId
+const {
+  generateEmailConformationJWT,
+} = require("../../utils/generateEmailConformationJWT")
 const generateJwt = require("../../utils/generateJwt")
 const io = require("../../socket")
 const chatEventListeners = require("../../utils/socket/chat/chatEventListeners")
+const { sendViewerEmailConformation } = require("../../sendgrid")
 
 function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
@@ -25,7 +29,8 @@ exports.createViewer = (req, res, next) => {
   let wasSocketUpdated = false
 
   /* 🥇🥇 */
-  const DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER = 999999
+  const DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER =
+    +process.env.DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER
 
   bcrypt
     .genSalt(5)
@@ -60,6 +65,9 @@ exports.createViewer = (req, res, next) => {
           meta: {
             lastLogin: new Date(),
           },
+          inProcessDetails: {
+            emailVerified: false,
+          },
         }).save(),
       ])
     })
@@ -80,6 +88,34 @@ exports.createViewer = (req, res, next) => {
         userType: user.userType,
         role: "no-role",
       })
+
+      let wasEmailSent = false
+      const emailToken = generateEmailConformationJWT({
+        userId: user._id.toString(),
+        relatedUserId: user.relatedUser._id.toString(),
+        userType: user.userType,
+      })
+
+      /* send conformation email */
+      try {
+        sendViewerEmailConformation({
+          to: email,
+          dynamic_template_data: {
+            confirm_url: `${
+              process.env.FRONTEND_URL.includes("localhost") ? "http" : "https"
+            }://${
+              process.env.FRONTEND_URL
+            }/link-verification/email?token=${emailToken}`,
+            first_name: name.split(" ")[0],
+            free_coins_amt: process.env.DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER,
+            confirm_before:
+              +process.env.EMAIL_CONFORMATION_EXPIRY_HOURS_VIEWER / 24,
+          },
+        })
+        wasEmailSent = true
+      } catch (error) {
+        wasEmailSent = false
+      }
 
       /**
        * my view is may be for some reason socketId may not be sent but,

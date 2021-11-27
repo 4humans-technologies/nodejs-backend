@@ -3,6 +3,10 @@ const User = require("../../models/User")
 const bcrypt = require("bcrypt")
 const Approval = require("../../models/management/approval")
 const TokenGiftHistory = require("../../models/globals/tokenGiftHistory")
+const {
+  generateEmailConformationJWT,
+} = require("../../utils/generateEmailConformationJWT")
+const { sendModelEmailConformation } = require("../../sendgrid")
 
 exports.getModelProfileData = (req, res, next) => {
   Model.findById(req.user.relatedUser._id)
@@ -79,7 +83,87 @@ exports.updateCallChargesAndMinDuration = (req, res, next) => {
 }
 
 exports.updateEmail = (req, res, next) => {
-  const { newEmail, prevPassword } = req.body
+  const { newEmail, password } = req.body
+
+  let theUser
+  let wasEmailSent
+  User.findById(req.user._id)
+    .select("password")
+    .then((user) => {
+      theUser = user
+      return bcrypt.compare(user.password, password)
+    })
+    .then((didMatched) => {
+      if (didMatched) {
+        return Promise.all([
+          User.updateOne(
+            {
+              _id: req.user._id,
+            },
+            {
+              "inProcessDetails.emailVerified": false,
+              needApproval: true,
+            }
+          ),
+          Model.findByIdAndUpdate(
+            {
+              _id: req.relatedUser._id,
+            },
+            {
+              $set: { email: newEmail },
+            },
+            { new: true }
+          )
+            .select("email")
+            .lean(),
+        ])
+      } else {
+        const error = new Error("Invalid credentials")
+        error.statusCode = 422
+        throw error
+      }
+    })
+    .then(([user, model]) => {
+      /* send the email conformation link */
+      if (model.email === newEmail && user.n === 1) {
+        /* send conformation email */
+        const emailToken = generateEmailConformationJWT({
+          userId: req.user._id,
+          relatedUserId: req.user.relatedUser._id,
+          userType: req.user.userType,
+        })
+        try {
+          sendModelEmailConformation({
+            to: newEmail,
+            dynamic_template_data: {
+              confirm_url: `${
+                process.env.FRONTEND_URL.includes("localhost")
+                  ? "http"
+                  : "https"
+              }://${
+                process.env.FRONTEND_URL
+              }/link-verification/email?token=${emailToken}`,
+              first_name: req.user.relatedUser.name.split(" ")[0],
+              confirm_before:
+                +process.env.EMAIL_CONFORMATION_EXPIRY_HOURS_MODEL / 24,
+            },
+          })
+          wasEmailSent = true
+        } catch (error) {
+          wasEmailSent = false
+        }
+      }
+    })
+    .then(() => {
+      /* logout the model on the client  */
+      return res.status(200).json({
+        actionStatus: "success",
+        message: "Your email was successfully updated to " + newEmail,
+        wasEmailSent: wasEmailSent,
+        action: "logout",
+      })
+    })
+    .catch((err) => next(err))
 }
 
 exports.updatePassword = (req, res, next) => {
@@ -108,15 +192,19 @@ exports.updatePassword = (req, res, next) => {
       theUser.password = hashedPassword
       return theUser.save()
     })
-    .then((user) => {
-      res.status(200).json({
+    .then(() => {
+      return res.status(200).json({
         actionStatus: "success",
+        message: "Password was updated to new value successfully",
       })
     })
-    .catch((err) => next(error))
+    .catch((err) => next(err))
 }
 
 exports.updateModelBasicDetails = (req, res, next) => {
+  /**
+   * this blocks working is under observation dont' use it
+   */
   const { updatedData } = req.body
 
   const userData = {}
@@ -156,8 +244,8 @@ exports.updateModelBasicDetails = (req, res, next) => {
 
   query
     .then((values) => {
-      updatedModel = values[0]
-      updatedUser = values?.[1]
+      const updatedModel = values[0]
+      const updatedUser = values?.[1]
       return res.status(200).json({
         actionStatus: "success",
         theModel: { ...updatedModel, rootUser: updatedUser },
@@ -217,6 +305,14 @@ exports.handlePublicVideosUpload = (req, res, next) => {
 }
 
 exports.updateInfoFields = (req, res, next) => {
+  // const arr = []
+  // const updatedData.keys.forEach(key => {
+  //   arr.push({
+  //     field:key,
+  //     value:updatedData[key]
+  //   })
+  // })
+
   /* *
    * req.body = [{
    *  field:"name",
@@ -226,19 +322,11 @@ exports.updateInfoFields = (req, res, next) => {
    *  field:"username",
    *  value:"my new username" <=== the new username
    * }] */
-
+  const a = req.body
   let fieldsToUpdate = {}
 
   req.body.forEach((field) => {
-    // if (field.field.includes(".")) {
-    //   const key = field.field
-    //   fieldsToUpdate = {
-    //     ...fieldsToUpdate,
-    //     [key]: field.value,
-    //   }
-    // } else {
     fieldsToUpdate[field.field] = field.value
-    // }
   })
 
   Model.updateOne(

@@ -6,9 +6,13 @@ const errorCollector = require("../../utils/controllerErrorCollector")
 const bcrypt = require("bcrypt")
 const ObjectId = require("mongodb").ObjectId
 const generateJwt = require("../../utils/generateJwt")
+const {
+  generateEmailConformationJWT,
+} = require("../../utils/generateEmailConformationJWT")
 const Document = require("../../models/globals/modelDocuments")
 const io = require("../../socket")
 const chatEventListeners = require("../../utils/socket/chat/chatEventListeners")
+const { sendModelEmailConformation } = require("../../sendgrid")
 
 function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1)
@@ -79,6 +83,9 @@ exports.createModel = (req, res, next) => {
         meta: {
           lastLogin: new Date(),
         },
+        inProcessDetails: {
+          emailVerified: false,
+        },
       }).save()
     })
     .then((userDoc) => {
@@ -90,6 +97,14 @@ exports.createModel = (req, res, next) => {
         relatedUserId: userDoc.relatedUser._id,
         userType: userDoc.userType,
         role: userDoc?.role?.roleName || "no-role",
+      })
+
+      /* hello moto  */
+      let wasEmailSent = false
+      const emailToken = generateEmailConformationJWT({
+        userId: theUserId,
+        relatedUserId: userDoc.relatedUser._id,
+        userType: userDoc.userType,
       })
 
       /**
@@ -125,6 +140,26 @@ exports.createModel = (req, res, next) => {
         wasSocketUpdated = false
       }
 
+      /* send conformation email */
+      try {
+        sendModelEmailConformation({
+          to: email,
+          dynamic_template_data: {
+            confirm_url: `${
+              process.env.FRONTEND_URL.includes("localhost") ? "http" : "https"
+            }://${
+              process.env.FRONTEND_URL
+            }/link-verification/email?token=${emailToken}`,
+            first_name: name.split(" ")[0],
+            confirm_before:
+              +process.env.EMAIL_CONFORMATION_EXPIRY_HOURS_MODEL / 24,
+          },
+        })
+        wasEmailSent = true
+      } catch (error) {
+        wasEmailSent = false
+      }
+
       return res.status(201).json({
         message: "model registered successfully",
         actionStatus: "success",
@@ -135,6 +170,7 @@ exports.createModel = (req, res, next) => {
         token: token,
         expiresIn: hours,
         wasSocketUpdated: wasSocketUpdated,
+        wasEmailSent: wasEmailSent,
       })
     })
     .catch((err) => {

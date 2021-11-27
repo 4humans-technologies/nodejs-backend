@@ -53,8 +53,7 @@ exports.withOutTokenStreamStart = (req, res, next) => {
         chats: ["hello"],
       })
     })
-    .then((returnValue) => {
-      console.log("Value returned from firebase >> ", returnValue)
+    .then(() => {
       return Model.findOneAndUpdate(
         { _id: req.user.relatedUser._id },
         {
@@ -99,9 +98,10 @@ exports.withOutTokenStreamStart = (req, res, next) => {
       /* 👇👇 broadcast to all who are not in any room */
       // io.getIO().except(io.getIO().sockets.adapter.rooms)
 
-      clientSocket.broadcast.emit(socketEvents.streamCreated, {
+      io.getIO().emit(socketEvents.streamCreated, {
         modelId: req.user.relatedUser._id,
         profileImage: model.profileImage,
+        liveNow: io.increaseLiveCount(),
       })
       res.status(200).json({
         actionStatus: "success",
@@ -118,7 +118,7 @@ exports.withOutTokenStreamStart = (req, res, next) => {
 exports.handleEndStream = (req, res, next) => {
   // this will be called by the model only
 
-  let { streamId, reason, callId, callType } = req.body
+  let { streamId, reason } = req.body
   const { socketId } = req.query
   if (!reason) {
     reason = "Error"
@@ -126,132 +126,70 @@ exports.handleEndStream = (req, res, next) => {
 
   // will send socket event to trigger leave agora channel on client
   // anyway they have to renew token hence no misuse for longer period
-  let callPr
-  if (callType === "audioCall") {
-    callPr = AudioCall.findById(callId)
-  } else {
-    callPr = VideoCall.findById(callId)
-  }
 
-  if (callId && callType) {
-    Promise.all([callPr])
-      .then((call) => {
-        if (call.stream._id.toString() === streamId) {
-          return Stream.findById(streamId)
-        }
-        const error = new Error(
-          "call is not for this stream or this stream does not have nay call request"
-        )
-        error.statusCode = 422
-        throw error
+  Stream.findById(streamId)
+    .then((stream) => {
+      const duration =
+        (new Date().getTime() - new Date(stream.createdAt).getTime()) /
+        60000 /* in minutes */
+      stream.endReason = reason
+      stream.status = "ended"
+      stream.duration = duration
+      return Promise.all([
+        stream.save(),
+        Model.updateOne(
+          { _id: req.user.relatedUser._id },
+          {
+            isStreaming: false,
+            currentStream: null,
+            onCall: false,
+          }
+        ),
+      ])
+    })
+    .then((values) => {
+      const stream = values[0]
+      let clientSocket = io.getIO().sockets.sockets.get(socketId)
+      if (!clientSocket) {
+        clientSocket = io
+          .getIO()
+          .sockets.sockets.get(
+            Array.from(
+              io
+                .getIO()
+                .sockets.adapter.rooms.get(
+                  `${req.user.relatedUser._id}-private`
+                )
+            )[0]
+          )
+      }
+      /* emit to all about delete stream room */
+      io.getIO().emit(socketEvents.deleteStreamRoom, {
+        modelId: req.user.relatedUser._id,
+        liveNow: io.decreaseLiveCount(),
       })
-      .then((stream) => {
-        const duration =
-          (new Date(stream.createdAt).getTime() - new Date().getTime()) / 600000
-        stream.endReason = reason
-        stream.status = "ended"
-        stream.duration = duration
-        if (callType === "audioCall") {
-          stream.endAudioCall = call
-        } else {
-          stream.endVideoCall = call
-        }
-        return save()
-      })
-      .then((stream) => {
-        // using .in so that everybody leaves the stream
-        io.getIO().in(streamId).emit(socketEvents.deleteStreamRoom, {
-          streamId,
-          viewerId: call.viewer._id,
-        })
-        res.status(200).json({
-          actionStatus: "success",
-          message:
-            "stream ended successfully, If you have pending call, then please call the customer fast 👍👍🤘",
-        })
-      })
-      .catch((err) => next(err))
-  } else {
-    /* if model canceled stream with booking any calls */
-    Stream.findById(streamId)
-      .then((stream) => {
-        const duration =
-          (new Date().getTime() - new Date(stream.createdAt).getTime()) /
-          60000 /* in minutes */
-        stream.endReason = reason
-        stream.status = "ended"
-        stream.duration = duration
-        return Promise.all([
-          stream.save(),
-          Model.updateOne(
-            { _id: req.user.relatedUser._id },
-            {
-              isStreaming: false,
-              currentStream: null,
-            }
-          ),
-        ])
-      })
-      .then((values) => {
-        const stream = values[0]
-        const model = values[1]
-        let clientSocket = io.getIO().sockets.sockets.get(socketId)
-        if (!clientSocket) {
-          clientSocket = io
-            .getIO()
-            .sockets.sockets.get(
-              Array.from(
-                io
-                  .getIO()
-                  .sockets.adapter.rooms.get(
-                    `${req.user.relatedUser._id}-private`
-                  )
-              )[0]
-            )
-        }
-        if (!clientSocket) {
-          io.getIO()
-            .in(`${streamId}-public`)
-            .emit(socketEvents.deleteStreamRoom, {
-              modelId: req.user.relatedUser._id,
-            })
-        } else {
-          clientSocket.broadcast.emit(socketEvents.deleteStreamRoom, {
-            modelId: req.user.relatedUser._id,
-          })
-        }
 
-        /* destroy the stream chat rooms */
-        io.getIO()
-          .in(`${stream._id}-public`)
-          .socketsLeave(`${stream._id}-public`)
+      /* destroy the stream chat rooms, heave to leave rooms on server as on client side it will overwhelm the client */
+      io.getIO().in(`${stream._id}-public`).socketsLeave(`${stream._id}-public`)
 
-        // 👇👇 why leave this, this is model id private room
-        // io.getIO()
-        //   .in(`${req.user.relatedUser._id}-private`)
-        //   .except(socketId)
-        //   .socketsLeave(`${req.user.relatedUser._id}-private`)
+      /* remove previous streams attributes from socket client */
+      clientSocket.isStreaming = false
+      clientSocket.streamId = null
 
-        /* remove previous streams attributes from socket client */
-        clientSocket.isStreaming = false
-        clientSocket.streamId = null
-
-        res.status(200).json({
-          actionStatus: "success",
-          message:
-            "stream ended successfully, If you have pending call, then please call the customer fast 👍👍🤘",
-        })
+      return res.status(200).json({
+        actionStatus: "success",
+        message:
+          "stream ended successfully, If you have pending call, then please call the customer fast 👍👍🤘",
       })
-      .catch((err) => next(err))
-  }
+    })
+    .catch((err) => next(err))
 }
 
 exports.handleViewerCallRequest = (req, res, next) => {
   // viewer must be authenticated
   // must have money >= min required
 
-  const { modelId, streamId, callType, walletCoins, relatedUserId, username } =
-    req.body
+  const { modelId, streamId, callType } = req.body
 
   let theViewer
   const { socketId } = req.query
@@ -498,7 +436,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       clientSocket.callType = callDoc.callType
       clientSocket.sharePercent = +req.user.relatedUser.sharePercent
 
-      /* don't emit to the model and viewer */
+      /* inform all sockets about model response */
       io.getIO()
         .in(`${streamId}-public`)
         .except(`${viewerId}-private`)
@@ -509,6 +447,17 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
           profileImage: viewer.profileImage,
         })
 
+      /* MAKE ALL OTHER CLIENTS EXCEPT THE MOdEL AND THE VIEWER LEAVE PUBLIC CHANNEL & destroy private channel 
+        but leaving will be done from client side, later can kick user out from server 🔺🔺
+      */
+
+      /* not destroying public channel for token gift to work on call */
+      io.getIO()
+        .in(`${streamId}-public`)
+        .except(`${viewerId}-private`)
+        .except(`${req.user.relatedUser._id}-private`)
+        .socketsLeave(`${streamId}-public`)
+
       /* emit to the viewer */
       callingViewerSocketData.username = viewer.rootUser.username
       io.getIO()
@@ -517,11 +466,6 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
           chatEvents.model_call_request_response_received,
           callingViewerSocketData
         )
-
-      /* MAKE ALL OTHER CLIENTS EXCEPT THE MOdEL AND THE VIEWER LEAVE PUBLIC CHANNEL & destroy private channel 
-        but leaving will be done from client side, later can kick user out from server 🔺🔺
-      */
-      /* not destorying public channel for token gift to work on call */
 
       return res.status(200).json({
         actionStatus: "success",
@@ -536,14 +480,6 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
 exports.handleEndCallFromViewer = (req, res, next) => {
   const { callId, callType, endTimeStamp } = req.body
   let { socketId } = req.query
-
-  if (!socketId) {
-    socketId = Array.from(
-      io
-        .getIO()
-        .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-    )[0]
-  }
 
   let theCall
   let viewerWallet
@@ -576,6 +512,16 @@ exports.handleEndCallFromViewer = (req, res, next) => {
 
   initialQuery
     .then((result) => {
+      if (!socketId) {
+        socketId = Array.from(
+          io
+            .getIO()
+            .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+        )?.[0]
+      }
+
+      /* decrease model count */
+      io.getIO().emit(chatEvents.call_end, io.decreaseLiveCount())
       if (result.n === 0) {
         /* no doc modified, model has ended tha call faster, return */
         res.status(200).json({
@@ -632,7 +578,12 @@ exports.handleEndCallFromViewer = (req, res, next) => {
         return Promise.all([
           viewerWallet.save(),
           theCall.save(),
-          Model.findById(theCall.model._id).select("sharePercent").lean(),
+          Model.findByIdAndUpdate(theCall.model._id, {
+            onCall: false,
+            isStreaming: false,
+          })
+            .select("sharePercent")
+            .lean(),
           Wallet.findOne({ relatedUser: theCall.model._id }),
         ])
       }
@@ -794,13 +745,6 @@ exports.handleEndCallFromViewer = (req, res, next) => {
 exports.handleEndCallFromModel = (req, res, next) => {
   const { callId, callType, endTimeStamp } = req.body
   let { socketId } = req.query
-  if (!socketId) {
-    socketId = Array.from(
-      io
-        .getIO()
-        .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-    )[0]
-  }
 
   let theCall
   let modelWallet
@@ -835,6 +779,15 @@ exports.handleEndCallFromModel = (req, res, next) => {
 
   initialQuery
     .then((result) => {
+      if (!socketId) {
+        socketId = Array.from(
+          io
+            .getIO()
+            .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+        )?.[0]
+      }
+      /* emit this event for updating live count on the client side */
+      io.getIO().emit(chatEvents.call_end, io.decreaseLiveCount())
       if (result.n === 0) {
         /* no doc modified, model has ended tha call faster, return */
         res.status(200).json({
@@ -864,13 +817,18 @@ exports.handleEndCallFromModel = (req, res, next) => {
       modelWallet = values[1]
 
       if (theCall.status !== "ongoing") {
-        /* means the call was not setup */
+        /* 🚩🚩🚩🚩🚩====ERROR====🚩🚩🚩🚩🚩🚩 */
+        /* means the call was not setup properly*/
         /* now refund the money of the user */
         theCall.status = "completed-and-billed"
         theCall.endReason = "viewer-network-error"
         const amountToRefund = theCall.minCallDuration * theCall.chargePerMin
         const amtToDeductFromModel =
           amountToRefund * (theCall.sharePercent / 100)
+        console.error(
+          "A call was not setup properly, hence refunding amt: ",
+          amountToRefund
+        )
         Promise.all([
           theCall.save(),
           Wallet.updateOne(
@@ -909,6 +867,8 @@ exports.handleEndCallFromModel = (req, res, next) => {
                 callType === "audioCall"
                   ? { "pendingCalls.audioCalls": theCall._id }
                   : { "pendingCalls.videoCalls": theCall._id },
+              onCall: false,
+              isStreaming: false,
             }
           ),
         ])
@@ -966,6 +926,13 @@ exports.handleEndCallFromModel = (req, res, next) => {
           modelWallet.save(),
           theCall.save(),
           Wallet.findOne({ relatedUser: theCall.viewer._id }),
+          Model.updateOne(
+            { _id: req.user.relatedUser._id },
+            {
+              onCall: false,
+              isStreaming: false,
+            }
+          ),
         ])
       }
     })
@@ -1122,19 +1089,31 @@ exports.setCallOngoing = (req, res, next) => {
    */
 
   const { callId, callType } = req.body
+  const { socketId } = req.query
+
+  let clientSocket = io.getIO().sockets.sockets.get(socketId)
+  if (!clientSocket) {
+    clientSocket = io
+      .getIO()
+      .sockets.sockets.get(
+        Array.from(
+          io
+            .getIO()
+            .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+        )?.[0]
+      )
+  }
 
   const query =
     callType === "audioCall"
-      ? AudioCall.findById(callId)
-          .select("viewer status endTimeStamp concurrencyControl")
-          .lean()
-      : VideoCall.findById(callId)
-          .select("viewer status endTimeStamp concurrencyControl")
-          .lean()
+      ? AudioCall.findById(callId).lean()
+      : VideoCall.findById(callId).lean()
 
+  let callDoc
   query
     .then((call) => {
       if (call) {
+        callDoc = call
         if (
           call.viewer._id.toString() === req.user.relatedUser._id.toString() &&
           !call.endTimeStamp &&
@@ -1174,10 +1153,27 @@ exports.setCallOngoing = (req, res, next) => {
       throw err
     })
     .then((result) => {
+      /* update the client socket and reflect the ongoing call */
+      let socketUpdated = false
+      try {
+        delete clientSocket.onStream
+        delete clientSocket.streamId
+
+        clientSocket.onCall = true
+        clientSocket.callId = callDoc._id.toString()
+        clientSocket.callType = callDoc.callType
+        clientSocket.sharePercent = +callDoc.sharePercent
+
+        socketUpdated = true
+      } catch (err) {
+        socketUpdated = false
+      }
+
       if (result.n === 1) {
         /* if only the status was updated */
         return res.status(200).json({
           actionStatus: "success",
+          socketUpdated: socketUpdated,
         })
       }
     })
@@ -1475,6 +1471,8 @@ exports.buyChatPlan = (req, res, next) => {
   /* verify is viewer and loggedIn */
   /* check is already active he cannot buy again */
 
+  /* ==========OBSOLETE============ */
+
   const { planId } = req.body
 
   Promise.all([
@@ -1529,8 +1527,8 @@ exports.buyChatPlan = (req, res, next) => {
       throw error
     })
     .then((viewer) => {
-      if (viewer.isChatPlanActive) {
-      }
+      // if (viewer.isChatPlanActive) {
+      // }
     })
 }
 
@@ -1595,37 +1593,51 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
   }
 
   try {
-    const [viewer, model] = await Promise.all([
-      Viewer.findById(req.user.relatedUser._id)
-        .select("isChatPlanActive")
-        .lean(),
-      Model.findById(modelId).select("currentStream isStreaming").lean(),
-    ])
+    const model = await Model.findById(modelId)
+      .select("currentStream isStreaming")
+      .lean()
 
+    /* ========================== */
+    /**
+     * all the viewers will rejoin on the same will over whelm the system
+     * so dont't emit during rejoin only emit to the model
+     */
     if (model.isStreaming) {
+      /* if model is streaming */
+
+      /* if rejoin it means model already have your data */
       io.getIO()
-        .sockets.sockets.get(socketId)
-        .join(`${model.currentStream._id}-public`)
-      if (viewer.isChatPlanActive) {
-        if (
-          /* 👇👇 for use in production */
-          // new Date(viewer.currentChatPlan.willExpireOn).getTime() >
-          // Date.now() + 10000
-          /* for now always true */
-          true
-        ) {
-          /* for future  */
-        }
-        /* join his own channel */
-        io.getIO()
-          .sockets.sockets.get(socketId)
-          .join(`${req.user.relatedUser._id}-private`)
-      }
+        .in(`${modelId}-private`)
+        .emit(`${socketEvents.viewerJoined}-private`, {
+          // roomSize: roomSize, /* hey model ask the room size with a http request after a time gap  */
+          reJoin: true /* hey, model if rejoin then don't update live count*/,
+          relatedUserId: req.user.relatedUser._id,
+        })
+
+      /**
+       * ============
+       * user joined event will not be fired as it will overwhelm
+       * hence all the users will ask the live users count after a delay
+       * with a seprate http or socket request
+       * ============
+       */
+
+      const clientSocket = io.getIO().sockets.sockets.get(socketId)
+
+      clientSocket.onStream = true
+      clientSocket.streamId = model.currentStream._id.toString()
+
+      /* join the public channel */
+      clientSocket.join(`${model.currentStream._id}-public`)
+
+      /* deliberately making him rejoin just incase he has left the channel */
+      clientSocket.join(`${req.user.relatedUser._id}-private`)
 
       return res.status(200).json({
         actionStatus: "success",
         isChatPlanActive: req.user.relatedUser.isChatPlanActive,
         streamId: model.currentStream._id,
+        puttedInRoom: true,
       })
     }
     return res.status(200).json({
@@ -1653,19 +1665,47 @@ exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
         err.statusCode = 400
         throw err
       }
-      if (model?.isStreaming) {
-        io.getIO()
-          .sockets.sockets.get(socketId)
-          .join(`${model.currentStream._id}-public`)
+      if (model.isStreaming) {
+        /**
+         * ============
+         * user joined event will not be fired as it will overwhelm
+         * hence all the users will ask the live users count after a delay
+         * with a seprate http or socket request
+         * ============
+         */
+        let puttedInRoom = false
+        try {
+          const clientSocket = io.getIO().sockets.sockets.get(socketId)
+          clientSocket.join(`${model.currentStream._id}-public`)
+          clientSocket.onStream = true
+          clientSocket.streamId = model.currentStream._id.toString()
+          puttedInRoom = true
+        } catch (err) {
+          puttedInRoom = false
+        }
+
         return res.status(200).json({
           actionStatus: "success",
           streamId: model.currentStream._id,
+          puttedInRoom: puttedInRoom,
         })
       }
       return res.status(400).json({
         actionStatus: "failed",
-        message: "This model is currently no streaming, please comeback later.",
+        message:
+          "This model is currently not streaming, please comeback later.",
       })
     })
     .catch((err) => next(err))
+}
+
+exports.getLiveRoomCount = (req, res, next) => {
+  /**
+   * return the live viewer count in a socket room
+   */
+  const { room } = req.params
+
+  return res.status(200).json({
+    roomSize: io.getIO().sockets.adapter.rooms.get(room)?.size,
+  })
 }

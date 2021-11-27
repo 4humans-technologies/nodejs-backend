@@ -70,6 +70,7 @@ router.post(
 )
 
 router.get("/get-active-chat-plans", streamController.getChatPlans)
+router.get("/get-live-room-count/:room", streamController.getLiveRoomCount)
 router.post("/buy-chat-plan", tokenVerify, streamController.buyChatPlan)
 
 module.exports = router

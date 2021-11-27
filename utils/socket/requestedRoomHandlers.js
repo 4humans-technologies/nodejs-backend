@@ -1,3 +1,5 @@
+const io = require("../../socket")
+const chatEvents = require("./chat/chatEvents")
 module.exports = function requestRoomHandlers(client) {
   client.on("putting-me-in-these-rooms", (rooms, callback) => {
     console.log("put in rooms >> ", rooms)
@@ -42,12 +44,19 @@ module.exports = function requestRoomHandlers(client) {
     }
   })
 
-  client.on("take-me-out-of-these-rooms", (rooms, callback) => {
+  client.on("take-me-out-of-these-rooms", (rooms) => {
     for (let i = 0; i < rooms.length; i++) {
-      client.leave(rooms[i])
+      const myRoom = rooms[i]
+      if (myRoom.endsWith("-public")) {
+        client.leave(myRoom)
+        client.in(myRoom).emit(chatEvents.viewer_left_received, {
+          roomSize: io.getIO().sockets.adapter.rooms.get(myRoom)?.size,
+          relatedUserId: client.data?.relatedUserId,
+        })
+        /* free data keys */
+        delete client.onStream
+        delete client.streamId
+      }
     }
-    callback({
-      status: "ok",
-    })
   })
 }

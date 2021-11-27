@@ -11,7 +11,8 @@ const onDisconnectCallEndHandler = require("./utils/socket/disconnect/callEndHan
 const updateClientInfo = require("./utils/socket/updateClientInfo")
 const { generatePublicUploadUrl } = require("./utils/aws/s3")
 const requestRoomHandlers = require("./utils/socket/requestedRoomHandlers")
-
+const verificationRouter = require("./routes/management/verificationRoutes")
+const { viewer_left_received } = require("./utils/socket/chat/chatEvents")
 if (process.env.RUN_ENV !== "ubuntu") {
   app.use(express.static(__dirname + "/images"))
   app.use("/images/gifts", express.static(__dirname + "/images/gifts"))
@@ -88,6 +89,7 @@ app.use("/api/website/stream", streamRouter)
 app.use("/api/website/stream/private-chat", privateChatsRouter)
 app.use("/api/website/profile", modelProfileRouter)
 app.use("/api/website/coupon", couponRouter)
+app.use("/api/website/verification", verificationRouter)
 
 /* aws setup */
 app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
@@ -201,25 +203,61 @@ mongoose
         ) /* 🌼🌼🌼 works here only */
       }
 
-      client.on("disconnect", () => {
-        if (
-          client.userType === "Model" &&
-          client?.isStreaming &&
-          client.authed
-        ) {
-          /* check if the disconnecting model was streaming */
-          onDisconnectStreamEndHandler(client)
-        } else if (client.authed && client?.onCall) {
-          /* check if the disconnecting "user" was on call */
-          onDisconnectCallEndHandler(client)
-        }
-      })
+      try {
+        client.on("disconnect", () => {
+          if (
+            client.userType === "Model" &&
+            client?.isStreaming &&
+            client.authed
+          ) {
+            /* check if the disconnecting model was streaming */
+            onDisconnectStreamEndHandler(client)
+          } else if (client.authed && client?.onCall) {
+            /* check if the disconnecting "user" was on call */
+            onDisconnectCallEndHandler(client)
+          } else if (client.onStream) {
+            /* if viewer was on a stream */
+            const myRoom = `${client.streamId}-public`
+            if (client.authed) {
+              socket
+                .getIO()
+                .in(myRoom)
+                .emit(viewer_left_received, {
+                  roomSize: socket.getIO().sockets.adapter.rooms.get(myRoom)
+                    ?.size,
+                  relatedUserId: client.data?.relatedUserId,
+                })
+            } else {
+              socket
+                .getIO()
+                .in(`${client.streamId}-public`)
+                .emit(viewer_left_received, {
+                  roomSize: socket.getIO().sockets.adapter.rooms.get(myRoom)
+                    ?.size,
+                })
+            }
+          }
+        })
+      } catch (err) {
+        console.error("Error while processing socket disconnection")
+        console.error("Error: ", err)
+      }
 
-      /* room handlers */
-      requestRoomHandlers(client)
+      try {
+        /* room handlers */
+        requestRoomHandlers(client)
+      } catch (err) {
+        console.error("Error while handling room join and leave!")
+        console.error("Error: ", err)
+      }
 
-      /* update client info on viewers request */
-      updateClientInfo(client)
+      try {
+        /* update client info on viewers request */
+        updateClientInfo(client)
+      } catch (err) {
+        console.error("Error while updating client info!")
+        console.error("Error: ", err)
+      }
 
       client.on("error", (err) => {
         socket.emit("socket-err", err.message)

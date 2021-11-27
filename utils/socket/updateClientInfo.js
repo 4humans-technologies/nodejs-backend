@@ -99,6 +99,15 @@ module.exports = function updateClientInfo(client) {
           console.log("socket login request without token")
         }
         break
+      case "join-the-stream":
+        {
+          /**
+           * fired when due to err client was not able to join the
+           * public rooms and also due to this no was was notified
+           * of this user
+           */
+        }
+        break
       default:
         break
     }
