@@ -66,25 +66,32 @@ module.exports = {
   modelListeners: (socket) => {
     /* model public chat emitter */
     socket.on(chatEvents.model_message_public_emitted, (data) => {
-      realtimeDb
-        .ref("publicChats")
-        .child(data.room.split("-")[0])
-        .child("chats")
-        .push({
-          type: "model-public-message",
-          ...data,
-        })
-        .then(() => {
-          io.getIO()
-            .in(data.room)
-            .emit(chatEvents.model_message_public_received, data)
-        })
-        .catch(() => {
-          /* even if error emmit the message */
-          io.getIO()
-            .in(data.room)
-            .emit(chatEvents.viewer_message_public_received, data)
-        })
+      try {
+        realtimeDb
+          .ref("publicChats")
+          .child(data.room.split("-")[0])
+          .child("chats")
+          .push({
+            type: "model-public-message",
+            ...data,
+          })
+          .then(() => {
+            io.getIO()
+              .in(data.room)
+              .emit(chatEvents.model_message_public_received, data)
+          })
+          .catch(() => {
+            /* even if error emmit the message */
+            io.getIO()
+              .in(data.room)
+              .emit(chatEvents.viewer_message_public_received, data)
+          })
+      } catch (err) {
+        console.error(
+          "Model's public message was not sent reason: ",
+          err.message
+        )
+      }
     })
 
     /* model private chat emitter */

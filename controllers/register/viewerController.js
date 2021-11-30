@@ -19,7 +19,7 @@ function capitalizeFirstLetter(string) {
 
 exports.createViewer = (req, res, next) => {
   errorCollector(req, "Invalid form details, please try again")
-  const { username, password, name, email, gender } = req.body
+  const { username, password, name, email, gender, profileImage } = req.body
 
   const { socketId } = req.query
 
@@ -53,6 +53,7 @@ exports.createViewer = (req, res, next) => {
           email: email,
           gender: capitalizeFirstLetter(gender),
           wallet: walletId,
+          profileImage: profileImage,
         }).save(),
         User({
           _id: advRootUserId,

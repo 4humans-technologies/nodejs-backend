@@ -167,21 +167,29 @@ exports.updateEmail = (req, res, next) => {
 }
 
 exports.updatePassword = (req, res, next) => {
-  const { newPassword, prevPassword } = req.body
+  const { oldPassword, newPassword, newPasswordConformation } = req.body
+  if (newPassword !== newPasswordConformation) {
+    return res.status(400).json({
+      actionStatus: "failed",
+      message: "Password conformation did not match!",
+    })
+  }
 
   let theUser
   User.findById(req.user._id)
     .select("password")
     .then((user) => {
       theUser = user
-      return bcrypt.compare(user.password, prevPassword)
+      return bcrypt.compare(oldPassword, user.password)
     })
     .then((didMatched) => {
       if (didMatched) {
         return bcrypt.genSalt(5)
       } else {
-        const error = new Error("Invalid credentials")
-        error.statusCode = 422
+        const error = new Error(
+          "Invalid credentials, Previous password is incorrect!"
+        )
+        error.statusCode = 400
         throw error
       }
     })
@@ -279,6 +287,56 @@ exports.handlePublicImageUpload = (req, res, next) => {
     .catch((err) => next(err))
 }
 
+exports.handlePrivateImageUpload = (req, res, next) => {
+  const { newImageUrl } = req.body
+
+  Model.updateOne(
+    {
+      _id: req.user.relatedUser._id,
+    },
+    {
+      $addToSet: { privateImages: newImageUrl },
+    }
+  )
+    .then((result) => {
+      if (result.n === 1) {
+        return res.status(200).json({
+          actionStatus: "success",
+        })
+      } else {
+        return res.status(200).json({
+          actionStatus: "failed",
+        })
+      }
+    })
+    .catch((err) => next(err))
+}
+
+exports.handlePrivateVideoUpload = (req, res, next) => {
+  const { newVideoUrl } = req.body
+
+  Model.updateOne(
+    {
+      _id: req.user.relatedUser._id,
+    },
+    {
+      $addToSet: { privateVideos: newVideoUrl },
+    }
+  )
+    .then((result) => {
+      if (result.n === 1) {
+        return res.status(200).json({
+          actionStatus: "success",
+        })
+      } else {
+        return res.status(200).json({
+          actionStatus: "failed",
+        })
+      }
+    })
+    .catch((err) => next(err))
+}
+
 exports.handlePublicVideosUpload = (req, res, next) => {
   const { newVideoUrl } = req.body
 
@@ -322,7 +380,6 @@ exports.updateInfoFields = (req, res, next) => {
    *  field:"username",
    *  value:"my new username" <=== the new username
    * }] */
-  const a = req.body
   let fieldsToUpdate = {}
 
   req.body.forEach((field) => {

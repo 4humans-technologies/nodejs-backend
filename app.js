@@ -215,7 +215,7 @@ mongoose
           } else if (client.authed && client?.onCall) {
             /* check if the disconnecting "user" was on call */
             onDisconnectCallEndHandler(client)
-          } else if (client.onStream) {
+          } else if (client?.onStream) {
             /* if viewer was on a stream */
             const myRoom = `${client.streamId}-public`
             if (client.authed) {
@@ -225,7 +225,7 @@ mongoose
                 .emit(viewer_left_received, {
                   roomSize: socket.getIO().sockets.adapter.rooms.get(myRoom)
                     ?.size,
-                  relatedUserId: client.data?.relatedUserId,
+                  relatedUserId: client.data.relatedUserId,
                 })
             } else {
               socket

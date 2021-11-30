@@ -93,6 +93,7 @@ exports.withOutTokenStreamStart = (req, res, next) => {
       }
       clientSocket.isStreaming = true
       clientSocket.streamId = theStream._id.toString()
+      clientSocket.createdAt = Date.now()
       clientSocket.join(streamRoomPublic)
 
       /* 👇👇 broadcast to all who are not in any room */
@@ -103,7 +104,7 @@ exports.withOutTokenStreamStart = (req, res, next) => {
         profileImage: model.profileImage,
         liveNow: io.increaseLiveCount(),
       })
-      res.status(200).json({
+      return res.status(200).json({
         actionStatus: "success",
         streamId: theStream._id,
       })
@@ -322,6 +323,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
   let callDoc
   const callStartTimeStamp = Date.now() + 0
   callingViewerSocketData.callStartTs = callStartTimeStamp
+  let viewerMaxCallDurationSeconds
 
   /* create the call entry in DB */
   Promise.all([
@@ -348,6 +350,9 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       callDoc = call
       callingViewerSocketData.callId = callDoc._id.toString()
       const minCharges = callDoc.chargePerMin * callDoc.minCallDuration
+      viewerMaxCallDurationSeconds = Math.floor(
+        (viewerWallet.currentAmount / callDoc.chargePerMin) * 60
+      )
       try {
         viewerWallet.deductAmount(minCharges)
       } catch (error) {
@@ -404,37 +409,28 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       ])
     })
     .then((result) => {
-      /*  */
       const viewer = result[0]
       if (result[1].n !== 1) {
-        const newError = new Error("Model status not updated in DB")
-        newError.statusCode = 400
-        throw newError
+        console.error("Model status not updated in DB while accepting call.")
       }
 
-      let clientSocket = io.getIO().sockets.sockets.get(socketId)
-      if (!clientSocket) {
-        clientSocket = io
-          .getIO()
-          .sockets.sockets.get(
-            Array.from(
-              io
-                .getIO()
-                .sockets.adapter.rooms.get(
-                  `${req.user.relatedUser._id}-private`
-                )
-            )[0]
-          )
+      let socketDataUpdated = false
+      try {
+        let clientSocket = io.getIO().sockets.sockets.get(socketId)
+        delete clientSocket.isStreaming
+        delete clientSocket.streamId
+        delete clientSocket.createdAt
+
+        /* all the necessary details to do the billing in case of a disconnect */
+        clientSocket.onCall = true
+        clientSocket.callId = callDoc._id.toString()
+        clientSocket.callType = callDoc.callType
+        clientSocket.sharePercent = +req.user.relatedUser.sharePercent
+
+        socketDataUpdated = true
+      } catch (err) {
+        socketDataUpdated = false
       }
-
-      delete clientSocket.isStreaming
-      delete clientSocket.streamId
-
-      /* all the necessary details to do the billing in case of a disconnect */
-      clientSocket.onCall = true
-      clientSocket.callId = callDoc._id.toString()
-      clientSocket.callType = callDoc.callType
-      clientSocket.sharePercent = +req.user.relatedUser.sharePercent
 
       /* inform all sockets about model response */
       io.getIO()
@@ -458,20 +454,23 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         .except(`${req.user.relatedUser._id}-private`)
         .socketsLeave(`${streamId}-public`)
 
-      /* emit to the viewer */
+      /* EMIT TO THE CALLER VIEWER */
       callingViewerSocketData.username = viewer.rootUser.username
       io.getIO()
         .in(`${viewerId}-private`)
-        .emit(
-          chatEvents.model_call_request_response_received,
-          callingViewerSocketData
-        )
+        .emit(chatEvents.model_call_request_response_received, {
+          ...callingViewerSocketData,
+          sharePercent: +req.user.relatedUser.sharePercent,
+        })
 
       return res.status(200).json({
         actionStatus: "success",
         viewerDoc: viewer,
         callDoc: callDoc,
         callStartTs: callStartTimeStamp /* not ISO, its in milliseconds */,
+        viewerMaxCallDurationSeconds: viewerMaxCallDurationSeconds - 5000,
+        socketDataUpdated: socketDataUpdated,
+        sharePercent: +req.user.relatedUser.sharePercent,
       })
     })
     .catch((err) => next(err))
@@ -483,7 +482,8 @@ exports.handleEndCallFromViewer = (req, res, next) => {
 
   let theCall
   let viewerWallet
-  /* amount to deduct from the models wallet 
+  /* 
+     amount to deduct from the models wallet 
      NOTE: this can be zero (0) if the call disconnects before the min call duration
      as we have already deducted the min call duration amount from the viewer
   */
@@ -634,38 +634,10 @@ exports.handleEndCallFromViewer = (req, res, next) => {
         },
         { runValidators: true }
       )
-        .select("name profileImage")
-        .lean()
       return Promise.all([viewerPr, modelPr])
     })
     .then((values) => {
       if (values[1].n + values[0].n === 2) {
-        let modelSocketCleared = false /* model socket */
-        let socketCleared = false /* for viewer socket */
-
-        try {
-          /* try to clear models socket client also */
-          const modelSocket = io
-            .getIO()
-            .sockets.sockets.get(
-              Array.from(
-                io
-                  .getIO()
-                  .sockets.adapter.rooms.get(
-                    `${theCall.model._id.toString()}-private`
-                  )
-              )[0]
-            )
-
-          delete modelSocket.onCall
-          delete modelSocket.callId
-          delete modelSocket.callType
-
-          modelSocketCleared = true
-        } catch (e) {
-          modelSocketCleared = false
-        }
-
         /* update models local wallet  */
         io.getIO()
           .in(`${theCall.model._id.toString()}-private`)
@@ -675,7 +647,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
             amount: amountAdded,
           })
 
-        /* not have to show call end details of the  model, model already have viewers detail */
+        /* not have to show call end details of the model, model already have viewers detail */
         io.getIO()
           .in(`${theCall.stream._id.toString()}-public`)
           .emit(chatEvents.viewer_call_end_request_finished, {
@@ -684,33 +656,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
             totalCharges: amountToDeduct,
             message: "Call was ended successfully by the model",
             ended: "ok",
-            modelSocketCleared: modelSocketCleared,
           })
-
-        try {
-          /* try to clear the viewer's socket */
-          let clientSocket = io.getIO().sockets.sockets.get(socketId)
-          if (!clientSocket) {
-            clientSocket = io
-              .getIO()
-              .sockets.sockets.get(
-                Array.from(
-                  io
-                    .getIO()
-                    .sockets.adapter.rooms.get(
-                      `${req.user.relatedUser._id}-private`
-                    )
-                )[0]
-              )
-          }
-          delete clientSocket.onCall
-          delete clientSocket.callId
-          delete clientSocket.callType
-
-          socketCleared = true
-        } catch (e) {
-          socketCleared = false
-        }
 
         return res.status(200).json({
           theCall: theCall,
@@ -719,7 +665,6 @@ exports.handleEndCallFromViewer = (req, res, next) => {
           actionStatus: "success",
           message: "call was ended successfully",
           wasFirst: "yes" /* was first to put the call end request */,
-          socketCleared: socketCleared,
         })
       } else {
         const error = new Error("pending calls were not removed successfully")
@@ -789,7 +734,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
       /* emit this event for updating live count on the client side */
       io.getIO().emit(chatEvents.call_end, io.decreaseLiveCount())
       if (result.n === 0) {
-        /* no doc modified, model has ended tha call faster, return */
+        /* no doc modified, viewer has ended tha call faster, return */
         res.status(200).json({
           actionStatus: "failed",
           wasFirst: "no" /* was first to put the call end request */,
@@ -873,26 +818,40 @@ exports.handleEndCallFromModel = (req, res, next) => {
           ),
         ])
           .then((result) => {
-            if (result[1].n + result[2].n + result[3].n + result[4].n === 4) {
-              io.getIO()
-                .in(`${theCall.model._id}-private`)
-                .emit("model-wallet-updated", {
-                  modelId: theCall.model._id,
-                  operation: "dec",
-                  amount: amtToDeductFromModel,
-                })
-              return res.status(200).json({
-                actionStatus: "success",
-                wasFirst: "yes",
-                callWasNotSetupProperly: true,
+            /* UPDATE MODELS LOCAL WALLET */
+            io.getIO()
+              .in(`${theCall.model._id}-private`)
+              .emit("model-wallet-updated", {
+                modelId: theCall.model._id,
+                operation: "dec",
+                amount: amtToDeductFromModel,
               })
-            } else {
-              throw new Error("Something was not updated!")
+
+            io.getIO()
+              .in(`${theCall.viewer._id}-private`)
+              .emit(chatEvents.model_call_end_request_finished, {
+                theCall: theCall._doc,
+                amountToRefund: amountToRefund,
+                message:
+                  "Call was not connected properly hence your money is refunded",
+                ended: "not-setuped-properly",
+              })
+
+            if (result[1].n + result[2].n + result[3].n + result[4].n !== 4) {
+              console.error("All documents were not updated, while ending call")
             }
+
+            return res.status(200).json({
+              actionStatus: "success",
+              wasFirst: "yes",
+              callWasNotSetupProperly: true,
+            })
           })
           .catch((err) => next(err))
         /* break out of the below promise chain */
         return Promise.reject("The call was not ongoing")
+
+        /* ==== CALL NOT ONGOING BLOCK 👆👆 ==== */
       }
 
       if (theCall.endTimeStamp) {
@@ -982,29 +941,6 @@ exports.handleEndCallFromModel = (req, res, next) => {
     })
     .then((values) => {
       if (values[1].n + values[0].n === 2) {
-        let viewerSocketCleared = false
-        let socketCleared = false
-
-        try {
-          /* try to clear viewers socket */
-          const viewerSocket = io
-            .getIO()
-            .sockets.sockets.get(
-              Array.from(
-                io
-                  .getIO()
-                  .sockets.adapter.rooms.get(`${theCall.viewer._id}-private`)
-              )[0]
-            )
-
-          delete viewerSocket.onCall
-          delete viewerSocket.callId
-          delete viewerSocket.callType
-          viewerSocketCleared = true
-        } catch (e) {
-          viewerSocketCleared = false
-        }
-
         /* update models local wallet */
         io.getIO()
           .in(`${theCall.model._id.toString()}-private`)
@@ -1023,33 +959,20 @@ exports.handleEndCallFromModel = (req, res, next) => {
             totalCharges: amountToDeduct,
             message: "Call was ended successfully by the model",
             ended: "ok",
-            viewerSocketCleared: viewerSocketCleared,
           })
 
-        try {
-          /* clear model's socket client */
-          let clientSocket = io.getIO().sockets.sockets.get(socketId)
-          if (!clientSocket) {
-            clientSocket = io
-              .getIO()
-              .sockets.sockets.get(
-                Array.from(
-                  io
-                    .getIO()
-                    .sockets.adapter.rooms.get(
-                      `${req.user.relatedUser._id}-private`
-                    )
-                )[0]
-              )
-          }
-
-          delete clientSocket.onCall
-          delete clientSocket.callId
-          delete clientSocket.callType
-          socketCleared = true
-        } catch (e) {
-          socketCleared = false
-        }
+        /* emit the same event, directly to the viewer in case the first one has not reached the viewer */
+        setTimeout(() => {
+          io.getIO()
+            .in(`${theCall.viewer._id.toString()}-public`)
+            .emit(chatEvents.model_call_end_request_finished, {
+              theCall: theCall._doc,
+              modelGot: amountAdded,
+              totalCharges: amountToDeduct,
+              message: "Call was ended successfully by the model",
+              ended: "ok",
+            })
+        }, [1000])
 
         return res.status(200).json({
           theCall: theCall,
@@ -1059,7 +982,6 @@ exports.handleEndCallFromModel = (req, res, next) => {
           actionStatus: "success",
           message: "call was ended successfully",
           wasFirst: "yes" /* was first to put the call end request */,
-          socketCleared: socketCleared,
         })
       } else {
         /* should not through err as it means the call was not setup correctly, hence roll back everything */
@@ -1174,6 +1096,7 @@ exports.setCallOngoing = (req, res, next) => {
         return res.status(200).json({
           actionStatus: "success",
           socketUpdated: socketUpdated,
+          sharePercent: callDoc.sharePercent,
         })
       }
     })
@@ -1570,7 +1493,7 @@ exports.getForCallDetails = (req, res, next) => {
   Model.findById(modelId)
     .select("charges minCallDuration isStreaming onCall")
     .then((model) => {
-      res.status(200).json({
+      return res.status(200).json({
         actionStatus: "success",
         details: model,
       })
@@ -1604,7 +1527,6 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
      */
     if (model.isStreaming) {
       /* if model is streaming */
-
       /* if rejoin it means model already have your data */
       io.getIO()
         .in(`${modelId}-private`)
@@ -1622,22 +1544,25 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
        * ============
        */
 
-      const clientSocket = io.getIO().sockets.sockets.get(socketId)
-
-      clientSocket.onStream = true
-      clientSocket.streamId = model.currentStream._id.toString()
-
-      /* join the public channel */
-      clientSocket.join(`${model.currentStream._id}-public`)
-
-      /* deliberately making him rejoin just incase he has left the channel */
-      clientSocket.join(`${req.user.relatedUser._id}-private`)
+      let socketUpdated = false
+      try {
+        const clientSocket = io.getIO().sockets.sockets.get(socketId)
+        clientSocket.onStream = true
+        clientSocket.streamId = model.currentStream._id.toString()
+        /* join the public channel */
+        clientSocket.join(`${model.currentStream._id}-public`)
+        /* deliberately making him rejoin just incase he has left the channel */
+        clientSocket.join(`${req.user.relatedUser._id}-private`)
+        socketUpdated = true
+      } catch (err) {
+        socketUpdated = false
+      }
 
       return res.status(200).json({
         actionStatus: "success",
         isChatPlanActive: req.user.relatedUser.isChatPlanActive,
         streamId: model.currentStream._id,
-        puttedInRoom: true,
+        socketUpdated: socketUpdated,
       })
     }
     return res.status(200).json({
@@ -1673,21 +1598,21 @@ exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
          * with a seprate http or socket request
          * ============
          */
-        let puttedInRoom = false
+        let socketUpdated = false
         try {
           const clientSocket = io.getIO().sockets.sockets.get(socketId)
           clientSocket.join(`${model.currentStream._id}-public`)
           clientSocket.onStream = true
           clientSocket.streamId = model.currentStream._id.toString()
-          puttedInRoom = true
+          socketUpdated = true
         } catch (err) {
-          puttedInRoom = false
+          socketUpdated = false
         }
 
         return res.status(200).json({
           actionStatus: "success",
           streamId: model.currentStream._id,
-          puttedInRoom: puttedInRoom,
+          socketUpdated: socketUpdated,
         })
       }
       return res.status(400).json({
@@ -1708,4 +1633,31 @@ exports.getLiveRoomCount = (req, res, next) => {
   return res.status(200).json({
     roomSize: io.getIO().sockets.adapter.rooms.get(room)?.size,
   })
+}
+
+exports.getAViewerDetails = (req, res, next) => {
+  const { viewerId } = req.params
+  Viewer.findById(viewerId)
+    .populate({
+      path: "rootUser",
+      select: "username",
+    })
+    .populate({
+      path: "wallet",
+      select: "currentAmount",
+    })
+    .lean()
+    .select("name profileImage rootUser wallet isChatPlanActive")
+    .then((viewer) => {
+      return res.status(200).json({
+        actionStatus: "success",
+        viewer: {
+          name: viewer.name,
+          username: viewer.rootUser.username,
+          walletCoins: viewer.wallet.currentAmount,
+          profileImage: viewer.profileImage,
+          isChatPlanActive: viewer.isChatPlanActive,
+        },
+      })
+    })
 }

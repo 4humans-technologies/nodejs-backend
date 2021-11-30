@@ -58,6 +58,7 @@ const audioCallSchema = new mongoose.Schema({
       "viewer-network-error",
       "model-network-error",
       "network-error",
+      "viewer-&-model-network-error",
     ],
   },
   startTimeStamp: Number,

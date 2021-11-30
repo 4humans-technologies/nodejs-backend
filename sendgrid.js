@@ -16,6 +16,7 @@ exports.sendTheMail = (msg) => {
 
 exports.fromEmails = {
   ADMIN: "admin@dreamgirllive.com",
+  DREAMGIRL: "dreamgirllive@dreamgirllive.com",
 }
 
 exports.mailTemplates = {
@@ -28,7 +29,7 @@ exports.sendModelEmailConformation = (msgData) => {
   const dataToSend = {
     ...msgData,
     subject: "E-mail verification for dreamgirllive.com",
-    from: this.fromEmails.ADMIN,
+    from: this.fromEmails.DREAMGIRL,
     templateId: this.mailTemplates.MODEL_CONFORMATION_TEMPLATE,
   }
   return this.sendTheMail(dataToSend)
@@ -39,7 +40,7 @@ exports.sendViewerEmailConformation = (msgData) => {
     ...msgData,
     subject:
       "E-mail verification for dreamgirllive.com, please verify your email",
-    from: this.fromEmails.ADMIN,
+    from: this.fromEmails.DREAMGIRL,
     templateId: this.mailTemplates.VIEWER_CONFORMATION_TEMPLATE,
   }
   return this.sendTheMail(dataToSend)
@@ -49,7 +50,7 @@ exports.sendPasswordResetLink = (msgData) => {
   const dataToSend = {
     ...msgData,
     subject: "Password reset link for dreamgirllive.com",
-    from: this.fromEmails.ADMIN,
+    from: this.fromEmails.DREAMGIRL,
     templateId: this.mailTemplates.PASSWORD_RESET,
   }
   return this.sendTheMail(dataToSend)

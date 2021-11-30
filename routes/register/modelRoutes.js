@@ -39,10 +39,12 @@ router.post(
     body("email").notEmpty().isEmail().normalizeEmail(),
     body("gender").notEmpty().isString(),
     body("profileImage").notEmpty().isURL(),
-    body("languages").notEmpty().isString(),
     body("phone")
       .notEmpty()
       .isMobilePhone(["en-IN", "en-PK", "bn-BD", "ne-NP", "th-TH"]),
+    // body("phone")
+    //   .notEmpty()
+    //   .isMobilePhone(["en-IN", "en-PK", "bn-BD", "ne-NP", "th-TH"]),
   ],
   modelController.createModel
 )

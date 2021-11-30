@@ -28,10 +28,24 @@ router.post(
 )
 
 router.post(
+  "/handle-private-image-upload",
+  tokenVerify,
+  [body("newImageUrl").isURL()],
+  modelProfileData.handlePrivateImageUpload
+)
+
+router.post(
   "/handle-public-video-upload",
   tokenVerify,
   [body("newVideoUrl").isURL({ require_host: true })],
   modelProfileData.handlePublicVideosUpload
+)
+
+router.post(
+  "/handle-private-video-upload",
+  tokenVerify,
+  [body("newVideoUrl").isURL({ require_host: true })],
+  modelProfileData.handlePrivateVideoUpload
 )
 
 router.post(
@@ -62,5 +76,7 @@ router.post(
   tokenVerify,
   modelProfileData.getTokenHistoryOfModel
 )
+
+router.post("/update-password", tokenVerify, modelProfileData.updatePassword)
 
 module.exports = router

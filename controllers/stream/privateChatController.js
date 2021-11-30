@@ -310,3 +310,15 @@ exports.getActiveChatPlans = (req, res, next) => {
     })
     .catch((err) => next(err))
 }
+
+exports.buyPrivateImagesVideosForViewer = (req, res, next) => {
+  
+  const {modelId} = req.body
+
+  Wallet.findOne({
+    rootUser:req.user._id
+  })
+  .then(wallet => {
+    
+  })
+}

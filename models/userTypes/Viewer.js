@@ -21,9 +21,13 @@ const viewerSchema = new mongoose.Schema({
     required: true,
     enum: ["Male", "Female", "Custom"],
   },
-  profileImages: {
+  profileImage: {
     type: String,
-    required: false,
+    default: "",
+  },
+  backgroundImage: {
+    type: String,
+    default: "",
   },
   hobbies: {
     type: [String],
@@ -74,6 +78,20 @@ const viewerSchema = new mongoose.Schema({
         },
       },
     ],
+    default: [],
+  },
+  privateImagesPlans: {
+    /**
+     * will contain the model id, of which the viewer has bought the plan
+     */
+    type: [String],
+    default: [],
+  },
+  privateVideoPlans: {
+    /**
+     * will contain the model id, of which the viewer has bought the plan
+     */
+    type: [String],
     default: [],
   },
   videoCallHistory: [
