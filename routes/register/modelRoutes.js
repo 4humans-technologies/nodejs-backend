@@ -25,8 +25,8 @@ router.post(
         })
       })
       .custom((value, _req) => {
-        if (value.includes("_")) {
-          const error = new Error("Space(s) is not allowed in username")
+        if (value.includes(" ")) {
+          const error = new Error("spaces are not allowed")
           error.statusCode = 400
           throw error
         }

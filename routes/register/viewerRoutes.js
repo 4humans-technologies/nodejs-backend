@@ -21,6 +21,14 @@ router.post(
           }
         })
       })
+      .custom((value, _req) => {
+        if (value.includes(" ")) {
+          const error = new Error("spaces are not allowed")
+          error.statusCode = 400
+          throw error
+        }
+        return true
+      })
       .toLowerCase(),
     body("password").notEmpty().isString(),
     body("name").notEmpty().isString().trim().escape().toLowerCase(),

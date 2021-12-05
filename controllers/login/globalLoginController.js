@@ -32,13 +32,25 @@ exports.loginHandler = (req, res, next) => {
   User.findOne({
     username: username,
   })
-    .select("username needApproval userType relatedUser password lastLogin")
+    .select(
+      "username needApproval userType relatedUser inProcessDetails password"
+    )
     .populate({
       path: "relatedUser",
-      populate: {
-        path: "wallet",
-        select: "currentAmount",
-      },
+      populate: [
+        {
+          path: "wallet",
+          select: "currentAmount",
+        },
+        {
+          path: "privateImages",
+          model: "ImageAlbum",
+        },
+        {
+          path: "privateVideos",
+          model: "VideoAlbum",
+        },
+      ],
     })
     .then((user) => {
       if (!user) {

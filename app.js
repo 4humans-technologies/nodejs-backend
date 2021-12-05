@@ -9,7 +9,10 @@ const chatEventListeners = require("./utils/socket/chat/chatEventListeners")
 const onDisconnectStreamEndHandler = require("./utils/socket/disconnect/streamEndHandler")
 const onDisconnectCallEndHandler = require("./utils/socket/disconnect/callEndHandler")
 const updateClientInfo = require("./utils/socket/updateClientInfo")
-const { generatePublicUploadUrl } = require("./utils/aws/s3")
+const {
+  generatePublicUploadUrl,
+  generatePrivateContentTwinUploadUrl,
+} = require("./utils/aws/s3")
 const requestRoomHandlers = require("./utils/socket/requestedRoomHandlers")
 const verificationRouter = require("./routes/management/verificationRoutes")
 const { viewer_left_received } = require("./utils/socket/chat/chatEvents")
@@ -41,10 +44,11 @@ const testRouter = require("./routes/test/test")
 // category is Depreciated, will now use Tag-group and tags
 // const categoryRoutes = require("./routes/management/categoryRoutes")
 const tagRouter = require("./routes/management/tagRoutes")
-const uxUtils = require("./routes/uxUtils/uxUtilsRoutes")
+const uxUtilsRoutes = require("./routes/uxUtils/uxUtilsRoutes")
 const giftsRouter = require("./routes/gifts/gifts")
 const streamRouter = require("./routes/stream/streamRoutes")
 const privateChatsRouter = require("./routes/stream/privateChatsRoute")
+const privateContentRouter = require("./routes/stream/PrivateContent")
 const modelProfileRouter = require("./routes/profile/modelProfile")
 const couponRouter = require("./routes/management/coupon")
 
@@ -65,7 +69,11 @@ if (process.env.LOCAL_DB === "false") {
 }
 
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*")
+  if (process.env.RUN_ENV === "windows") {
+    res.setHeader("Access-Control-Allow-Origin", "*")
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "https://dreamgirllive.com")
+  }
   res.setHeader(
     "Access-Control-Allow-Methods",
     "PUT, GET, POST, DELETE, OPTIONS"
@@ -79,7 +87,7 @@ app.use("/api/website/permissions", permissionRouter)
 app.use("/api/website/register/viewer", viewerRouter)
 app.use("/api/website/register/model", modelRouter)
 app.use("/api/website/login", globalLoginRoutes)
-app.use("/api/website/compose-ui", uxUtils)
+app.use("/api/website/compose-ui", uxUtilsRoutes)
 // category is Depreciated, will now use Tag-group and tags
 // app.use("/api/website/management/category", categoryRoutes)
 app.use("/api/website/management/tags", tagRouter)
@@ -87,6 +95,10 @@ app.use("/api/website/token-builder", tokenBuilderRouter)
 app.use("/api/website/gifts", giftsRouter)
 app.use("/api/website/stream", streamRouter)
 app.use("/api/website/stream/private-chat", privateChatsRouter)
+app.use(
+  "/api/website/stream/private-content",
+  privateContentRouter
+) /* private album buy/sell */
 app.use("/api/website/profile", modelProfileRouter)
 app.use("/api/website/coupon", couponRouter)
 app.use("/api/website/verification", verificationRouter)
@@ -111,11 +123,37 @@ app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
     .catch((err) => next(err))
 })
 
+/* generate upload url for private images/videos upload */
+app.get(
+  "/api/website/aws/get-s3-model-private-content-upload-url",
+  (req, res, next) => {
+    const { type, albumId, albumType } = req.query
+    /**
+     * should check if the model owns this album
+     */
+    if (!type) {
+      return res.status(400).json({
+        actionStatus: "failed",
+        message: "Type not provide in the query parameter, it's required",
+      })
+    }
+    const extension = "." + type?.split("/")[1]
+    generatePrivateContentTwinUploadUrl(extension, type, albumId, albumType)
+      .then((s3UrlData) => {
+        return res.status(200).json({
+          uploadUrl: s3UrlData.uploadUrls,
+          key: s3UrlData.key,
+        })
+      })
+      .catch((err) => next(err))
+  }
+)
+
 // ADMIN PATHS
 /* 🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻 */
 /* comment after one time use */
 /* should use script to use superadmin, via api is very dangerous */
-// app.use("/api/admin/superadmin", superAdminRouter)
+app.use("/api/admin/superadmin", superAdminRouter)
 /* 🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺 */
 app.use("/api/admin/permissions", adminPermissions)
 app.use("/api/admin/gifts", adminGiftRoutes)

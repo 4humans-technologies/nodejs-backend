@@ -3,7 +3,7 @@ const mongoose = require("mongoose")
 const tokenGiftHistorySchema = new mongoose.Schema({
   time: {
     type: Date,
-    default: () => new Date(),
+    default: Date,
   },
   tokenAmount: {
     type: Number,

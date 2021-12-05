@@ -108,7 +108,8 @@ exports.createViewer = (req, res, next) => {
               process.env.FRONTEND_URL
             }/link-verification/email?token=${emailToken}`,
             first_name: name.split(" ")[0],
-            free_coins_amt: process.env.DEFAULT_SIGNUP_WALLET_AMOUNT_FOR_VIEWER,
+            free_coins_amt:
+              process.env.DEFAULT_EMAIL_CONFORMATION_WALLET_AMOUNT_FOR_VIEWER,
             confirm_before:
               +process.env.EMAIL_CONFORMATION_EXPIRY_HOURS_VIEWER / 24,
           },
@@ -151,6 +152,8 @@ exports.createViewer = (req, res, next) => {
         token: token,
         expiresIn: hours,
         wasSocketUpdated: wasSocketUpdated,
+        freeCoins:
+          +process.env.DEFAULT_EMAIL_CONFORMATION_WALLET_AMOUNT_FOR_VIEWER,
       })
     })
     .catch((err) => {

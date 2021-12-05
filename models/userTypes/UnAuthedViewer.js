@@ -16,11 +16,11 @@ const unAuthedViewerSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: () => new Date(),
+    default: Date,
   },
   lastAccess: {
     type: Date,
-    default: () => new Date(),
+    default: Date,
   },
   lastStream: {
     /**

@@ -9,7 +9,7 @@ const streamSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: () => new Date(),
+    default: Date,
   },
   status: {
     type: String,

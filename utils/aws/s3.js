@@ -34,16 +34,41 @@ exports.generatePublicUploadUrl = (extension, type) => {
     })
 }
 
-exports.deleteObjectFromS3 = (attachmentId) => {
-  s3.deleteObject(
-    {
-      Bucket: bucketName,
-      Key: attachmentId,
-    },
-    function (err, data) {
-      if (err) {
-      } else {
+exports.generatePrivateContentTwinUploadUrl = (
+  extension,
+  type,
+  albumId,
+  albumType
+) => {
+  let uniqueImageName
+  return nanoid(24)
+    .then((id) => {
+      uniqueImageName = id
+      const origParams = {
+        Bucket: `${bucketName}/${
+          albumType === "imageAlbum" ? "image-album" : "video-album"
+        }/${albumId}`,
+        Key: `${uniqueImageName}**__original${extension}`,
+        Expires: 60,
+        ContentType: type,
       }
-    }
-  )
+      const thumbParams = {
+        Bucket: `${bucketName}/${
+          albumType === "imageAlbum" ? "image-album" : "video-album"
+        }/${albumId}`,
+        Key: `${uniqueImageName}**__thumbnail${extension}`,
+        Expires: 60,
+        ContentType: type,
+      }
+      return Promise.all([
+        s3.getSignedUrlPromise("putObject", origParams),
+        s3.getSignedUrlPromise("putObject", thumbParams),
+      ])
+    })
+    .then((values) => {
+      return {
+        uploadUrls: values,
+        key: uniqueImageName,
+      }
+    })
 }

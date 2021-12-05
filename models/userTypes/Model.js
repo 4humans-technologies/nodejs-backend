@@ -113,11 +113,11 @@ const modelSchema = new mongoose.Schema({
     type: [
       {
         name: {
-          type: String,
+          type: String /* reference name for backend */,
           required: true,
         },
         displayName: {
-          type: String,
+          type: String /* what viewer will see */,
           required: true,
         },
         value: {
@@ -210,18 +210,12 @@ const modelSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
-  privateImages: {
-    type: [String],
-    default: [],
-  },
   publicVideos: {
     type: [String],
     default: [],
   },
-  privateVideos: {
-    type: [String],
-    default: [],
-  },
+  privateImages: [{ type: mongoose.Schema.Types.ObjectId, ref: "ImageAlbum" }],
+  privateVideos: [{ type: mongoose.Schema.Types.ObjectId, ref: "VideoAlbum" }],
   offlineStatus: {
     /**
      * offline message is the actually the more right name

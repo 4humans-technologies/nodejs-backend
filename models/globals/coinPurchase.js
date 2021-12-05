@@ -3,7 +3,7 @@ const mongoose = require("mongoose")
 const coinPurchaseSchema = new mongoose.Schema({
   timestamp: {
     type: Number,
-    default: () => new Date(),
+    default: Date,
   },
   by: {
     type: mongoose.Schema.Types.ObjectId,

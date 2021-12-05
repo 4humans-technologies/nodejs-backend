@@ -1,6 +1,7 @@
 const router = require("express").Router()
 const modelProfileData = require("../../controllers/profile/modelProfile")
 const tokenVerify = require("../../middlewares/tokenVerify")
+const tokenVerifyWithOutPopulate = require("../../middlewares/tokenVerifyWithOutPopulate")
 const { body } = require("express-validator")
 
 router.get(
@@ -73,10 +74,29 @@ router.post(
 
 router.post(
   "/get-model-token-history",
-  tokenVerify,
+  tokenVerifyWithOutPopulate,
   modelProfileData.getTokenHistoryOfModel
 )
 
 router.post("/update-password", tokenVerify, modelProfileData.updatePassword)
+
+router.post(
+  "/create-album",
+  [
+    body("name").notEmpty().isString(),
+    body("price").notEmpty().isNumeric(),
+    body("type").custom((value, { req }) => {
+      if (["imageAlbum", "videoAlbum"].includes(value)) {
+        return true
+      } else {
+        throw new Error(
+          "type can be 'imageAlbum' or 'videoAlbum' " + value + " was provided"
+        )
+      }
+    }),
+  ],
+  tokenVerifyWithOutPopulate,
+  modelProfileData.createContentAlbum
+)
 
 module.exports = router

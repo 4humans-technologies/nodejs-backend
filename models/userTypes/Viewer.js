@@ -68,30 +68,55 @@ const viewerSchema = new mongoose.Schema({
   previousChatPlans: {
     type: [
       {
-        planId: {
+        _id: false,
+        model: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: "PrivateChatPlan",
+          ref: "Model",
+          required: true,
         },
         purchasedOn: {
           type: Date,
-          required: true,
+          default: Date,
+        },
+        albums: {
+          type: [mongoose.Schema.Types.ObjectId],
         },
       },
     ],
     default: [],
   },
   privateImagesPlans: {
-    /**
-     * will contain the model id, of which the viewer has bought the plan
-     */
-    type: [String],
+    type: [
+      {
+        _id: false,
+        model: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Model",
+          required: true,
+        },
+        albums: {
+          type: [mongoose.Schema.Types.ObjectId],
+        },
+      },
+    ],
     default: [],
   },
-  privateVideoPlans: {
+  privateVideosPlans: {
     /**
      * will contain the model id, of which the viewer has bought the plan
      */
-    type: [String],
+    type: [
+      {
+        model: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Model",
+          required: true,
+        },
+        albums: {
+          type: [mongoose.Schema.Types.ObjectId],
+        },
+      },
+    ],
     default: [],
   },
   videoCallHistory: [

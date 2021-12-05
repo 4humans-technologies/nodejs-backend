@@ -7,6 +7,9 @@ const {
   generateEmailConformationJWT,
 } = require("../../utils/generateEmailConformationJWT")
 const { sendModelEmailConformation } = require("../../sendgrid")
+const ImageAlbum = require("../../models/globals/ImageAlbum")
+const VideoAlbum = require("../../models/globals/VideosAlbum")
+const ObjectId = require("mongodb").ObjectId
 
 exports.getModelProfileData = (req, res, next) => {
   Model.findById(req.user.relatedUser._id)
@@ -287,15 +290,72 @@ exports.handlePublicImageUpload = (req, res, next) => {
     .catch((err) => next(err))
 }
 
-exports.handlePrivateImageUpload = (req, res, next) => {
-  const { newImageUrl } = req.body
+exports.createContentAlbum = (req, res, next) => {
+  const { name, price, type } = req.body
 
-  Model.updateOne(
-    {
-      _id: req.user.relatedUser._id,
+  const myId = ObjectId()
+  const query =
+    type === "imageAlbum"
+      ? ImageAlbum({
+          _id: myId,
+          name: name,
+          price: price,
+        }).save()
+      : VideoAlbum({
+          _id: myId,
+          name: name,
+          price: price,
+        }).save()
+
+  Promise.all([
+    query,
+    Model.updateOne(
+      {
+        _id: req.user.relatedUser._id,
+      },
+      {
+        $addToSet:
+          type === "imageAlbum"
+            ? { privateImages: myId }
+            : { privateVideos: myId },
+      }
+    ),
+  ])
+    .then(([album, model]) => {
+      return res.status(200).json({
+        actionStatus: 200,
+        album: album,
+      })
+    })
+    .catch((err) => next(err))
+}
+
+exports.handlePrivateImageUpload = (req, res, next) => {
+  /**
+   * no use here but usefull snippet
+   * ------------------------------
+   * {
+      $push: {
+        "privateImages.$[entry].originalImages": originalImageURL,
+        "privateImages.$[entry].thumbnails": thumbUrl,
+      },
     },
     {
-      $addToSet: { privateImages: newImageUrl },
+      arrayFilters: [{ "entry.model": req.user.relatedUser._id.toString() }],
+      upsert: true,
+    }
+   */
+  const { originalImageURL, thumbUrl, albumId } = req.body
+
+  ImageAlbum.updateOne(
+    {
+      _id: albumId,
+    },
+    {
+      $push: {
+        originalImages: originalImageURL,
+        thumbnails: thumbUrl,
+      },
     }
   )
     .then((result) => {
@@ -313,14 +373,17 @@ exports.handlePrivateImageUpload = (req, res, next) => {
 }
 
 exports.handlePrivateVideoUpload = (req, res, next) => {
-  const { newVideoUrl } = req.body
+  const { originalVideoURL, thumbUrl, albumId } = req.body
 
-  Model.updateOne(
+  VideoAlbum.updateOne(
     {
-      _id: req.user.relatedUser._id,
+      _id: albumId,
     },
     {
-      $addToSet: { privateVideos: newVideoUrl },
+      $push: {
+        originalVideos: originalVideoURL,
+        thumbnails: thumbUrl,
+      },
     }
   )
     .then((result) => {

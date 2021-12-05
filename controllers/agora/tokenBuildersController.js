@@ -135,12 +135,17 @@ exports.createStreamAndToken = (req, res, next) => {
 }
 
 exports.genRtcTokenViewer = (req, res, next) => {
-  // for viewer who are loggedIn, and want to view model stream
-  // just generate token and update stats
   controllerErrorCollector(req)
 
-  const { modelId } = req.body
+  let { modelId, purchasedImageAlbums, purchasedVideoAlbums } = req.body
   const { socketId } = req.query
+
+  if (!purchasedImageAlbums) {
+    purchasedImageAlbums = []
+  }
+  if (!purchasedVideoAlbums) {
+    purchasedVideoAlbums = []
+  }
 
   const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
     "viewer",
@@ -150,17 +155,10 @@ exports.genRtcTokenViewer = (req, res, next) => {
 
   let theModel
   let selectString =
-    "currentStream isStreaming onCall tags rating profileImage publicImages publicVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
-
-  if (req.user.relatedUser.privateImagesPlans) {
-    selectString = selectString + " privateImagesPlans"
-  }
-
-  if (req.user.relatedUser.privateVideoPlans) {
-    selectString = selectString + " privateVideosPlans"
-  }
-
-  Model.findById(modelId)
+    "currentStream isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
+  Model.findOne({
+    _id: modelId,
+  })
     .select(selectString)
     .populate({
       path: "rootUser",
@@ -170,12 +168,26 @@ exports.genRtcTokenViewer = (req, res, next) => {
       path: "tags",
       select: "name",
     })
+    .populate({
+      path: "privateImages",
+      match: {
+        _id: { $nin: purchasedImageAlbums },
+      },
+      model: "ImageAlbum",
+      select: "-originalImages",
+      options: { lean: true },
+    })
+    .populate({
+      path: "privateVideos",
+      match: { _id: { $nin: purchasedVideoAlbums } },
+      model: "VideoAlbum",
+      select: "-originalVideos",
+      options: { lean: true },
+    })
     .lean()
     .then((model) => {
       theModel = model
       if (model?.isStreaming) {
-        /* 🔴 Dangerously 👆👆 removing currentstream check, only while developing */
-        // if (model.isStreaming && model.currentStream) {
         const streamPr = Stream.updateOne(
           { _id: model.currentStream._id },
           {
@@ -186,6 +198,9 @@ exports.genRtcTokenViewer = (req, res, next) => {
           },
           { new: true }
         )
+        /**
+         * populate the purchased  private image and video album
+         */
         const viewerPr = Viewer.findOneAndUpdate(
           {
             _id: req.user.relatedUser._id,
@@ -195,9 +210,33 @@ exports.genRtcTokenViewer = (req, res, next) => {
           }
         )
           .select(
-            "isChatPlanActive currentChatPlan wallet audioCallHistory videoCallHistory streams gender following"
+            "isChatPlanActive privateImagesPlans privateVideosPlans currentChatPlan wallet audioCallHistory videoCallHistory streams gender following name profileImage"
           )
           .populate("wallet")
+          .populate({
+            path: "rootUser",
+            select: "username",
+          })
+          .populate({
+            path: "privateImagesPlans",
+            match: { model: modelId },
+            populate: {
+              path: "albums",
+              model: "ImageAlbum",
+              select: "-thumbNails",
+              options: { lean: true },
+            },
+          })
+          .populate({
+            path: "privateVideosPlans",
+            match: { model: modelId },
+            populate: {
+              path: "albums",
+              model: "VideoAlbum",
+              select: "-thumbNails",
+              options: { lean: true },
+            },
+          })
           .lean()
         return Promise.all([streamPr, viewerPr])
           .then((values) => {
@@ -208,10 +247,10 @@ exports.genRtcTokenViewer = (req, res, next) => {
 
             let viewerDetails = {
               _id: req.user.relatedUser._id,
-              username: req.user.username,
-              name: req.user.relatedUser.name,
+              username: viewer.rootUser.username,
+              name: viewer.name,
               walletCoins: viewer.wallet.currentAmount,
-              profileImage: req.user.relatedUser.profileImage,
+              profileImage: viewer.profileImage,
               isChatPlanActive: viewer.isChatPlanActive,
             }
 
@@ -247,12 +286,6 @@ exports.genRtcTokenViewer = (req, res, next) => {
                   roomSize: roomSize,
                   viewer: {
                     ...viewerDetails,
-                    // following: viewer.following.length,
-                    // streams: viewer.streams.length,
-                    // currentChatPlan: viewer.currentChatPlan,
-                    // gender: viewer.gender,
-                    // audioCallHistory: viewer.audioCallHistory.length,
-                    // videoCallHistory: viewer.videoCallHistory.length,
                   },
                 })
 
@@ -265,7 +298,10 @@ exports.genRtcTokenViewer = (req, res, next) => {
               socketUpdated = false
             }
 
-            // http response
+            /* combine viewers purchased album with  */
+            theModel.privateImages.push(...viewer.privateImagesPlans.albums)
+            theModel.privateVideos.push(...viewer.privateVideosPlans.albums)
+
             return res.status(200).json({
               actionStatus: "success",
               rtcToken: rtcToken,
@@ -279,15 +315,60 @@ exports.genRtcTokenViewer = (req, res, next) => {
           })
           .catch((err) => next(err))
       } else {
-        /* have to show offline screen */
-        return res.status(200).json({
-          actionStatus: "success",
-          message: "model not streaming",
-          theModel: theModel,
-          isChatPlanActive: req.user.relatedUser.isChatPlanActive,
+        /* ID MODEL NOT STREAMING */
+        Viewer.findOne({
+          _id: req.user.relatedUser._id,
         })
+          .select("isChatPlanActive privateImagesPlans privateVideosPlans")
+          .populate({
+            path: "privateImagesPlans",
+            match: { model: modelId },
+            populate: {
+              path: "albums",
+              model: "ImageAlbum",
+              select: "-thumbNails",
+              options: { lean: true },
+            },
+          })
+          .populate({
+            path: "privateVideosPlans",
+            match: { model: modelId },
+            populate: {
+              path: "albums",
+              model: "VideoAlbum",
+              select: "-thumbNails",
+              options: { lean: true },
+            },
+          })
+          .lean()
+          .then((viewer) => {
+            /* PUSH PRIVATE IMAGES */
+            if (viewer.privateImagesPlans[0]) {
+              theModel.privateImages.push(
+                ...viewer.privateImagesPlans[0].albums
+              )
+            }
+
+            /* PUSH PRIVATE VIDEOS */
+            if (viewer.privateVideosPlans[0]) {
+              theModel.privateVideos.push(
+                ...viewer.privateVideosPlans[0].albums
+              )
+            }
+
+            return res.status(200).json({
+              actionStatus: "success",
+              message: "model not streaming",
+              theModel: theModel,
+              isChatPlanActive: viewer.isChatPlanActive,
+            })
+          })
+          .catch((err) => {
+            throw err
+          })
       }
     })
+    .catch((err) => next(err))
 }
 
 exports.generateRtcTokenUnauthed = (req, res, next) => {
