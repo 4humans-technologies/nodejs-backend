@@ -8,29 +8,32 @@ const realtimeDb = getDatabase()
 module.exports = {
   authedViewerListeners: (socket) => {
     /* public message emitter */
-
-    /* can get this message payload as string and streamId as other parameter😀 */
-    socket.on(chatEvents.viewer_message_public_emitted, (data) => {
-      realtimeDb
-        .ref("publicChats")
-        .child(data.room.split("-")[0])
-        .child("chats")
-        .push({
-          type: "normal-public-message",
-          ...data,
-        })
-        .then(() => {
-          io.getIO()
-            .in(data.room)
-            .emit(chatEvents.viewer_message_public_received, data)
-        })
-        .catch(() => {
-          /* even if error emmit the message */
-          io.getIO()
-            .in(data.room)
-            .emit(chatEvents.viewer_message_public_received, data)
-        })
-    })
+    try {
+      /* can get this message payload as string and streamId as other parameter😀 */
+      socket.on(chatEvents.viewer_message_public_emitted, (data) => {
+        realtimeDb
+          .ref("publicChats")
+          .child(data.room.split("-")[0])
+          .child("chats")
+          .push({
+            type: "normal-public-message",
+            ...data,
+          })
+          .then(() => {
+            io.getIO()
+              .in(data.room)
+              .emit(chatEvents.viewer_message_public_received, data)
+          })
+          .catch(() => {
+            /* even if error emmit the message */
+            io.getIO()
+              .in(data.room)
+              .emit(chatEvents.viewer_message_public_received, data)
+          })
+      })
+    } catch (err) {
+      console.error("Error while sending public chat reason: " + err.message)
+    }
 
     /* only viewers who have private chat plan will use this, for others it is just wastage of resources 
       hence should look for optimization later 👇👇 (below 2)

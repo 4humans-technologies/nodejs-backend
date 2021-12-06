@@ -7,5 +7,10 @@ router.post(
   tokenVerifyWithOutPopulate,
   privateContent.buyPrivateImageAlbum
 )
+router.post(
+  "/buy-private-video-album",
+  tokenVerifyWithOutPopulate,
+  privateContent.buyPrivateVideosAlbum
+)
 
 module.exports = router

@@ -223,7 +223,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
             populate: {
               path: "albums",
               model: "ImageAlbum",
-              select: "-thumbNails",
+              select: "-thumbnails",
               options: { lean: true },
             },
           })
@@ -233,7 +233,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
             populate: {
               path: "albums",
               model: "VideoAlbum",
-              select: "-thumbNails",
+              select: "-thumbnails",
               options: { lean: true },
             },
           })
@@ -242,7 +242,6 @@ exports.genRtcTokenViewer = (req, res, next) => {
           .then((values) => {
             const viewer = values[1]
             const streamRoom = `${theModel.currentStream._id}-public`
-
             let socketUpdated = false
 
             let viewerDetails = {
@@ -299,8 +298,18 @@ exports.genRtcTokenViewer = (req, res, next) => {
             }
 
             /* combine viewers purchased album with  */
-            theModel.privateImages.push(...viewer.privateImagesPlans.albums)
-            theModel.privateVideos.push(...viewer.privateVideosPlans.albums)
+            if (viewer.privateImagesPlans[0]) {
+              theModel.privateImages.push(
+                ...viewer.privateImagesPlans[0].albums
+              )
+            }
+
+            /* PUSH PRIVATE VIDEOS */
+            if (viewer.privateVideosPlans[0]) {
+              theModel.privateVideos.push(
+                ...viewer.privateVideosPlans[0].albums
+              )
+            }
 
             return res.status(200).json({
               actionStatus: "success",
@@ -326,7 +335,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
             populate: {
               path: "albums",
               model: "ImageAlbum",
-              select: "-thumbNails",
+              select: "-thumbnails",
               options: { lean: true },
             },
           })
@@ -336,7 +345,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
             populate: {
               path: "albums",
               model: "VideoAlbum",
-              select: "-thumbNails",
+              select: "-thumbnails",
               options: { lean: true },
             },
           })
@@ -382,7 +391,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
   let socketUpdated
   Model.findById(modelId)
     .select(
-      "currentStream isStreaming onCall tags rating profileImage publicImages publicVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
+      "currentStream isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
     )
     .populate({
       path: "tags",
@@ -391,6 +400,18 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
     .populate({
       path: "rootUser",
       select: "username",
+    })
+    .populate({
+      path: "privateImages",
+      model: "ImageAlbum",
+      select: "-originalImages",
+      options: { lean: true },
+    })
+    .populate({
+      path: "privateVideos",
+      model: "VideoAlbum",
+      select: "-originalVideos",
+      options: { lean: true },
     })
     .lean()
     .then((model) => {

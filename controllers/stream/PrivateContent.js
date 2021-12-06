@@ -11,6 +11,8 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
   /*  */
   const { modelId, albumId } = req.body
 
+  let modelGot
+  let albumCost
   Promise.all([
     Model.findOne({
       _id: modelId,
@@ -38,7 +40,7 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
             if (modelAlbums) {
               /* if has purchased any other album of this model */
               modelAlbums.albums.push(albumId)
-              viewer.markModified("privateImages")
+              viewer.markModified("privateImagesPlans")
               wallet.deductAmount(imageAlbum.price)
             } else {
               /* if has *NOT* purchased any other album of this model */
@@ -51,6 +53,8 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
 
               wallet.deductAmount(imageAlbum.price)
             }
+            albumCost = imageAlbum.price
+            modelGot = imageAlbum.price * (model.sharePercent / 100)
             return Promise.all([
               viewer.save(),
               Wallet.updateOne(
@@ -59,8 +63,7 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
                 },
                 {
                   $inc: {
-                    currentAmount:
-                      imageAlbum.price * (model.sharePercent / 100),
+                    currentAmount: modelGot,
                   },
                 }
               ),
@@ -93,6 +96,7 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
       return res.status(200).json({
         actionStatus: "success",
         privateImages: viewer.privateImagesPlans,
+        albumCost: albumCost,
       })
     })
     .catch((err) => {
@@ -101,8 +105,11 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
 }
 
 exports.buyPrivateVideosAlbum = (req, res, next) => {
+  /*  */
   const { modelId, albumId } = req.body
 
+  let modelGot
+  let albumCost
   Promise.all([
     Model.findOne({
       _id: modelId,
@@ -110,36 +117,74 @@ exports.buyPrivateVideosAlbum = (req, res, next) => {
       .lean()
       .select("privateVideos sharePercent"),
     Viewer.findById(req.user.relatedUser._id).select("privateVideosPlans"),
+    Wallet.findOne({ rootUser: req.user._id }),
+    VideosAlbum.findById(albumId).select("price purchases"),
   ])
-    .then(([model, viewer]) => {
-      if (model.privateVideos.includes(albumId)) {
-        const modelAlbums = viewer.privateVideos.find(
-          (entry) => entry.model === modelId
-        )
-        if (!modelAlbums?.album.includes(albumId)) {
-          if (modelAlbums) {
-            viewer.privateVideos = viewer.privateVideos.map((entry) => {
-              if (entry.model === modelId) {
-                entry.albums.push(albumId)
-              }
-            })
-            return viewer.save()
+    .then(([model, viewer, wallet, videosAlbum]) => {
+      if (
+        model.privateVideos.map((id) => id.toString()).includes(albumId) &&
+        videosAlbum
+      ) {
+        /* if album exists/created by the model */
+        if (wallet.currentAmount >= videosAlbum.price) {
+          const modelAlbums = viewer.privateVideosPlans.find(
+            (entry) => entry.model.toString() === modelId
+          )
+          if (
+            !modelAlbums?.albums.map((id) => id.toString()).includes(albumId)
+          ) {
+            /* if album *NOT* already purchased */
+            if (modelAlbums) {
+              /* if has purchased any other album of this model */
+              modelAlbums.albums.push(albumId)
+              viewer.markModified("privateVideosPlans")
+              wallet.deductAmount(videosAlbum.price)
+            } else {
+              /* if has *NOT* purchased any other album of this model */
+              viewer.privateVideosPlans = [
+                {
+                  model: modelId,
+                  albums: [albumId],
+                },
+              ]
+
+              wallet.deductAmount(videosAlbum.price)
+            }
+            albumCost = videosAlbum.price
+            modelGot = videosAlbum.price * (model.sharePercent / 100)
+            return Promise.all([
+              viewer.save(),
+              Wallet.updateOne(
+                {
+                  relatedUser: modelId,
+                },
+                {
+                  $inc: {
+                    currentAmount: modelGot,
+                  },
+                }
+              ),
+              wallet.save(),
+            ])
           } else {
-            viewer.privateVideos = viewer.privateVideos.push({
-              model: modelId,
-              albums: [albumId],
-            })
-            return viewer.save()
+            /* plan already purchased */
+            const error = new Error("Album already purchased")
+            error.statusCode = 400
+            throw error
           }
         } else {
-          /* plan already purchased */
-          const error = new Error("Album already purchased")
+          /* error requested album not found */
+          const error = new Error(
+            "You don't have required amount of coins to purchase this album"
+          )
           error.statusCode = 400
           throw error
         }
       } else {
         /* error requested album not found */
-        const error = new Error("Invalid albumId, Album does not exists")
+        const error = new Error(
+          "Invalid albumId, Album does not exists please reload the page to get the updated albums"
+        )
         error.statusCode = 400
         throw error
       }
@@ -147,7 +192,8 @@ exports.buyPrivateVideosAlbum = (req, res, next) => {
     .then((viewer) => {
       return res.status(200).json({
         actionStatus: "success",
-        privateVideos: viewer.privateVideos,
+        privateVideos: viewer.privateVideosPlans,
+        albumCost: albumCost,
       })
     })
     .catch((err) => {
