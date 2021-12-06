@@ -6,6 +6,11 @@ const socketEvents = require("../socketEvents")
 module.exports = function onDisconnectStreamEndHandler(client) {
   const duration = (Date.now() - client.createdAt) / 60000
 
+  io.getIO().emit(socketEvents.deleteStreamRoom, {
+    modelId: client.data.relatedUserId,
+    liveNow: io.decreaseLiveCount(),
+  })
+
   Promise.all([
     Stream.updateOne(
       {
@@ -30,12 +35,6 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         /* model and stream updated */
         /* end the stream of every user, as the model has disconnected */
         const publicRoom = `${client.streamId}-public`
-
-        /* should only send this to the users who are in home page & this models stream */
-        io.getIO().emit(socketEvents.deleteStreamRoom, {
-          modelId: client.data.relatedUserId,
-          liveNow: io.decreaseLiveCount(),
-        })
 
         /* destroy the stream chat rooms, 
            adding timeout so that isModelOffline ste can be set the later
@@ -63,10 +62,6 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         err.message
       )
       const publicRoom = `${client.streamId.toString()}-public`
-      io.getIO().emit(socketEvents.deleteStreamRoom, {
-        modelId: client.data.relatedUserId,
-        liveNow: io.decreaseLiveCount(),
-      })
 
       /* see reason above to find the setTimeout reason */
       setTimeout(() => {
