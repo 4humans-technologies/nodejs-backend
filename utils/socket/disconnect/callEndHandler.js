@@ -9,7 +9,6 @@ const io = require("../../../socket")
 module.exports = function (client) {
   /* if anyone viewer or model leaves the call also means model has is not live she's offline */
   /* for updating the number in the header */
-  io.getIO().emit(chatEvents.call_end, io.decreaseLiveCount())
 
   if (client.userType === "Model") {
     /* ==== disconnection from model side ==== */
@@ -48,7 +47,11 @@ module.exports = function (client) {
           /* no doc modified, model has disconnected from call faster, return */
           return Promise.reject("Viewer ended/disconnected before you.")
         } else if (result.n === 1) {
-          /* you have locked the db model cannot over-rite */
+          /* you have locked the db model cannot over-write */
+          io.getIO().emit(
+            chatEvents.call_end,
+            io.decreaseLiveCount(client.data.relatedUserId)
+          )
           const query =
             callType === "audioCall"
               ? Promise.all([
@@ -292,11 +295,14 @@ module.exports = function (client) {
         if (result.n === 0) {
           /* no doc modified, model has ended tha call faster, return */
           return Promise.reject(
-            "Model ended/disconnected before" +
-              "model ended call before you, please wait while we are processing the transaction!"
+            "Model ended/disconnected before model ended call before you, please wait while we are processing the transaction!"
           )
         } else if (result.n > 0) {
-          /* you have locked the db model cannot over-rite */
+          /* you have locked the db viewer cannot over-write */
+          io.getIO().emit(
+            chatEvents.call_end,
+            io.decreaseLiveCount(client.data.relatedUserId)
+          )
           const query =
             client.callType === "audioCall"
               ? Promise.all([

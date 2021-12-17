@@ -50,6 +50,7 @@ const streamRouter = require("./routes/stream/streamRoutes")
 const privateChatsRouter = require("./routes/stream/privateChatsRoute")
 const privateContentRouter = require("./routes/stream/PrivateContent")
 const modelProfileRouter = require("./routes/profile/modelProfile")
+const viewerProfileRouter = require("./routes/profile/viewerProfile")
 const couponRouter = require("./routes/management/coupon")
 
 // 🔴 ADMIN ROUTES 🔴
@@ -78,7 +79,11 @@ app.use((req, res, next) => {
     "Access-Control-Allow-Methods",
     "PUT, GET, POST, DELETE, OPTIONS"
   )
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization")
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type,Authorization,Content-Range"
+  )
+  res.setHeader("Access-Control-Expose-Headers", "Content-Range")
   next()
 })
 
@@ -100,6 +105,7 @@ app.use(
   privateContentRouter
 ) /* private album buy/sell */
 app.use("/api/website/profile", modelProfileRouter)
+app.use("/api/website/profile/viewer", viewerProfileRouter)
 app.use("/api/website/coupon", couponRouter)
 app.use("/api/website/verification", verificationRouter)
 
@@ -183,7 +189,7 @@ app.use((err, req, res, next) => {
 })
 
 // MONGODB CONNECTION SETUP--->
-// mongoose.set("debug",true)
+mongoose.set("debug", true)
 mongoose
   .connect(CONNECT_URL, {
     useNewUrlParser: true,

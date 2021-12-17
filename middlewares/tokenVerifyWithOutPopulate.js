@@ -1,8 +1,7 @@
 const jwt = require("jsonwebtoken")
-const User = require("../models/User")
 
 module.exports = (req, _res, next) => {
-  if (!req.get("Authorization")) {
+  if (!req.get("Authorization") && !req.query?.["jwtToken"]) {
     const err = new Error("No Token Found In The Header")
     err.statusCode = 403
     throw err
@@ -13,7 +12,7 @@ module.exports = (req, _res, next) => {
      * it is required to have token in the request
      */
   }
-  const token = req.get("Authorization").split(" ")[1]
+  const token = req.get("Authorization").split(" ")[1] || req.query["jwtToken"]
   if (!token) {
     /**
      * wrong token is a clear violation, raise error

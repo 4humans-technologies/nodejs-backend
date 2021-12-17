@@ -8,7 +8,9 @@ const Viewer = require("../../models/userTypes/Viewer")
 const io = require("../../socket")
 const socketEvents = require("../../utils/socket/socketEvents")
 const { getDatabase } = require("firebase-admin/database")
-const realtimeDb = getDatabase()
+const Wallet = require("../../models/globals/wallet")
+const AudioCall = require("../../models/globals/audioCall")
+const VideoCall = require("../../models/globals/videoCall")
 
 exports.createStreamAndToken = (req, res, next) => {
   // create stream and generate token for model
@@ -26,7 +28,7 @@ exports.createStreamAndToken = (req, res, next) => {
           io
             .getIO()
             .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-        )[0]
+        )?.[0]
       )
   }
 
@@ -62,7 +64,6 @@ exports.createStreamAndToken = (req, res, next) => {
     .save()
     .then((stream) => {
       theStream = stream
-      // 🤐🤐 ➡➡ will keep channel as modelID
       const genResult = rtcTokenGenerator(
         "model",
         req.user.relatedUser._id.toString(),
@@ -70,12 +71,12 @@ exports.createStreamAndToken = (req, res, next) => {
       )
       privilegeExpiredTs = genResult.privilegeExpiredTs
       rtcToken = genResult.rtcToken
-      const publicChats = realtimeDb
+      const publicChats = getDatabase()
         .ref("publicChats")
         .child(theStream._id.toString())
       return publicChats.set({
-        model: { ...req.user },
-        chats: ["hello"],
+        model: req.user.relatedUser._id.toString(),
+        chats: [],
       })
     })
     .then(() => {
@@ -101,23 +102,23 @@ exports.createStreamAndToken = (req, res, next) => {
       /* 👉👉 return data so as to compose the complete card on the main page */
 
       const streamRoomPublic = `${theStream._id}-public`
-
       try {
         clientSocket.isStreaming = true
         clientSocket.streamId = theStream._id.toString()
         clientSocket.createdAt = Date.now()
         clientSocket.join(streamRoomPublic)
+        /* redundency just to make sure */
+        clientSocket.join(`${req.user.relatedUser._id.toString()}-private`)
       } catch (err) {
         /* try catch just for safety */
       }
-
-      /* 👇👇 broadcast to all who are not in any room */
-      // io.getIO().except(io.getIO().sockets.adapter.rooms)
       io.getIO().emit(socketEvents.streamCreated, {
         modelId: req.user.relatedUser._id,
         profileImage: model.profileImage,
-        // streamId: theStream._id.toString(),
-        liveNow: io.increaseLiveCount(),
+        liveNow: io.increaseLiveCount({
+          _id: req.user.relatedUser._id.toString(),
+          username: req.user.username,
+        }),
       })
 
       return res.status(200).json({
@@ -129,8 +130,8 @@ exports.createStreamAndToken = (req, res, next) => {
     })
     .catch((err) => {
       Stream.deleteOne({ _id: theStream._id })
-        .then((_) => next(err))
         .catch(() => next(err))
+        .finally(() => next(err))
     })
 }
 
@@ -155,7 +156,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
 
   let theModel
   let selectString =
-    "currentStream isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
+    "currentStream numberOfFollowers minCallDuration callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
   Model.findOne({
     _id: modelId,
   })
@@ -391,7 +392,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
   let socketUpdated
   Model.findById(modelId)
     .select(
-      "currentStream isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
+      "currentStream numberOfFollowers minCallDuration callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
     )
     .populate({
       path: "tags",
@@ -600,51 +601,164 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
 
 exports.renewRtcTokenGlobal = (req, res, next) => {
   // renew token for anybody be model or viewer or unAuthed viewer
-  controllerErrorCollector(req)
-  const { channel, relatedUserId } = req.body
-  if (!req.user) {
-    UnAuthedViewer.findOne({ _id: relatedUserId })
-      .then((viewer) => {
-        if (!viewer) {
-          const err = new Error("Not Authorized")
-          err.statusCode = 401
-          throw err
+  // controllerErrorCollector(req)
+
+  const { channel, unAuthedUserId, onCall } = req.query
+
+  /**
+   * should ABSOLUTELY check is this channel exists
+   */
+  if (onCall && req?.user?.userType === "Model") {
+    const callQuery =
+      req.query.callType === "audioCall"
+        ? AudioCall.findById({
+            _id: req.query.callId,
+          }).lean()
+        : VideoCall.updateOne({
+            _id: req.query.callId,
+          }).lean()
+
+    let canRenew = false
+    let privilegeExpiredTs, rtcToken
+    Promise.all([
+      callQuery,
+      Wallet.findOne({
+        relatedUser: req.query.viewerId,
+      }),
+      Wallet.findOne({
+        relatedUser: req.user.relatedUser._id,
+      }),
+    ])
+      .then(([callDoc, wallet, modelWallet]) => {
+        if (
+          callDoc.status !== "ended" &&
+          callDoc.viewer === req.query.viewerId
+        ) {
+          const amountLeft = wallet.currentAmount - callDoc.chargesPermin
+          if (amountLeft > callDoc.chargesPermin / 2) {
+            canRenew = true
+            wallet.deductAmount(callDoc.chargesPermin)
+            modelWallet.addAmount(
+              callDoc.chargesPermin * (callDoc.sharePercent / 100)
+            )
+            const a = rtcTokenGenerator(
+              "model",
+              req.user.relatedUser._id,
+              req.user.relatedUser._id,
+              60,
+              "sec"
+            )
+            privilegeExpiredTs = a.privilegeExpiredTs
+            rtcToken = a.rtcToken
+          } else {
+            /**
+             * calculate in secs amount of time the user can call, deduct all the money
+             * and generate token for all the amount
+             *
+             */
+            modelWallet.addAmount(
+              wallet.currentAmount * (callDoc.sharePercent / 100)
+            )
+            wallet.currentAmount = 0
+            const a = rtcTokenGenerator(
+              "model",
+              req.user.relatedUser._id,
+              req.user.relatedUser._id,
+              (amountLeft * 60) / callDoc.chargesPermin
+            )
+            privilegeExpiredTs = a.privilegeExpiredTs
+            rtcToken = a.rtcToken
+          }
+
+          return Promise.all([wallet.save(), modelWallet.save()])
+        } else {
+          const error = new Error("call is already ended or caller is invalid")
+          error.statusCode = 422
+          throw error
         }
-        const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-          "unAuthed",
-          relatedUserId,
-          channel
-        )
+      })
+      .then(() => {
         return res.status(200).json({
-          actionStatus: "success",
-          rtcToken: rtcToken,
-          privilegeExpiredTs: privilegeExpiredTs,
+          canRenew,
+          privilegeExpiredTs,
+          rtcToken,
         })
       })
       .catch((err) => next(err))
+    /**
+     * if onCall get the viewers wallet
+     */
+  } else {
+    /*  */
   }
+  Model.findById(channel)
+    .select("isStreaming onCall")
+    .lean()
+    .then((model) => {
+      /**
+       * if unAuthedUser
+       */
+      if (!req.user) {
+        if (model.isStreaming && !model.onCall) {
+          /**
+           * un-authed user can not ask token for streaming model
+           */
+          const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+            "unAuthed",
+            unAuthedUserId,
+            channel
+          )
 
-  if (req.user.userType === "Viewer") {
-    const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-      "viewer",
-      relatedUserId,
-      channel
-    )
-    return res.status(200).json({
-      actionStatus: "success",
-      rtcToken: rtcToken,
-      privilegeExpiredTs: privilegeExpiredTs,
+          return res
+            .status(200)
+            .json({
+              actionStatus: "success",
+              rtcToken: rtcToken,
+              privilegeExpiredTs: privilegeExpiredTs,
+            })
+            .catch((err) => next(err))
+        } else {
+          throw Error("Model is not streaming and you cannot join call!")
+        }
+      } else {
+        /**
+         * if authed user
+         */
+        if (model.isStreaming || model.onCall) {
+          /**
+           * onCall is a special case not if model is onCall
+           * not anybody can ask for token, ONLY the CALLER should be able to get the token 🔴
+           */
+          if (req.user.userType === "Viewer") {
+            const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+              "viewer",
+              req.user.relatedUser._id,
+              channel
+            )
+            return res.status(200).json({
+              actionStatus: "success",
+              rtcToken: rtcToken,
+              privilegeExpiredTs: privilegeExpiredTs,
+            })
+          } else if (req.user.userType === "Model") {
+            const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+              "model",
+              req.user.relatedUser._id,
+              channel
+            )
+            return res.status(200).json({
+              actionStatus: "success",
+              rtcToken: rtcToken,
+              privilegeExpiredTs: privilegeExpiredTs,
+            })
+          }
+        } else {
+          /**
+           * if model is just not available
+           */
+          throw Error("Suspicious act of joining a restricted channel")
+        }
+      }
     })
-  } else if (req.user.userType === "Model") {
-    const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-      "model",
-      relatedUserId,
-      channel
-    )
-    return res.status(200).json({
-      actionStatus: "success",
-      rtcToken: rtcToken,
-      privilegeExpiredTs: privilegeExpiredTs,
-    })
-  }
+    .catch((err) => next(err))
 }

@@ -1,6 +1,7 @@
 const AudioCall = require("../../models/globals/audioCall")
 const Stream = require("../../models/globals/Stream")
-const TokenGiftHistory = require("../../models/globals/tokenGiftHistory")
+const CoinsSpendHistory = require("../../models/globals/coinsSpendHistory")
+const coinsUses = require("../../utils/coinsUseCaseStrings")
 const VideoCall = require("../../models/globals/videoCall")
 const Wallet = require("../../models/globals/wallet")
 const Model = require("../../models/userTypes/Model")
@@ -11,145 +12,60 @@ const PrivateChatPlan = require("../../models/management/privateChatPlan")
 const chatEvents = require("../../utils/socket/chat/chatEvents")
 const controllerErrorCollector = require("../../utils/controllerErrorCollector")
 const { getDatabase } = require("firebase-admin/database")
-const realtimeDb = getDatabase()
-
-/* 
-    👉👉 function to handle streaming start is in tokenBuilderController
-*/
-
-exports.withOutTokenStreamStart = (req, res, next) => {
-  // create stream and generate token for model
-  // this end point will be called by the model
-
-  /* 🤔🤔🧲 any qouta for how many times a model can stream in a day */
-
-  const { socketId } = req.query
-
-  // check if the model is approved or not,
-  // by making a new model approval checker
-
-  /* 🔺🔺 commented for presentation only 🔻🔻 */
-  /* if (req.user.relatedUser.isStreaming || req.user.relatedUser.onCall) {
-    return res.status(400).json({
-      actionStatus: "failed",
-      message:
-        "You are streaming or taking call, already from another account, streaming from two devices is not currently supported!",
-    })
-  } */
-
-  let theStream
-  Stream({
-    model: req.user.relatedUser._id,
-    createdAt: new Date(),
-  })
-    .save()
-    .then((stream) => {
-      theStream = stream
-      const publicChats = realtimeDb
-        .ref("publicChats")
-        .child(theStream._id.toString())
-      return publicChats.set({
-        model: { ...req.user },
-        chats: ["hello"],
-      })
-    })
-    .then(() => {
-      return Model.findOneAndUpdate(
-        { _id: req.user.relatedUser._id },
-        {
-          isStreaming: true,
-          currentStream: theStream._id,
-          /* 👇👇 how to ensure same theStream is not added again */
-          $push: { streams: theStream },
-        }
-      )
-        .writeConcern({
-          w: 3,
-          j: true,
-        })
-        .select("profileImage")
-        .lean()
-    })
-    .then((model) => {
-      // io.join(theStream._id)
-      // everybody will get the notification of new stream
-      /* 👉👉 return data so as to compose the complete card on the main page */
-
-      const streamRoomPublic = `${theStream._id}-public`
-      let clientSocket = io.getIO().sockets.sockets.get(socketId)
-      /* save data on client about the stream */
-      if (!clientSocket) {
-        clientSocket = io
-          .getIO()
-          .sockets.sockets.get(
-            Array.from(
-              io
-                .getIO()
-                .sockets.adapter.rooms.get(
-                  `${req.user.relatedUser._id}-private`
-                )
-            )[0]
-          )
-      }
-      clientSocket.isStreaming = true
-      clientSocket.streamId = theStream._id.toString()
-      clientSocket.createdAt = Date.now()
-      clientSocket.join(streamRoomPublic)
-
-      /* 👇👇 broadcast to all who are not in any room */
-      // io.getIO().except(io.getIO().sockets.adapter.rooms)
-
-      io.getIO().emit(socketEvents.streamCreated, {
-        modelId: req.user.relatedUser._id,
-        profileImage: model.profileImage,
-        liveNow: io.increaseLiveCount(),
-      })
-      return res.status(200).json({
-        actionStatus: "success",
-        streamId: theStream._id,
-      })
-    })
-    .catch((err) => {
-      Stream.deleteOne({ _id: theStream._id })
-        .then((_) => next(err))
-        .catch((_error) => next(err))
-    })
-}
+const Notifier = require("../../utils/Events/Notification")
+const rtcTokenGenerator = require("../../utils/rtcTokenGenerator")
 
 exports.handleEndStream = (req, res, next) => {
   // this will be called by the model only
 
-  let { streamId, reason } = req.body
+  let { streamId } = req.body
   const { socketId } = req.query
-  if (!reason) {
-    reason = "Error"
-  }
 
   // will send socket event to trigger leave agora channel on client
   // anyway they have to renew token hence no misuse for longer period
 
-  Stream.findById(streamId)
-    .then((stream) => {
-      const duration =
-        (new Date().getTime() - new Date(stream.createdAt).getTime()) /
-        60000 /* in minutes */
-      stream.endReason = reason
-      stream.status = "ended"
-      stream.duration = duration
-      return Promise.all([
-        stream.save(),
-        Model.updateOne(
-          { _id: req.user.relatedUser._id },
-          {
-            isStreaming: false,
-            currentStream: null,
-            onCall: false,
-          }
-        ),
-      ])
+  Promise.all([
+    Model.findOneAndUpdate(
+      { _id: req.user.relatedUser._id },
+      {
+        isStreaming: false,
+        currentStream: null,
+        onCall: false,
+      }
+    ),
+    Stream.findById(streamId),
+  ])
+    .then(([model, stream]) => {
+      if (
+        stream.status !== "ended" &&
+        model.isStreaming &&
+        model.currentStream
+      ) {
+        io.getIO().emit(socketEvents.deleteStreamRoom, {
+          modelId: req.user.relatedUser._id,
+          liveNow: io.decreaseLiveCount(req.user.relatedUser._id.toString()),
+        })
+        const duration =
+          (new Date().getTime() - new Date(stream.createdAt).getTime()) /
+          60000 /* in minutes */
+        stream.endReason = "Manual"
+        stream.status = "ended"
+        stream.meta.set("duration", duration)
+
+        /* emit to all about delete stream room */
+        return Promise.all([
+          stream.save(),
+          getDatabase().ref("publicChats").child(streamId).remove(),
+        ])
+      } else {
+        const error = new Error(
+          "Stream is already ended and models was not streaming"
+        )
+        error.statusCode = 422
+        throw error
+      }
     })
-    .then((values) => {
-      const stream = values[0]
+    .then(() => {
       let clientSocket = io.getIO().sockets.sockets.get(socketId)
       if (!clientSocket) {
         clientSocket = io
@@ -164,18 +80,13 @@ exports.handleEndStream = (req, res, next) => {
             )[0]
           )
       }
-      /* emit to all about delete stream room */
-      io.getIO().emit(socketEvents.deleteStreamRoom, {
-        modelId: req.user.relatedUser._id,
-        liveNow: io.decreaseLiveCount(),
-      })
-
-      /* destroy the stream chat rooms, heave to leave rooms on server as on client side it will overwhelm the client */
-      io.getIO().in(`${stream._id}-public`).socketsLeave(`${stream._id}-public`)
 
       /* remove previous streams attributes from socket client */
       clientSocket.isStreaming = false
       clientSocket.streamId = null
+
+      /* destroy the stream chat rooms, heave to leave rooms on server as on client side it will overwhelm the client */
+      io.getIO().in(`${streamId}-public`).socketsLeave(`${streamId}-public`)
 
       return res.status(200).json({
         actionStatus: "success",
@@ -183,7 +94,16 @@ exports.handleEndStream = (req, res, next) => {
           "stream ended successfully, If you have pending call, then please call the customer fast 👍👍🤘",
       })
     })
-    .catch((err) => next(err))
+    .catch((err) => {
+      next(err)
+      io.getIO().emit(socketEvents.deleteStreamRoom, {
+        modelId: req.user.relatedUser._id,
+        liveNow: io.getLiveCount(),
+      })
+    })
+    .finally(() => {
+      /* to execute absolute necassary code */
+    })
 }
 
 exports.handleViewerCallRequest = (req, res, next) => {
@@ -264,13 +184,13 @@ exports.handleViewerCallRequest = (req, res, next) => {
         } else {
           /* if not streaming */
           const error = new Error("The model is not currently streaming!")
-          error.statusCode = 401
+          error.statusCode = 400
           throw error
         }
       } else {
         /* in sufficient balance */
         const error = new Error(
-          `You do not have sufficient balance in your wallet to request ${callType}, ₹ ${minBalance} is required, you have ₹ ${wallet.currentAmount}`
+          `You do not have sufficient balance in your wallet to request ${callType}, ${minBalance} coins are required, you have   ${wallet.currentAmount} coins only`
         )
         error.statusCode = 400
         throw error
@@ -284,8 +204,8 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
   // this is just for updating call doc and emitting event
 
   if (!req.user.relatedUser.isStreaming) {
-    return res.status(400).json({
-      actionStatus: "success",
+    return res.status(200).json({
+      actionStatus: "failed",
       notStreaming: true,
       message: "You are not currently streaming",
     })
@@ -298,7 +218,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       io
         .getIO()
         .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-    )[0]
+    )?.[0]
   }
 
   /* 
@@ -413,7 +333,6 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       if (result[1].n !== 1) {
         console.error("Model status not updated in DB while accepting call.")
       }
-
       let socketDataUpdated = false
       try {
         let clientSocket = io.getIO().sockets.sockets.get(socketId)
@@ -454,23 +373,48 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         .except(`${req.user.relatedUser._id}-private`)
         .socketsLeave(`${streamId}-public`)
 
+      /**
+       * for viewer
+       */
+      const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+        "model",
+        viewerId.toString(),
+        req.user.relatedUser._id.toString(),
+        +callDoc.minCallDuration,
+        "min"
+      )
+
       /* EMIT TO THE CALLER VIEWER */
       callingViewerSocketData.username = viewer.rootUser.username
       io.getIO()
         .in(`${viewerId}-private`)
         .emit(chatEvents.model_call_request_response_received, {
           ...callingViewerSocketData,
-          sharePercent: +req.user.relatedUser.sharePercent,
+          sharePercent: req.user.relatedUser.sharePercent,
+          privilegeExpiredTs: privilegeExpiredTs,
+          rtcToken: rtcToken,
         })
+
+      /**
+       * for the model
+       */
+      const modelToken = rtcTokenGenerator(
+        "model",
+        req.user.relatedUser._id.toString(),
+        req.user.relatedUser._id.toString(),
+        +callDoc.minCallDuration,
+        "min"
+      )
 
       return res.status(200).json({
         actionStatus: "success",
         viewerDoc: viewer,
         callDoc: callDoc,
         callStartTs: callStartTimeStamp /* not ISO, its in milliseconds */,
-        viewerMaxCallDurationSeconds: viewerMaxCallDurationSeconds - 5000,
         socketDataUpdated: socketDataUpdated,
         sharePercent: +req.user.relatedUser.sharePercent,
+        rtcToken: modelToken.rtcToken,
+        privilegeExpiredTs: modelToken.privilegeExpiredTs,
       })
     })
     .catch((err) => next(err))
@@ -521,7 +465,10 @@ exports.handleEndCallFromViewer = (req, res, next) => {
       }
 
       /* decrease model count */
-      io.getIO().emit(chatEvents.call_end, io.decreaseLiveCount())
+      io.getIO().emit(
+        chatEvents.call_end,
+        io.decreaseLiveCount(req.user.relatedUser._id.toString())
+      )
       if (result.n === 0) {
         /* no doc modified, model has ended tha call faster, return */
         res.status(200).json({
@@ -573,7 +520,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
           ) /* in minutes */
           amountToDeduct = billableCallDuration * theCall.chargePerMin
         }
-        viewerWallet.deductAmount(amountToDeduct)
+        viewerWallet.deductAmount(amountToDeduct, 1)
 
         return Promise.all([
           viewerWallet.save(),
@@ -698,6 +645,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
      NOTE: this can be zero (0) if the call disconnects before the min call duration
      as we have already deducted the min call duration amount from the viewer
   */
+
   let amountToDeduct
   let amountAdded /* amount added in the models wallet */
 
@@ -732,7 +680,10 @@ exports.handleEndCallFromModel = (req, res, next) => {
         )?.[0]
       }
       /* emit this event for updating live count on the client side */
-      io.getIO().emit(chatEvents.call_end, io.decreaseLiveCount())
+      io.getIO().emit(
+        chatEvents.call_end,
+        io.decreaseLiveCount(req.user.relatedUser._id.toString())
+      )
       if (result.n === 0) {
         /* no doc modified, viewer has ended tha call faster, return */
         res.status(200).json({
@@ -899,7 +850,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
       /* assign the latest values to theCall */
       theCall = values[1]
       viewerWallet = values[2]
-      viewerWallet.deductAmount(amountToDeduct)
+      viewerWallet.deductAmount(amountToDeduct, 1)
       return viewerWallet.save()
     })
     .then(() => {
@@ -1140,55 +1091,69 @@ exports.viewerFollowModel = (req, res, next) => {
   /* check if the model is approved and the user is logged in*/
 
   const { modelId } = req.body
-  let alreadyFollowing = false
 
-  if (req.user.userType !== "Model") {
+  if (req.user.userType !== "Viewer") {
     return res.status(200).json({
       actionStatus: "failed",
       message: "Only viewers can follow the models!",
     })
   }
 
-  Viewer.updateOne(
+  let alreadyFollowing = false
+  let viewerData = {}
+  Viewer.findOneAndUpdate(
     {
-      _id: req.relatedUser._id,
+      _id: req.user.relatedUser._id,
     },
     {
       $addToSet: { following: modelId },
     }
   )
-    .then((result) => {
-      if (result.n > 0) {
-        /* was not already following */
-        /* add following */
+    .lean()
+    .select("name profileImage following")
+    .then((viewer) => {
+      if (!viewer.following.includes(req.user.relatedUser._id)) {
+        /* was not already following, Follow the model */
+        viewerData = {
+          name: viewer.name,
+          _id: viewer._id,
+          profileImage: viewer.profileImage,
+        }
         return Promise.all([
-          Model.updateOne(
+          Model.findOneAndUpdate(
             {
               _id: modelId,
             },
             {
-              $addToSet: { following: req.user.relatedUser._id },
               $inc: { numberOfFollowers: 1 },
+            },
+            {
+              new: true,
             }
-          ),
+          )
+            .lean()
+            .select("numberOfFollowers"),
         ])
       } else {
-        /* was already in array */
-        /* unfollow model */
+        /* was already in array, unFollow model */
         alreadyFollowing = true
         return Promise.all([
-          Model.updateOne(
+          Model.findOneAndUpdate(
             {
               _id: modelId,
             },
             {
-              $pull: { following: req.user.relatedUser._id },
               $inc: { numberOfFollowers: -1 },
+            },
+            {
+              new: true,
             }
-          ),
+          )
+            .lean()
+            .select("numberOfFollowers"),
           Viewer.updateOne(
             {
-              _id: req.relatedUser._id,
+              _id: req.user.relatedUser._id,
             },
             {
               $pull: { following: modelId },
@@ -1199,16 +1164,19 @@ exports.viewerFollowModel = (req, res, next) => {
     })
     .then((result) => {
       if (alreadyFollowing) {
-        res.status(200).json({
+        return res.status(200).json({
           actionStatus: "success",
-          message: "You are not following this model from now.",
-          action: "un-follow",
+          message: "You are now not following this model.",
+          action: "un-followed",
+          newCount: result[0].numberOfFollowers,
         })
       } else {
-        res.status(200).json({
+        Notifier.newModelNotification("viewer-follow", modelId, viewerData)
+        return res.status(200).json({
           actionStatus: "success",
           message: "You are now following this model.",
           action: "follow",
+          newCount: result[0].numberOfFollowers,
         })
       }
     })
@@ -1221,10 +1189,10 @@ exports.viewerFollowModel = (req, res, next) => {
 }
 
 exports.unFollowModel = (req, res, next) => {
-  if (req.user.userType !== "Model") {
+  if (req.user.userType !== "Viewer") {
     return res.status(200).json({
       actionStatus: "failed",
-      message: "Only viewers can un-follow the models!",
+      message: "Only viewers can Un-follow the models!",
     })
   }
 }
@@ -1233,7 +1201,6 @@ exports.processTokenGift = (req, res, next) => {
   /* handle the gifting of token by the user to model */
 
   const { modelId, tokenAmount, socketData } = req.body
-  const { socketId } = req.query
 
   let sharePercent
   let viewerNewWalletAmount
@@ -1267,14 +1234,19 @@ exports.processTokenGift = (req, res, next) => {
       if (!sharePercent) {
         sharePercent = 60
       }
-      return Wallet.updateOne(
-        { relatedUser: modelId },
-        {
-          $inc: { currentAmount: tokenAmount * (sharePercent / 100) },
-        }
-      )
+      return Promise.all([
+        Wallet.updateOne(
+          { relatedUser: modelId },
+          {
+            $inc: { currentAmount: tokenAmount * (sharePercent / 100) },
+          }
+        ),
+        Viewer.findById(req.user.relatedUser._id)
+          .lean()
+          .select("name profileImage"),
+      ])
     })
-    .then(() => {
+    .then(([_r, viewer]) => {
       io.getIO()
         .in(`${modelId}-private`)
         .emit("model-wallet-updated", {
@@ -1282,17 +1254,26 @@ exports.processTokenGift = (req, res, next) => {
           operation: "add",
           amount: tokenAmount * (sharePercent / 100),
         })
-      return TokenGiftHistory({
+      if (streamId) {
+        /* save a notification */
+        Notifier.newModelNotification("viewer-coins-gift", modelId, {
+          viewer: viewer,
+          modelGot: tokenAmount * (sharePercent / 100),
+          amount: tokenAmount,
+        })
+      }
+      return CoinsSpendHistory({
         tokenAmount: tokenAmount,
         forModel: modelId,
-        by: req.user.relatedUser,
+        by: req.user.relatedUser._id,
+        givenFor: coinsUses.ON_STREAM_COINS,
       }).save()
     })
     .then(() => {
       /* save data in firebase */
       if (streamId) {
         const path = `publicChats/${streamId}`
-        return realtimeDb.ref(path).child("chats").push(socketData)
+        return getDatabase().ref(path).child("chats").push(socketData)
       } else {
         return Promise.resolve("Model not streaming")
       }
@@ -1319,44 +1300,64 @@ exports.processTokenGift = (req, res, next) => {
 
 exports.processTipMenuRequest = (req, res, next) => {
   controllerErrorCollector(req)
-  const { activity, modelId, socketData, room } = req.body
+  let { activity, modelId, socketData, room } = req.body
 
   let sharePercent
   let viewerNewWalletAmount
   let streamId
-  Wallet.findOne({ rootUser: req.user._id })
-    .then((wallet) => {
+  Promise.all([
+    Wallet.findOne({ rootUser: req.user._id }),
+    Model.findById(modelId)
+      .select("sharePercent currentStream tipMenuActions")
+      .lean(),
+  ])
+    .then(([wallet, model]) => {
+      activity = model.tipMenuActions.actions.find(
+        (action) => action._id.toString() === activity._id
+      )
+      if (!activity) {
+        throw new Error("Invalid Activity!")
+      }
       if (activity.price <= wallet.currentAmount) {
         const amountLeft = wallet.currentAmount - activity.price
         viewerNewWalletAmount = amountLeft
         wallet.currentAmount = amountLeft
-        return wallet.save()
+
+        sharePercent = model.sharePercent
+        streamId = model.currentStream?._id
+
+        const promiseArray = [
+          Wallet.updateOne(
+            { relatedUser: modelId },
+            {
+              $inc: { currentAmount: activity.price * (sharePercent / 100) },
+            }
+          ),
+          CoinsSpendHistory({
+            tokenAmount: activity.price,
+            forModel: modelId,
+            by: req.user.relatedUser,
+            givenFor: coinsUses.ON_STREAM_ACTIVITY,
+          }).save(),
+          wallet.save(),
+        ]
+
+        if (streamId) {
+          /* save data in firebase */
+          const path = `publicChats/${streamId}`
+          promiseArray.push(
+            getDatabase().ref(path).child("chats").push(socketData)
+          )
+        }
       } else {
         const error = new Error(
-          `You dont have sufficient amount of coins to gift the model, ${activity.price} is required you have only ${wallet.currentAmount}`
+          `You dont have sufficient amount of coins to gift the model, ${activity.price} coins are required you have only ${wallet.currentAmount} coins`
         )
         error.statusCode = 400
         throw error
       }
     })
-    .then((wallet) => {
-      /* transfer the amount to model*/
-      return Model.findById(modelId).select("sharePercent currentStream").lean()
-    })
-    .then((model) => {
-      sharePercent = model?.sharePercent
-      streamId = model?.currentStream?._id
-      if (!sharePercent) {
-        sharePercent = 60
-      }
-      return Wallet.updateOne(
-        { relatedUser: modelId },
-        {
-          $inc: { currentAmount: activity.price * (sharePercent / 100) },
-        }
-      )
-    })
-    .then(() => {
+    .then((result) => {
       io.getIO()
         .in(`${modelId}-private`)
         .emit("model-wallet-updated", {
@@ -1364,24 +1365,11 @@ exports.processTipMenuRequest = (req, res, next) => {
           operation: "add",
           amount: activity.price * (sharePercent / 100),
         })
-      return TokenGiftHistory({
-        tokenAmount: activity.price,
-        forModel: modelId,
-        by: req.user.relatedUser,
-      }).save()
-    })
-    .then(() => {
-      if (streamId) {
-        /* save data in firebase */
-        const path = `publicChats/${streamId}`
-        return realtimeDb.ref(path).child("chats").push(socketData)
-      }
-    })
-    .then(() => {
-      // const clientSocket = io.getIO().sockets.sockets.get(socketId)
+
       io.getIO()
         .in(room)
         .emit(chatEvents.viewer_super_message_public_received, socketData)
+
       return res.status(200).json({
         actionStatus: "success",
         viewerNewWalletAmount: viewerNewWalletAmount,
@@ -1504,7 +1492,7 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
   /* join models current stream even when he quits and restarts */
   /* NOTE: at this sage the viewer already has the rtcToken */
 
-  const { modelId } = req.body
+  const { modelId, getNewToken } = req.body
   let { socketId } = req.query
 
   if (!socketId) {
@@ -1558,6 +1546,21 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
         socketUpdated = false
       }
 
+      if (getNewToken) {
+        const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+          "viewer",
+          req.user.relatedUser._id,
+          modelId
+        )
+        return res.status(200).json({
+          actionStatus: "success",
+          isChatPlanActive: req.user.relatedUser.isChatPlanActive,
+          streamId: model.currentStream._id,
+          socketUpdated: socketUpdated,
+          privilegeExpiredTs: privilegeExpiredTs,
+          rtcToken: rtcToken,
+        })
+      }
       return res.status(200).json({
         actionStatus: "success",
         isChatPlanActive: req.user.relatedUser.isChatPlanActive,
@@ -1578,7 +1581,7 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
 }
 
 exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
-  const { modelId } = req.body
+  const { modelId, unAuthedUserId, getNewToken } = req.body
   const { socketId } = req.query
 
   Model.findById(modelId)
@@ -1587,7 +1590,7 @@ exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
     .then((model) => {
       if (!model) {
         const err = new Error("Invalid model id, model does not exists!")
-        err.statusCode = 400
+        err.statusCode = 422
         throw err
       }
       if (model.isStreaming) {
@@ -1608,7 +1611,20 @@ exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
         } catch (err) {
           socketUpdated = false
         }
-
+        if (getNewToken) {
+          const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+            "unAuthed",
+            unAuthedUserId,
+            modelId
+          )
+          return res.status(200).json({
+            actionStatus: "success",
+            streamId: model.currentStream._id,
+            socketUpdated: socketUpdated,
+            privilegeExpiredTs: privilegeExpiredTs,
+            rtcToken: rtcToken,
+          })
+        }
         return res.status(200).json({
           actionStatus: "success",
           streamId: model.currentStream._id,

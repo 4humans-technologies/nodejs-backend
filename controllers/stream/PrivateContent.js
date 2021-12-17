@@ -6,11 +6,10 @@ const Viewer = require("../../models/userTypes/Viewer")
 const Wallet = require("../../models/globals/wallet")
 const ImageAlbum = require("../../models/globals/ImageAlbum")
 const VideosAlbum = require("../../models/globals/VideosAlbum")
+const Notifier = require("../../utils/Events/Notification")
 
 exports.buyPrivateImageAlbum = (req, res, next) => {
-  /*  */
   const { modelId, albumId } = req.body
-
   let modelGot
   let albumCost
   Promise.all([
@@ -19,9 +18,11 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
     })
       .lean()
       .select("privateImages sharePercent"),
-    Viewer.findById(req.user.relatedUser._id).select("privateImagesPlans"),
+    Viewer.findById(req.user.relatedUser._id).select(
+      "privateImagesPlans name profileImage"
+    ),
     Wallet.findOne({ rootUser: req.user._id }),
-    ImageAlbum.findById(albumId).select("price purchases"),
+    ImageAlbum.findById(albumId).select("name price purchases"),
   ])
     .then(([model, viewer, wallet, imageAlbum]) => {
       if (
@@ -55,8 +56,10 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
             }
             albumCost = imageAlbum.price
             modelGot = imageAlbum.price * (model.sharePercent / 100)
+            imageAlbum.purchases = imageAlbum.purchases + 1
             return Promise.all([
               viewer.save(),
+              imageAlbum.save(),
               Wallet.updateOne(
                 {
                   relatedUser: modelId,
@@ -92,7 +95,20 @@ exports.buyPrivateImageAlbum = (req, res, next) => {
         throw error
       }
     })
-    .then((viewer) => {
+    .then(([viewer, imageAlbum]) => {
+      Notifier.newModelNotification("image-album-purchase", modelId, {
+        viewer: {
+          name: viewer.name,
+          profileImage: viewer.profileImage,
+          _id: viewer._id,
+        },
+        album: {
+          _id: imageAlbum._id,
+          name: imageAlbum.name,
+        },
+        debited: modelGot,
+        albumCost: albumCost,
+      })
       return res.status(200).json({
         actionStatus: "success",
         privateImages: viewer.privateImagesPlans,
@@ -116,9 +132,11 @@ exports.buyPrivateVideosAlbum = (req, res, next) => {
     })
       .lean()
       .select("privateVideos sharePercent"),
-    Viewer.findById(req.user.relatedUser._id).select("privateVideosPlans"),
+    Viewer.findById(req.user.relatedUser._id).select(
+      "privateVideosPlans name profileImage"
+    ),
     Wallet.findOne({ rootUser: req.user._id }),
-    VideosAlbum.findById(albumId).select("price purchases"),
+    VideosAlbum.findById(albumId).select("price purchases name"),
   ])
     .then(([model, viewer, wallet, videosAlbum]) => {
       if (
@@ -152,6 +170,7 @@ exports.buyPrivateVideosAlbum = (req, res, next) => {
             }
             albumCost = videosAlbum.price
             modelGot = videosAlbum.price * (model.sharePercent / 100)
+            videosAlbum.purchases = videosAlbum.purchases + 1
             return Promise.all([
               viewer.save(),
               Wallet.updateOne(
@@ -189,7 +208,20 @@ exports.buyPrivateVideosAlbum = (req, res, next) => {
         throw error
       }
     })
-    .then((viewer) => {
+    .then(([viewer, videoAlbum]) => {
+      Notifier.newModelNotification("video-album-purchase", modelId, {
+        viewer: {
+          name: viewer.name,
+          profileImage: viewer.profileImage,
+          _id: viewer._id,
+        },
+        album: {
+          _id: videoAlbum._id,
+          name: videoAlbum.name,
+        },
+        debited: modelGot,
+        albumCost: albumCost,
+      })
       return res.status(200).json({
         actionStatus: "success",
         privateVideos: viewer.privateVideosPlans,

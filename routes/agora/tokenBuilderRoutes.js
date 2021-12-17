@@ -2,6 +2,7 @@ const router = require("express").Router()
 const tokenBuilderController = require("../../controllers/agora/tokenBuildersController")
 const tokenVerify = require("../../middlewares/tokenVerify")
 const tokenVerifyWithOutPopulate = require("../../middlewares/tokenVerifyWithOutPopulate")
+const safeTokenDecode = require("../../middlewares/safeTokenDecode")
 const userTypeChecker = require("../../middlewares/userTypeChecker")
 
 router.post(
@@ -24,10 +25,10 @@ router.post(
   "/unauthed-viewer-join-stream",
   tokenBuilderController.generateRtcTokenUnauthed
 )
-router.post(
+router.get(
   "/global-renew-token",
-  tokenVerify,
-  tokenBuilderController.generateRtcTokenUnauthed
+  safeTokenDecode,
+  tokenBuilderController.renewRtcTokenGlobal
 )
 
 module.exports = router

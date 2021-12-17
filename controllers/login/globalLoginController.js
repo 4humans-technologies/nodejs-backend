@@ -37,18 +37,11 @@ exports.loginHandler = (req, res, next) => {
     )
     .populate({
       path: "relatedUser",
+      select: "-streams -videoCallHistory -audioCallHistory",
       populate: [
         {
           path: "wallet",
           select: "currentAmount",
-        },
-        {
-          path: "privateImages",
-          model: "ImageAlbum",
-        },
-        {
-          path: "privateVideos",
-          model: "VideoAlbum",
         },
       ],
     })
@@ -58,6 +51,15 @@ exports.loginHandler = (req, res, next) => {
         error.statusCode = 422
         throw error
       }
+
+      if (user.userType === "SuperAdmin" || user.userType === "Staff") {
+        const error = new Error(
+          "This login form is NOT for superadmin and staff!"
+        )
+        error.statusCode = 422
+        throw error
+      }
+
       theUser = user
       return bcrypt.compare(password, user.password)
     })

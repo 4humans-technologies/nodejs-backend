@@ -2,7 +2,7 @@ const Model = require("../../models/userTypes/Model")
 const User = require("../../models/User")
 const bcrypt = require("bcrypt")
 const Approval = require("../../models/management/approval")
-const TokenGiftHistory = require("../../models/globals/tokenGiftHistory")
+const CoinsSpendHistory = require("../../models/globals/coinsSpendHistory")
 const {
   generateEmailConformationJWT,
 } = require("../../utils/generateEmailConformationJWT")
@@ -221,7 +221,7 @@ exports.updateModelBasicDetails = (req, res, next) => {
   const userData = {}
 
   if (updatedData?.username) {
-    userData[username] = updatedData.username
+    userData["username"] = updatedData.username
   }
 
   const queryArray = updatedData?.userName
@@ -443,6 +443,7 @@ exports.updateInfoFields = (req, res, next) => {
    *  field:"username",
    *  value:"my new username" <=== the new username
    * }] */
+
   let fieldsToUpdate = {}
 
   req.body.forEach((field) => {
@@ -456,7 +457,7 @@ exports.updateInfoFields = (req, res, next) => {
     { $set: fieldsToUpdate },
     { runValidators: true }
   )
-    .then((_model) => {
+    .then(() => {
       return res.status(200).json({
         actionStatus: "success",
         updatedFields: Object.keys(fieldsToUpdate),
@@ -483,7 +484,7 @@ exports.getAskedFields = (req, res, next) => {
 }
 
 exports.getTokenHistoryOfModel = (req, res, next) => {
-  TokenGiftHistory.find({
+  CoinsSpendHistory.find({
     forModel: req.user.relatedUser._id,
   })
     .populate({

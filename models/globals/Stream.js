@@ -13,40 +13,19 @@ const streamSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    required: true,
     default: "initializing",
     enum: ["initializing", "ongoing", "ended"],
     index: true,
   },
   endReason: {
     type: String,
-    required: true,
     default: "Error",
     enum: ["AudioCall", "VideoCall", "Manual", "Error", "socket-disconnect"],
   },
   meta: {
     duration: Number,
     moneySpent: Number,
-    viewerCount: {
-      /**
-       * will store the peak number of users ever joined
-       */
-      type: Number,
-      default: 0,
-    },
   },
-  // meta: {
-  //     type: new mongoose.Schema({
-  //         duration: Number,
-  //         moneySpent: Number,
-  //         gifts: [{
-  //             type: Map,
-  //             of: String
-  //         }],
-  //         viewerCount: Number,
-  //     }),
-  //     default: () => ({})
-  // },
   endAudioCall: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "AudioCall",

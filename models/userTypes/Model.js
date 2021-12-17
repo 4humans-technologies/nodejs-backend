@@ -105,9 +105,9 @@ const modelSchema = new mongoose.Schema({
     type: String,
     default: "Hello guys, today's stream will be super, so dont't go away",
   },
-  privateCallActivity: {
-    type: [String],
-    default: [],
+  callActivity: {
+    audioCall: [String],
+    videoCall: [String],
   },
   dynamicFields: {
     type: [
@@ -146,6 +146,10 @@ const modelSchema = new mongoose.Schema({
     type: Number,
     /* 🔻🔻 remove in production 🔻🔻 */
     default: 60 /* amount model will give to admin */,
+    validate: {
+      validator: Number.isInteger,
+      message: "{VALUE} is not an integer value",
+    },
   } /* Not in decimals, 90% === 90 not 0.9 */,
   adminPriceRange: {
     type: mongoose.Schema.Types.ObjectId,
@@ -156,11 +160,19 @@ const modelSchema = new mongoose.Schema({
       type: Number,
       /* 🔻🔻 remove in production 🔻🔻 */
       default: 50,
+      validate: {
+        validator: Number.isInteger,
+        message: "{VALUE} is not an integer value",
+      },
     },
     videoCall: {
       type: Number,
       /* 🔻🔻 remove in production 🔻🔻 */
       default: 80,
+      validate: {
+        validator: Number.isInteger,
+        message: "{VALUE} is not an integer value",
+      },
     },
   },
   minCallDuration: {
@@ -168,6 +180,10 @@ const modelSchema = new mongoose.Schema({
     type: Number,
     /* 🔻🔻 remove in production 🔻🔻 */
     default: 2,
+    validate: {
+      validator: Number.isInteger,
+      message: "{VALUE} is not an integer value",
+    },
   },
   timeForAcceptingCall: {
     // in seconds
@@ -222,22 +238,10 @@ const modelSchema = new mongoose.Schema({
      */
     type: String,
     default: "I will soon come online, I Know you are waiting for me 🥰🥰",
+    maxlength: 164,
   },
   backGroundImage: String,
   coverImage: String,
-  // privateImages: {
-  //   type: Map,
-  //   of: new mongoose.Schema({
-  //     images: {
-  //       type: [String],
-  //       required: true,
-  //     },
-  //     price: {
-  //       type: Number,
-  //       required: true,
-  //     },
-  //   }),
-  // },
   streams: [
     {
       type: mongoose.Schema.Types.ObjectId,
@@ -270,19 +274,34 @@ const modelSchema = new mongoose.Schema({
       },
     ],
   },
-  dailyIncome: [
-    {
-      date: Date,
-      revenue: Number,
-      netIncome: Number,
-    },
-  ],
   wallet: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: "Wallet",
     unique: true,
     index: true,
+  },
+  bankDetails: {
+    bankName: {
+      type: String,
+      default: "",
+    },
+    IfscCode: {
+      type: String,
+      default: "",
+    },
+    holderName: {
+      type: String,
+      default: "",
+    },
+    accountNumber: {
+      type: Number,
+    },
+    accountType: {
+      type: String,
+      enum: ["savings", "current"],
+      default: "savings",
+    },
   },
   privateChats: [
     {

@@ -1,22 +1,21 @@
 const router = require("express").Router()
 const streamController = require("../../controllers/stream/streamController")
 const tokenVerify = require("../../middlewares/tokenVerify")
+const tokenVerifyWithOutPopulate = require("../../middlewares/tokenVerifyWithOutPopulate")
 const putUserInRequest = require("../../middlewares/putUserInRequest")
 const { body } = require("express-validator")
 
-router.get(
-  "/create-stream-without-token",
-  tokenVerify,
-  streamController.withOutTokenStreamStart
-)
-
 router.post("/set-call-ongoing", tokenVerify, streamController.setCallOngoing)
-router.post("/handle-stream-end", tokenVerify, streamController.handleEndStream)
+router.post(
+  "/handle-stream-end",
+  tokenVerifyWithOutPopulate,
+  streamController.handleEndStream
+)
 router.post("/set-ongoing", streamController.setOngoing)
 router.post("/get-private-chat-plans", streamController.setOngoing)
 router.post(
   "/process-token-gift",
-  tokenVerify,
+  tokenVerifyWithOutPopulate,
   streamController.processTokenGift
 )
 router.post(
@@ -38,7 +37,12 @@ router.post(
   tokenVerify,
   streamController.handleModelAcceptedCallRequest
 )
-router.post("/follow-model", tokenVerify, streamController.viewerFollowModel)
+
+router.post(
+  "/follow-model",
+  tokenVerifyWithOutPopulate,
+  streamController.viewerFollowModel
+)
 
 router.post(
   "/handle-call-end-from-model",

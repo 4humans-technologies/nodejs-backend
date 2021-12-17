@@ -20,6 +20,12 @@ const walletSchema = new mongoose.Schema({
     type: Number,
     required: true,
     default: 0,
+    set: (amt) => {
+      if (!Number.isInteger(amt)) {
+        return parseFloat(amt.toFixed(1))
+      }
+      return amt
+    },
   },
   lastTransaction: {
     type: Map,
@@ -31,9 +37,16 @@ const walletSchema = new mongoose.Schema({
   },
 })
 
-walletSchema.methods.deductAmount = function (amount) {
+walletSchema.methods.deductAmount = function (amount, buffer = 0) {
   if (this.currentAmount >= amount) {
     return (this.currentAmount = this.currentAmount - amount)
+  } else {
+    /**
+     * check if only some amount is less
+     */
+    if (this.currentAmount + buffer >= amount) {
+      return (this.currentAmount = 0)
+    }
   }
   const error = new Error(
     "don't have sufficient balance to perform this Purchase"
@@ -43,7 +56,7 @@ walletSchema.methods.deductAmount = function (amount) {
 }
 
 walletSchema.methods.addAmount = function (amount) {
-  this.currentAmount = this.currentAmount + amount
+  this.currentAmount = this.currentAmount + parseFloat(amount.toFixed(1))
 }
 
 const Wallet = mongoose.model("Wallet", walletSchema)

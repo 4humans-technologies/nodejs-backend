@@ -6,13 +6,8 @@ const socketEvents = require("../socketEvents")
 module.exports = function onDisconnectStreamEndHandler(client) {
   const duration = (Date.now() - client.createdAt) / 60000
 
-  io.getIO().emit(socketEvents.deleteStreamRoom, {
-    modelId: client.data.relatedUserId,
-    liveNow: io.decreaseLiveCount(),
-  })
-
   Promise.all([
-    Stream.updateOne(
+    Stream.findOneAndUpdate(
       {
         _id: client.streamId,
       },
@@ -21,51 +16,62 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         status: "ended",
         duration: duration,
       }
-    ),
-    Model.updateOne(
+    )
+      .select("status endReason")
+      .lean(),
+    Model.findOneAndUpdate(
       { _id: client.data.relatedUserId },
       {
         isStreaming: false,
         currentStream: null,
+        onCall: false,
       }
-    ),
+    )
+      .select("currentStream isStreaming")
+      .lean(),
   ])
-    .then((values) => {
-      if (values[0].n + values[1].n === 2) {
-        /* model and stream updated */
-        /* end the stream of every user, as the model has disconnected */
-        const publicRoom = `${client.streamId}-public`
+    .then(([stream, model]) => {
+      if (
+        stream.status !== "ended" &&
+        model.isStreaming &&
+        model.currentStream
+      ) {
+        /**
+         * if stream was actually ongoing and model was live
+         * then only emit the event
+         */
 
-        /* destroy the stream chat rooms, 
-           adding timeout so that isModelOffline ste can be set the later
-           when the "you-left-the-room" event occurs safely get out of the room (problem due to setInterval running in loop)
-           will definitely look to improve this strategy in future
-        */
-
-        setTimeout(() => {
-          io.getIO().in(publicRoom).socketsLeave(publicRoom)
-        }, 1000)
-
-        /* i guess no need to update client as it will be destroyed automatically */
-        // client.isStreaming = false
-        // client.currentStream = null
-      } else {
-        return Promise.reject("Stream or model data was not updated")
+        io.getIO().emit(socketEvents.deleteStreamRoom, {
+          modelId: client.data.relatedUserId,
+          liveNow: io.decreaseLiveCount(client.data.relatedUserId),
+        })
       }
+
+      /* end the stream of every user, as the model has disconnected */
+      const publicRoom = `${client.streamId}-public`
+
+      /* destroy the stream chat rooms, 
+        adding timeout so that isModelOffline ste can be set the later
+        when the "you-left-the-room" event occurs safely get out of the
+        room (problem due to setInterval running in loop)
+        will definitely look to improve this strategy in future
+      */
+      setTimeout(() => {
+        io.getIO().in(publicRoom).socketsLeave(publicRoom)
+      }, 1000)
     })
     .catch((err) => {
       /* may emit to the user */
       /* log that stream was not closed */
-      console.log(err)
       console.error(
-        "The streaming status was not updated(closed) :Reason: ",
+        "The streaming status was not updated(closed) Reason: ",
         err.message
       )
-      const publicRoom = `${client.streamId.toString()}-public`
 
-      /* see reason above to find the setTimeout reason */
+      const publicRoom = `${client.streamId}-public`
+      /* see reason written above to find the setTimeout reason */
       setTimeout(() => {
         io.getIO().in(publicRoom).socketsLeave(publicRoom)
-      }, 600)
+      }, 1000)
     })
 }
