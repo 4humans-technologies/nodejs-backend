@@ -58,6 +58,9 @@ walletSchema.methods.deductAmount = function (amount, buffer = 0) {
 walletSchema.methods.addAmount = function (amount) {
   this.currentAmount = this.currentAmount + parseFloat(amount.toFixed(1))
 }
+walletSchema.methods.setAmount = function (amount) {
+  this.currentAmount = amount
+}
 
 const Wallet = mongoose.model("Wallet", walletSchema)
 

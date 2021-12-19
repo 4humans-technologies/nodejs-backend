@@ -42,21 +42,15 @@ exports.getRankingOnlineModels = (req, res, next) => {
     //   }
     // )
     .sort("rating")
-    .populate("rootUser", "username userType currentStream")
-    .populate("currentStream", "createdAt status")
+    .lean()
+  // .populate("rootUser", "username userType currentStream")
   // .populate({
   //   path: 'rootUser',
   //   model: 'User',
   //   select: { 'field_name': 1, 'field_name': 1 },
   // })
   paginator
-    .withNormal(
-      null,
-      query,
-      "name gender rating onCall isStreaming currentStream dob username languages profileImage",
-      req,
-      res
-    )
+    .withNormal(null, query, "rating onCall isStreaming profileImage", req, res)
     .catch((err) => next(err))
 }
 

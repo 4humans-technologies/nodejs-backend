@@ -23,12 +23,9 @@ const audioCallSchema = new mongoose.Schema({
     enum: [
       "model-accept-pending",
       "model-accepted",
-      "model-declined",
       "model-accepted-will-end-stream",
       "ongoing",
-      "completed",
-      "completed-and-billed",
-      "viewer-call-not-received",
+      "ended",
     ],
   },
   callDuration: {

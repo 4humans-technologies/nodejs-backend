@@ -43,10 +43,10 @@ module.exports = function (client) {
 
     initialQuery
       .then((result) => {
-        if (result.n === 0) {
+        if (result.nModified === 0) {
           /* no doc modified, model has disconnected from call faster, return */
           return Promise.reject("Viewer ended/disconnected before you.")
-        } else if (result.n === 1) {
+        } else if (result.nModified === 1) {
           /* you have locked the db model cannot over-write */
           io.getIO().emit(
             chatEvents.call_end,
@@ -73,11 +73,17 @@ module.exports = function (client) {
         theCall = values[0]
         modelWallet = values[1]
 
+        io.getIO()
+          .in(`${theCall.viewer.toString()}-private`)
+          .emit(chatEvents.viewer_call_end_request_init_received, {
+            action: "viewer-has-requested-call-end",
+          })
+
         /* 🚩🚩🚩🚩🚩====ERROR====🚩🚩🚩🚩🚩🚩 */
         if (theCall.status !== "ongoing") {
           /* means the call was not setup properly*/
           /* now refund the money of the user */
-          theCall.status = "completed-and-billed"
+          theCall.status = "ended"
           theCall.endReason = "viewer-&-model-network-error"
           const amountToRefund = theCall.minCallDuration * theCall.chargePerMin
           const amtToDeductFromModel =
@@ -292,17 +298,13 @@ module.exports = function (client) {
     initialQuery
       .then((result) => {
         /* decrease model count */
-        if (result.n === 0) {
+        if (result.nModified === 0) {
           /* no doc modified, model has ended tha call faster, return */
           return Promise.reject(
             "Model ended/disconnected before model ended call before you, please wait while we are processing the transaction!"
           )
-        } else if (result.n > 0) {
+        } else if (result.nModified === 1) {
           /* you have locked the db viewer cannot over-write */
-          io.getIO().emit(
-            chatEvents.call_end,
-            io.decreaseLiveCount(client.data.relatedUserId)
-          )
           const query =
             client.callType === "audioCall"
               ? Promise.all([
@@ -319,6 +321,19 @@ module.exports = function (client) {
       .then((values) => {
         theCall = values[0]
         viewerWallet = values[1]
+
+        /* decrease the live count, provide the model id */
+        io.getIO().emit(
+          chatEvents.call_end,
+          io.decreaseLiveCount(theCall.model.toString())
+        )
+
+        io.getIO()
+          .in(`${theCall.model.toString()}-private`)
+          .emit(chatEvents.model_call_end_request_init_received, {
+            action: "viewer-has-requested-call-end",
+          })
+
         if (theCall.endTimeStamp) {
           /* return bro */
           const error = new Error(
@@ -330,6 +345,7 @@ module.exports = function (client) {
           /* do the money transfer logic */
           theCall.endTimeStamp = endTimeStamp
           theCall.endReason = "viewer-network-error"
+          theCall.status = "ended"
           theCall.callDuration = (+endTimeStamp - theCall.startTimeStamp) / 1000
           const totalCallDuration =
             (+endTimeStamp - theCall.startTimeStamp) /

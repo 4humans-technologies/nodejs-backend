@@ -96,13 +96,9 @@ exports.handleEndStream = (req, res, next) => {
     })
     .catch((err) => {
       next(err)
-      io.getIO().emit(socketEvents.deleteStreamRoom, {
-        modelId: req.user.relatedUser._id,
-        liveNow: io.getLiveCount(),
-      })
     })
     .finally(() => {
-      /* to execute absolute necassary code */
+      /* to execute absolute necessary code */
     })
 }
 
@@ -241,9 +237,11 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
 
   let theCall = callType === "audioCall" ? AudioCall : VideoCall
   let callDoc
-  const callStartTimeStamp = Date.now() + 0
+  const callSetupBufferSeconds = 8 /* time after which the call will officially start */
+  const callStartTimeStamp = Date.now() + callSetupBufferSeconds * 1000
   callingViewerSocketData.callStartTs = callStartTimeStamp
-  let viewerMaxCallDurationSeconds
+  let canAffordNextMinute
+  let modelTokenValidity
 
   /* create the call entry in DB */
   Promise.all([
@@ -270,13 +268,46 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       callDoc = call
       callingViewerSocketData.callId = callDoc._id.toString()
       const minCharges = callDoc.chargePerMin * callDoc.minCallDuration
-      viewerMaxCallDurationSeconds = Math.floor(
-        (viewerWallet.currentAmount / callDoc.chargePerMin) * 60
-      )
+      if (viewerWallet.currentAmount - minCharges - callDoc.chargePerMin > 0) {
+        /**
+         * have money to afford next complete minute
+         */
+        canAffordNextMinute = true
+      } else {
+        /**
+         * does not have money to afford next minute
+         */
+        canAffordNextMinute = false
+        modelTokenValidity = Math.floor(
+          (viewerWallet.currentAmount * 60) / callDoc.chargePerMin
+        )
+      }
+
       try {
-        viewerWallet.deductAmount(minCharges)
+        if (canAffordNextMinute) {
+          viewerWallet.deductAmount(minCharges)
+        } else {
+          /**
+           * generate token for all the amount in wallet
+           */
+          viewerWallet.setAmount(0)
+        }
       } catch (error) {
-        next(error)
+        theCall
+          .deleteOne({
+            _id: callDoc._id,
+          })
+          .catch(() => {
+            console.error(
+              "Viewer does not have sufficient amount of money for the call, and the call was also not deleted!"
+            )
+          })
+          .finally(() => {
+            return next(error)
+          })
+        return Promise.reject(
+          "Viewer does not have sufficient amount of money for the call"
+        )
       }
       modelWallet.addAmount(
         minCharges * (req.user.relatedUser.sharePercent / 100)
@@ -294,6 +325,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
           operation: "set",
           amount: modelWallet.currentAmount,
         })
+
       /* add the call as pending call for both model and viewer */
       return Promise.all([
         Viewer.findOneAndUpdate(
@@ -366,6 +398,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         but leaving will be done from client side, later can kick user out from server 🔺🔺
       */
 
+      /* make all viewers leave the public room */
       /* not destroying public channel for token gift to work on call */
       io.getIO()
         .in(`${streamId}-public`)
@@ -380,8 +413,11 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         "model",
         viewerId.toString(),
         req.user.relatedUser._id.toString(),
-        +callDoc.minCallDuration,
-        "min"
+        canAffordNextMinute
+          ? callDoc.minCallDuration + callSetupBufferSeconds
+          : modelTokenValidity +
+              60 /* anyway viewer token expiry is just for preventing extra "agora connection time", adding 60 so that model and viewers token expirey dont fire at the same time */,
+        canAffordNextMinute ? "min" : "sec"
       )
 
       /* EMIT TO THE CALLER VIEWER */
@@ -393,6 +429,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
           sharePercent: req.user.relatedUser.sharePercent,
           privilegeExpiredTs: privilegeExpiredTs,
           rtcToken: rtcToken,
+          canAffordNextMinute,
         })
 
       /**
@@ -402,8 +439,10 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         "model",
         req.user.relatedUser._id.toString(),
         req.user.relatedUser._id.toString(),
-        +callDoc.minCallDuration,
-        "min"
+        canAffordNextMinute
+          ? callDoc.minCallDuration + callSetupBufferSeconds
+          : modelTokenValidity + callSetupBufferSeconds,
+        canAffordNextMinute ? "min" : "sec"
       )
 
       return res.status(200).json({
@@ -415,9 +454,15 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         sharePercent: +req.user.relatedUser.sharePercent,
         rtcToken: modelToken.rtcToken,
         privilegeExpiredTs: modelToken.privilegeExpiredTs,
+        canAffordNextMinute,
+        modelTokenValidity,
       })
     })
-    .catch((err) => next(err))
+    .catch((err) => {
+      if (typeof err !== "string") {
+        return next(err)
+      }
+    })
 }
 
 exports.handleEndCallFromViewer = (req, res, next) => {
@@ -464,12 +509,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
         )?.[0]
       }
 
-      /* decrease model count */
-      io.getIO().emit(
-        chatEvents.call_end,
-        io.decreaseLiveCount(req.user.relatedUser._id.toString())
-      )
-      if (result.n === 0) {
+      if (result.nModified === 0) {
         /* no doc modified, model has ended tha call faster, return */
         res.status(200).json({
           actionStatus: "failed",
@@ -478,7 +518,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
             "model ended call before you, please wait while we are processing the transaction!",
         })
         return Promise.reject("Model ended before")
-      } else if (result.n > 0) {
+      } else if (result.nModified > 0) {
         /* you have locked the db model cannot over-rite */
         const query =
           callType === "audioCall"
@@ -496,6 +536,13 @@ exports.handleEndCallFromViewer = (req, res, next) => {
     .then((values) => {
       theCall = values[0]
       viewerWallet = values[1]
+
+      /* decrease model count */
+      io.getIO().emit(
+        chatEvents.call_end,
+        io.decreaseLiveCount(theCall.model.toString())
+      )
+
       if (theCall.endTimeStamp) {
         /* return bro */
         const error = new Error(
@@ -507,6 +554,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
         /* do the money transfer logic */
         theCall.endTimeStamp = endTimeStamp
         theCall.endReason = "viewer-ended"
+        theCall.status = "ended"
         theCall.callDuration = (+endTimeStamp - theCall.startTimeStamp) / 1000
         const totalCallDuration =
           (+endTimeStamp - theCall.startTimeStamp) /
@@ -679,12 +727,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
             .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
         )?.[0]
       }
-      /* emit this event for updating live count on the client side */
-      io.getIO().emit(
-        chatEvents.call_end,
-        io.decreaseLiveCount(req.user.relatedUser._id.toString())
-      )
-      if (result.n === 0) {
+      if (result.nModified === 0) {
         /* no doc modified, viewer has ended tha call faster, return */
         res.status(200).json({
           actionStatus: "failed",
@@ -693,7 +736,12 @@ exports.handleEndCallFromModel = (req, res, next) => {
             "viewer ended call before you, please wait while we are processing the transaction!",
         })
         return Promise.reject("Viewer ended before")
-      } else if (result.n > 0) {
+      } else if (result.nModified > 0) {
+        /* emit this event for updating live count on the client side */
+        io.getIO().emit(
+          chatEvents.call_end,
+          io.decreaseLiveCount(req.user.relatedUser._id.toString())
+        )
         /* you have locked the db model cannot over-rite */
         const query =
           callType === "audioCall"
@@ -716,7 +764,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
         /* 🚩🚩🚩🚩🚩====ERROR====🚩🚩🚩🚩🚩🚩 */
         /* means the call was not setup properly*/
         /* now refund the money of the user */
-        theCall.status = "completed-and-billed"
+        theCall.status = "ended"
         theCall.endReason = "viewer-network-error"
         const amountToRefund = theCall.minCallDuration * theCall.chargePerMin
         const amtToDeductFromModel =
@@ -817,6 +865,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
         theCall.endTimeStamp = endTimeStamp
         theCall.callDuration = (+endTimeStamp - theCall.startTimeStamp) / 1000
         theCall.endReason = "model-ended"
+        theCall.status = "ended"
         const totalCallDuration =
           (+endTimeStamp - theCall.startTimeStamp) /
           60000 /* convert milliseconds to seconds */
@@ -1668,6 +1717,7 @@ exports.getAViewerDetails = (req, res, next) => {
       return res.status(200).json({
         actionStatus: "success",
         viewer: {
+          _id: viewerId,
           name: viewer.name,
           username: viewer.rootUser.username,
           walletCoins: viewer.wallet.currentAmount,

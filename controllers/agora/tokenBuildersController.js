@@ -608,18 +608,23 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
   /**
    * should ABSOLUTELY check is this channel exists
    */
+
   if (onCall && req?.user?.userType === "Model") {
+    /**
+     * this case below is exclusively only for the model who is on call
+     */
     const callQuery =
       req.query.callType === "audioCall"
         ? AudioCall.findById({
             _id: req.query.callId,
           }).lean()
-        : VideoCall.updateOne({
+        : VideoCall.findById({
             _id: req.query.callId,
           }).lean()
 
     let canRenew = false
     let privilegeExpiredTs, rtcToken
+    let generatedFor = 60
     Promise.all([
       callQuery,
       Wallet.findOne({
@@ -631,25 +636,32 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
     ])
       .then(([callDoc, wallet, modelWallet]) => {
         if (
-          callDoc.status !== "ended" &&
-          callDoc.viewer === req.query.viewerId
+          callDoc.status === "ongoing" &&
+          callDoc.viewer.toString() === req.query.viewerId
         ) {
-          const amountLeft = wallet.currentAmount - callDoc.chargesPermin
-          if (amountLeft > callDoc.chargesPermin / 2) {
+          /**
+           * amount left in viewers wallet
+           */
+          const amountLeft = wallet.currentAmount - callDoc.chargePerMin
+          /**
+           * token cannot be generated for less than 1 minute
+           */
+          if (amountLeft - callDoc.chargePerMin > 0) {
             canRenew = true
-            wallet.deductAmount(callDoc.chargesPermin)
+            wallet.deductAmount(callDoc.chargePerMin)
             modelWallet.addAmount(
-              callDoc.chargesPermin * (callDoc.sharePercent / 100)
+              callDoc.chargePerMin * (callDoc.sharePercent / 100)
             )
             const a = rtcTokenGenerator(
               "model",
               req.user.relatedUser._id,
               req.user.relatedUser._id,
-              60,
+              generatedFor,
               "sec"
             )
             privilegeExpiredTs = a.privilegeExpiredTs
             rtcToken = a.rtcToken
+            return Promise.all([wallet.save(), modelWallet.save(), {}])
           } else {
             /**
              * calculate in secs amount of time the user can call, deduct all the money
@@ -660,17 +672,21 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
               wallet.currentAmount * (callDoc.sharePercent / 100)
             )
             wallet.currentAmount = 0
+
+            generatedFor = Math.floor(
+              (wallet.currentAmount * 60) / callDoc.chargePerMin
+            )
             const a = rtcTokenGenerator(
               "model",
               req.user.relatedUser._id,
               req.user.relatedUser._id,
-              (amountLeft * 60) / callDoc.chargesPermin
+              generatedFor,
+              "sec"
             )
             privilegeExpiredTs = a.privilegeExpiredTs
             rtcToken = a.rtcToken
+            return Promise.all([wallet.save(), modelWallet.save()])
           }
-
-          return Promise.all([wallet.save(), modelWallet.save()])
         } else {
           const error = new Error("call is already ended or caller is invalid")
           error.statusCode = 422
@@ -682,6 +698,7 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
           canRenew,
           privilegeExpiredTs,
           rtcToken,
+          generatedFor,
         })
       })
       .catch((err) => next(err))
@@ -689,76 +706,75 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
      * if onCall get the viewers wallet
      */
   } else {
-    /*  */
-  }
-  Model.findById(channel)
-    .select("isStreaming onCall")
-    .lean()
-    .then((model) => {
-      /**
-       * if unAuthedUser
-       */
-      if (!req.user) {
-        if (model.isStreaming && !model.onCall) {
-          /**
-           * un-authed user can not ask token for streaming model
-           */
-          const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-            "unAuthed",
-            unAuthedUserId,
-            channel
-          )
-
-          return res
-            .status(200)
-            .json({
-              actionStatus: "success",
-              rtcToken: rtcToken,
-              privilegeExpiredTs: privilegeExpiredTs,
-            })
-            .catch((err) => next(err))
-        } else {
-          throw Error("Model is not streaming and you cannot join call!")
-        }
-      } else {
+    Model.findById(channel)
+      .select("isStreaming onCall")
+      .lean()
+      .then((model) => {
         /**
-         * if authed user
+         * if unAuthedUser
          */
-        if (model.isStreaming || model.onCall) {
-          /**
-           * onCall is a special case not if model is onCall
-           * not anybody can ask for token, ONLY the CALLER should be able to get the token 🔴
-           */
-          if (req.user.userType === "Viewer") {
+        if (!req.user) {
+          if (model.isStreaming && !model.onCall) {
+            /**
+             * un-authed user can not ask token for streaming model
+             */
             const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-              "viewer",
-              req.user.relatedUser._id,
+              "unAuthed",
+              unAuthedUserId,
               channel
             )
-            return res.status(200).json({
-              actionStatus: "success",
-              rtcToken: rtcToken,
-              privilegeExpiredTs: privilegeExpiredTs,
-            })
-          } else if (req.user.userType === "Model") {
-            const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-              "model",
-              req.user.relatedUser._id,
-              channel
-            )
-            return res.status(200).json({
-              actionStatus: "success",
-              rtcToken: rtcToken,
-              privilegeExpiredTs: privilegeExpiredTs,
-            })
+
+            return res
+              .status(200)
+              .json({
+                actionStatus: "success",
+                rtcToken: rtcToken,
+                privilegeExpiredTs: privilegeExpiredTs,
+              })
+              .catch((err) => next(err))
+          } else {
+            throw Error("Model is not streaming and you cannot join call!")
           }
         } else {
           /**
-           * if model is just not available
+           * if authed user
            */
-          throw Error("Suspicious act of joining a restricted channel")
+          if (model.isStreaming || model.onCall) {
+            /**
+             * onCall is a special case not if model is onCall
+             * not anybody can ask for token, ONLY the CALLER should be able to get the token 🔴
+             */
+            if (req.user.userType === "Viewer") {
+              const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                "viewer",
+                req.user.relatedUser._id,
+                channel
+              )
+              return res.status(200).json({
+                actionStatus: "success",
+                rtcToken: rtcToken,
+                privilegeExpiredTs: privilegeExpiredTs,
+              })
+            } else if (req.user.userType === "Model") {
+              const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                "model",
+                req.user.relatedUser._id,
+                channel
+              )
+              return res.status(200).json({
+                actionStatus: "success",
+                rtcToken: rtcToken,
+                privilegeExpiredTs: privilegeExpiredTs,
+              })
+            }
+          } else {
+            /**
+             * if model is just not available
+             */
+            throw Error("Suspicious act of joining a restricted channel")
+          }
         }
-      }
-    })
-    .catch((err) => next(err))
+      })
+      .catch((err) => next(err))
+  }
 }
