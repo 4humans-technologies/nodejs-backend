@@ -1,6 +1,7 @@
 require("dotenv").config()
 const mongoose = require("mongoose")
 const firebase = require("./firebase")
+const redis = require("./redis")
 const express = require("express")
 const socket = require("./socket")
 const app = express()
@@ -189,7 +190,7 @@ app.use((err, req, res, next) => {
 })
 
 // MONGODB CONNECTION SETUP--->
-mongoose.set("debug", true)
+// mongoose.set("debug", true)
 mongoose
   .connect(CONNECT_URL, {
     useNewUrlParser: true,

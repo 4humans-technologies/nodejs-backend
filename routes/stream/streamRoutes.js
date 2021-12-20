@@ -46,13 +46,13 @@ router.post(
 
 router.post(
   "/handle-call-end-from-model",
-  tokenVerify,
+  tokenVerifyWithOutPopulate,
   streamController.handleEndCallFromModel
 )
 
 router.post(
   "/handle-call-end-from-viewer",
-  tokenVerify,
+  tokenVerifyWithOutPopulate,
   streamController.handleEndCallFromViewer
 )
 router.post(

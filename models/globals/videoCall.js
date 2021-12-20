@@ -20,13 +20,7 @@ const videoCallSchema = new mongoose.Schema({
   status: {
     type: String,
     required: true,
-    enum: [
-      "model-accept-pending",
-      "model-accepted",
-      "model-accepted-will-end-stream",
-      "ongoing",
-      "ended",
-    ],
+    enum: ["model-accepted-will-end-stream", "ongoing", "ended"],
   },
   callDuration: {
     type: Number,
@@ -45,6 +39,7 @@ const videoCallSchema = new mongoose.Schema({
     type: Number,
     default: 60,
   },
+  advanceCut: Number,
   endReason: {
     type: String,
     default: "network-error",

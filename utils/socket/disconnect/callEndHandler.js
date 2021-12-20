@@ -16,100 +16,72 @@ module.exports = function (client) {
     const callType = client.callType
     const endTimeStamp = Date.now()
 
-    let theCall
-    let modelWallet
-    let amountToDeduct
-    let amountAdded
-    let viewerWallet
+    /**
+     * emit call-request-init-event
+     */
 
-    const initialQuery =
-      callType === "audioCall"
-        ? AudioCall.updateOne(
-            {
-              _id: callId,
-            },
-            {
-              $addToSet: { concurrencyControl: 1 },
-            }
-          )
-        : VideoCall.updateOne(
-            {
-              _id: callId,
-            },
-            {
-              $addToSet: { concurrencyControl: 1 },
-            }
-          )
-
-    initialQuery
-      .then((result) => {
-        if (result.nModified === 0) {
-          /* no doc modified, model has disconnected from call faster, return */
-          return Promise.reject("Viewer ended/disconnected before you.")
-        } else if (result.nModified === 1) {
-          /* you have locked the db model cannot over-write */
-          io.getIO().emit(
-            chatEvents.call_end,
-            io.decreaseLiveCount(client.data.relatedUserId)
-          )
-          const query =
-            callType === "audioCall"
-              ? Promise.all([
-                  AudioCall.findById(callId),
-                  Wallet.findOne({
-                    relatedUser: client.data.relatedUserId,
-                  }),
-                ])
-              : Promise.all([
-                  VideoCall.findById(callId),
-                  Wallet.findOne({
-                    relatedUser: client.data.relatedUserId,
-                  }),
-                ])
-          return query
-        }
+    io.getIO()
+      .in(`${client.data.relatedUserId}-private`)
+      .emit(chatEvents.viewer_call_end_request_init_received, {
+        action: "model-has-requested-call-end",
       })
-      .then((values) => {
-        theCall = values[0]
-        modelWallet = values[1]
 
-        io.getIO()
-          .in(`${theCall.viewer.toString()}-private`)
-          .emit(chatEvents.viewer_call_end_request_init_received, {
-            action: "viewer-has-requested-call-end",
-          })
+    let theCall
+    const query =
+      callType === "audioCall"
+        ? Promise.all([
+            AudioCall.updateOne(
+              {
+                _id: callId,
+              },
+              {
+                $addToSet: { concurrencyControl: 1 },
+              }
+            ),
+            AudioCall.findById(callId),
+          ])
+        : Promise.all([
+            VideoCall.updateOne(
+              {
+                _id: callId,
+              },
+              {
+                $addToSet: { concurrencyControl: 1 },
+              }
+            ),
+            VideoCall.findById(callId),
+          ])
 
-        /* 🚩🚩🚩🚩🚩====ERROR====🚩🚩🚩🚩🚩🚩 */
+    query
+      .then(([lockResult, callDoc]) => {
+        theCall = callDoc
+        if (lockResult.nModified !== 1) {
+          return Promise.reject(
+            "Viewer has ended the call before you, please wait while the transaction is processing!"
+          )
+        }
+
         if (theCall.status !== "ongoing") {
-          /* means the call was not setup properly*/
-          /* now refund the money of the user */
+          /**
+           * It means the call was not setup properly from the viewer side
+           * now refund the "advance" amount to the viewer
+           */
           theCall.status = "ended"
-          theCall.endReason = "viewer-&-model-network-error"
-          const amountToRefund = theCall.minCallDuration * theCall.chargePerMin
-          const amtToDeductFromModel =
-            amountToRefund * (theCall.sharePercent / 100)
+          theCall.endReason = "viewer-network-error"
+
+          const amountToRefundViewer = theCall.advanceCut
+          const deductFromModel =
+            amountToRefundViewer * (theCall.sharePercent / 100)
+
           console.error(
             "A call was not setup properly, hence refunding amt: ",
-            amountToRefund
+            amountToRefundViewer,
+            " to the viewer"
           )
-          Promise.all([
+
+          return Promise.all([
+            false,
             theCall.save(),
-            Wallet.updateOne(
-              {
-                relatedUser: theCall.viewer._id,
-              },
-              {
-                $inc: { currentAmount: amountToRefund },
-              }
-            ),
-            Wallet.updateOne(
-              {
-                relatedUser: theCall.model._id,
-              },
-              {
-                $inc: { currentAmount: -amtToDeductFromModel },
-              }
-            ),
             Viewer.updateOne(
               {
                 _id: theCall.viewer._id,
@@ -135,355 +107,391 @@ module.exports = function (client) {
                 currentStream: null,
               }
             ),
-          ])
-            .then((result) => {
-              io.getIO()
-                .in(`${theCall.model._id}-private`)
-                .emit("model-wallet-updated", {
-                  modelId: theCall.model._id,
-                  operation: "dec",
-                  amount: amtToDeductFromModel,
-                })
-
-              io.getIO()
-                .in(`${theCall.viewer._id}-private`)
-                .emit(chatEvents.model_call_end_request_finished, {
-                  theCall: theCall._doc,
-                  amountToRefund: amountToRefund,
-                  message:
-                    "Call was not connected properly hence your money is refunded",
-                  ended: "not-setuped-properly",
-                })
-
-              if (!result[1].n + result[2].n + result[3].n + result[4].n != 4) {
-                console.error(
-                  "All documents were not updated, while ending call"
-                )
+            amountToRefundViewer,
+            deductFromModel,
+            Wallet.updateOne(
+              {
+                relatedUser: theCall.viewer._id,
+              },
+              {
+                $inc: { currentAmount: amountToRefundViewer },
               }
-            })
-            .catch((err) =>
-              console.error(
-                "Call was not setup properly & also ot disconnected properly :Reason : ",
-                err.message
-              )
-            )
-          /* break out of the below promise chain */
-          return Promise.reject("The call was not ongoing")
-        }
-
-        if (theCall.endTimeStamp) {
-          /* return bro */
-          throw new Error(
-            "call doc updated even after locking, There was endTimestamp already"
-          )
+            ),
+            Wallet.updateOne(
+              {
+                relatedUser: theCall.model._id,
+              },
+              {
+                $inc: { currentAmount: -deductFromModel },
+              }
+            ),
+            /* DELETE THE CALL ALSO */
+          ])
         } else {
-          /* do the money transfer logic */
+          /**
+           * if call was setup properly
+           */
+          theCall = callDoc
           theCall.endTimeStamp = endTimeStamp
-          theCall.endReason = "model-network-error"
-          const totalCallDuration =
-            (endTimeStamp - theCall.startTimeStamp) /
-            60000 /* convert milliseconds to seconds */
-          if (totalCallDuration <= theCall.minCallDuration) {
-            amountToDeduct = 0
+          theCall.endReason = "model-ended"
+          theCall.status = "ended"
+
+          const callDuration =
+            (+endTimeStamp - theCall.startTimeStamp) / 1000 /* IN SECONDS */
+          const callDurationMinutes = callDuration / 60
+
+          theCall.callDuration = callDuration
+          let viewerDeducted
+          let modelGot
+
+          if (
+            theCall.advanceCut >
+            theCall.minCallDuration * theCall.chargePerMin
+          ) {
+            /**
+             * means all the money from the viewer was
+             * cut as advance, and the viewer has talked
+             * as long as advance money lasted
+             */
+            viewerDeducted = theCall.advanceCut
+            modelGot = theCall.advanceCut * (theCall.sharePercent / 100)
           } else {
-            const billableCallDuration = Math.ceil(
-              totalCallDuration - theCall.minCallDuration
-            ) /* in minutes */
-            amountToDeduct = billableCallDuration * theCall.chargePerMin
+            /**
+             * viewer had the money for next minute
+             */
+            if (callDurationMinutes <= theCall.minCallDuration) {
+              /* minCall duration charges only, not extra charges */
+              viewerDeducted = theCall.minCallDuration * theCall.chargePerMin
+              modelGot = viewerDeducted * (theCall.sharePercent / 100)
+            } else {
+              /* now charge over minCall duration */
+              viewerDeducted =
+                Math.ceil(callDuration / 60) * theCall.chargePerMin
+              modelGot = viewerDeducted * (theCall.sharePercent / 100)
+            }
           }
-          amountAdded = amountToDeduct * (client.sharePercent / 100)
-          modelWallet.addAmount(amountAdded)
-          /* for admin account */
-          // adminWallet.addAmount(amountToDeduct * ((100 - sharePercent) / 100))
+
           return Promise.all([
-            modelWallet.save(),
+            true,
             theCall.save(),
-            Wallet.findOne({ relatedUser: theCall.viewer._id }),
+            Viewer.updateOne(
+              {
+                _id: theCall.viewer._id,
+              },
+              {
+                $addToSet:
+                  callType === "audioCall"
+                    ? { audioCallHistory: theCall._id }
+                    : { videoCallHistory: theCall._id },
+                $pull:
+                  callType === "audioCall"
+                    ? { "pendingCalls.audioCalls": theCall._id }
+                    : { "pendingCalls.videoCalls": theCall._id },
+              },
+              { runValidators: true }
+            ),
+            Model.updateOne(
+              {
+                _id: theCall.model,
+              },
+              {
+                isStreaming: false,
+                onCall: false,
+                currentStream: null,
+                $pull:
+                  callType === "audioCall"
+                    ? { "pendingCalls.audioCalls": theCall._id }
+                    : { "pendingCalls.videoCalls": theCall._id },
+                $addToSet:
+                  callType === "audioCall"
+                    ? { audioCallHistory: theCall._id }
+                    : { videoCallHistory: theCall._id },
+              },
+              { runValidators: true }
+            ),
+            viewerDeducted,
+            modelGot,
+            Wallet.findOne({
+              relatedUser: theCall.viewer,
+            }).lean(),
+            Wallet.findOne({
+              relatedUser: client.data.relatedUserId,
+            }).lean(),
           ])
         }
       })
-      .then((values) => {
-        /* assign the latest values to theCall */
-        theCall = values[1]
-        viewerWallet = values[2]
-        viewerWallet.deductAmount(amountToDeduct)
-        return viewerWallet.save()
-      })
-      .then(() => {
-        /* now remove the pending calls from model & viewer */
-        const viewerPr = Viewer.updateOne(
-          {
-            _id: theCall.viewer._id,
-          },
-          {
-            $addToSet:
-              callType === "audioCall"
-                ? { audioCallHistory: theCall._id }
-                : { videoCallHistory: theCall._id },
-            $pull:
-              callType === "audioCall"
-                ? { "pendingCalls.audioCalls": theCall._id }
-                : { "pendingCalls.videoCalls": theCall._id },
-          },
-          { runValidators: true }
-        )
+      .then((result) => {
+        if (!result[0]) {
+          /**
+           * if call was not setup properly
+           */
+          const [
+            callSetUpProperly,
+            call,
+            viewerRes,
+            modelRes,
+            amountToRefundViewer,
+            deductFromModel,
+            vWalletRes,
+            mWalletRes,
+          ] = result
 
-        const modelPr = Model.updateOne(
-          {
-            _id: theCall.model._id,
-          },
-          {
-            $pull:
-              callType === "audioCall"
-                ? { "pendingCalls.audioCalls": theCall._id }
-                : { "pendingCalls.videoCalls": theCall._id },
-            $addToSet:
-              callType === "audioCall"
-                ? { audioCallHistory: theCall._id }
-                : { videoCallHistory: theCall._id },
-          },
-          { runValidators: true }
-        )
-        return Promise.all([viewerPr, modelPr])
+          theCall = call
+          if (viewerRes.n + modelRes.n !== 2) {
+            console.error(
+              "Model or Viewer ware not updated correctly after the call end from viewer!"
+            )
+          }
+
+          /**
+           * emit to the viewer about call transaction compeletion, with error
+           */
+          io.getIO()
+            .in(`${theCall.viewer._id}-private`)
+            .emit(chatEvents.model_call_end_request_finished, {
+              theCall: theCall._doc,
+              amountToRefund: amountToRefundViewer,
+              message:
+                "Call was not connected properly hence your money is refunded",
+              ended: "not-setuped-properly",
+            })
+        } else {
+          const [
+            callSetUpProperly,
+            call,
+            viewerRes,
+            modelRes,
+            viewerDeducted,
+            modelGot,
+            viewerWallet,
+            modelWallet,
+          ] = result
+
+          theCall = call
+          if (viewerRes.n + modelRes.n !== 2) {
+            console.error(
+              "Model or Viewer ware not updated correctly after the call end from viewer!"
+            )
+          }
+
+          /**
+           * emit to the viewer about call transaction compeletion
+           */
+          io.getIO()
+            .in(`${theCall.viewer.toString()}-private`)
+            .emit(chatEvents.model_call_end_request_finished, {
+              theCall: theCall._doc,
+              modelGot: modelGot,
+              totalCharges: viewerDeducted,
+              message: "Call was ended successfully by the model",
+              ended: "ok",
+              wallet: viewerWallet,
+            })
+        }
       })
-      .then(() => {
+      .finally(() => {
+        /**
+         * destroy the public channel
+         */
         io.getIO()
-          .in(`${theCall.stream._id.toString()}-public`)
-          .emit(chatEvents.model_call_end_request_finished)
+          .in(`${theCall.stream.toString()}-public`)
+          .socketsLeave(`${theCall.stream.toString()}-public`)
 
-        /* not sure if this needs to be done as anyway client is disconnected */
-        delete client.onCall
-        delete client.callId
-        delete client.callType
-        delete client.sharePercent
-      })
-      .catch((err) =>
-        console.error(
-          `call was not ended successFully for call => ${client.callId}, due to ${err.message}`
+        /**
+         * remove this model from live models list
+         */
+        io.getIO().emit(
+          chatEvents.call_end,
+          io.decreaseLiveCount(client.data.relatedUserId)
         )
-      )
+      })
   } else if (client.userType === "Viewer") {
     /* ========= DISCONNECTION FROM VIEWER SIDE ======== */
+    const callId = client.callId
+    const callType = client.callType
+    const endTimeStamp = Date.now()
+
+    io.getIO()
+      .in(`${client.data.relatedUserId}-private`)
+      .emit(chatEvents.model_call_end_request_init_received, {
+        action: "model-has-requested-call-end",
+      })
 
     let theCall
-    let viewerWallet
-    /* 
-     amount to deduct from the models wallet 
-     NOTE: this can be zero (0) if the call disconnects before the min call duration
-     as we have already deducted the min call duration amount from the viewer
-    */
-    let amountToDeduct
-    let amountAdded /* amount added in the models wallet */
-    let modelWallet
-    const endTimeStamp = Date.now()
-    const initialQuery =
-      client.callType === "audioCall"
-        ? AudioCall.updateOne(
-            {
-              _id: client.callId,
-            },
-            {
-              $addToSet: { concurrencyControl: 1 },
-            }
-          )
-        : VideoCall.updateOne(
-            {
-              _id: client.callId,
-            },
-            {
-              $addToSet: { concurrencyControl: 1 },
-            }
-          )
+    const query =
+      callType === "audioCall"
+        ? Promise.all([
+            AudioCall.updateOne(
+              {
+                _id: callId,
+              },
+              {
+                $addToSet: { concurrencyControl: 1 },
+              }
+            ),
+            AudioCall.findById(callId),
+          ])
+        : Promise.all([
+            VideoCall.updateOne(
+              {
+                _id: callId,
+              },
+              {
+                $addToSet: { concurrencyControl: 1 },
+              }
+            ),
+            VideoCall.findById(callId),
+          ])
 
-    initialQuery
-      .then((result) => {
-        /* decrease model count */
-        if (result.nModified === 0) {
-          /* no doc modified, model has ended tha call faster, return */
+    query
+      .then(([lockResult, callDoc]) => {
+        if (lockResult.nModified !== 1) {
+          /**
+           * processing of transaction for this call is already done
+           */
           return Promise.reject(
-            "Model ended/disconnected before model ended call before you, please wait while we are processing the transaction!"
+            "Model has ended the call before you, please wait while the transaction is processing!"
           )
-        } else if (result.nModified === 1) {
-          /* you have locked the db viewer cannot over-write */
-          const query =
-            client.callType === "audioCall"
-              ? Promise.all([
-                  AudioCall.findById(client.callId),
-                  Wallet.findOne({ relatedUser: client.data.relatedUserId }),
-                ])
-              : Promise.all([
-                  VideoCall.findById(client.callId),
-                  Wallet.findOne({ relatedUser: client.data.relatedUserId }),
-                ])
-          return query
+        }
+        theCall = callDoc
+        theCall.endTimeStamp = endTimeStamp
+        theCall.endReason = "viewer-ended"
+        theCall.status = "ended"
+
+        const callDuration =
+          (+endTimeStamp - theCall.startTimeStamp) / 1000 /* IN SECONDS */
+        const callDurationMinutes = callDuration / 60
+
+        theCall.callDuration = callDuration
+
+        let viewerDeducted
+        let modelGot
+        if (
+          theCall.advanceCut >
+          theCall.minCallDuration * theCall.chargePerMin
+        ) {
+          /**
+           * means all the money from the viewer was
+           * cut as advance, and the viewer has talked
+           * as long as advance money lasted
+           */
+          viewerDeducted = theCall.advanceCut
+          modelGot = theCall.advanceCut * (theCall.sharePercent / 100)
+        } else {
+          /**
+           * viewer had the money for next minute
+           */
+          if (callDurationMinutes <= theCall.minCallDuration) {
+            /* minCall duration charges only, not extra charges */
+            viewerDeducted = theCall.minCallDuration * theCall.chargePerMin
+            modelGot = viewerDeducted * (theCall.sharePercent / 100)
+          } else {
+            /* now charge over minCall duration */
+            viewerDeducted = Math.ceil(callDuration / 60) * theCall.chargePerMin
+            modelGot = viewerDeducted * (theCall.sharePercent / 100)
+          }
+        }
+
+        return Promise.all([
+          theCall.save(),
+          Model.updateOne(
+            {
+              _id: theCall.model,
+            },
+            {
+              isStreaming: false,
+              onCall: false,
+              currentStream: null,
+              $pull:
+                callType === "audioCall"
+                  ? { "pendingCalls.audioCalls": theCall._id }
+                  : { "pendingCalls.videoCalls": theCall._id },
+              $addToSet:
+                callType === "audioCall"
+                  ? { audioCallHistory: theCall._id }
+                  : { videoCallHistory: theCall._id },
+            },
+            { runValidators: true }
+          ),
+          Viewer.updateOne(
+            {
+              _id: theCall.viewer._id,
+            },
+            {
+              $addToSet:
+                callType === "audioCall"
+                  ? { audioCallHistory: theCall._id }
+                  : { videoCallHistory: theCall._id },
+              $pull:
+                callType === "audioCall"
+                  ? { "pendingCalls.audioCalls": theCall._id }
+                  : { "pendingCalls.videoCalls": theCall._id },
+            },
+            { runValidators: true }
+          ),
+          viewerDeducted,
+          modelGot,
+          Wallet.findOne({
+            relatedUser: theCall.viewer,
+          }).lean(),
+          Wallet.findOne({
+            relatedUser: theCall.model,
+          }).lean(),
+        ])
+      })
+      .then(
+        ([
+          call,
+          modelRes,
+          viewerRes,
+          viewerDeducted,
+          modelGot,
+          viewerWallet,
+          modelWallet,
+        ]) => {
+          if (viewerRes.n + modelRes.n !== 2) {
+            console.error(
+              "Model or Viewer ware not updated correctly after the call end from viewer!"
+            )
+          }
+          /**
+           * emit to the model about call transaction completion
+           */
+          io.getIO()
+            .in(`${theCall.model.toString()}-private`)
+            .emit(chatEvents.viewer_call_end_request_finished, {
+              theCall: theCall._doc,
+              modelGot: modelGot,
+              totalCharges: viewerDeducted,
+              message: "Call was ended successfully by the model",
+              ended: "ok",
+              wallet: modelWallet,
+            })
+        }
+      )
+      .catch((err) => {
+        if (typeof err === "string") {
+          console.error(err)
+        } else {
+          console.error("Viewer disconnected from call Error: " + err.message)
         }
       })
-      .then((values) => {
-        theCall = values[0]
-        viewerWallet = values[1]
+      .finally(() => {
+        /**
+         * destroy the public channel
+         */
+        io.getIO()
+          .in(`${theCall.stream.toString()}-public`)
+          .socketsLeave(`${theCall.stream.toString()}-public`)
 
-        /* decrease the live count, provide the model id */
+        /**
+         * this model from live models list
+         */
         io.getIO().emit(
           chatEvents.call_end,
           io.decreaseLiveCount(theCall.model.toString())
         )
-
-        io.getIO()
-          .in(`${theCall.model.toString()}-private`)
-          .emit(chatEvents.model_call_end_request_init_received, {
-            action: "viewer-has-requested-call-end",
-          })
-
-        if (theCall.endTimeStamp) {
-          /* return bro */
-          const error = new Error(
-            "call doc updated even after locking, this should be impossible"
-          )
-          error.statusCode = 500
-          throw error
-        } else {
-          /* do the money transfer logic */
-          theCall.endTimeStamp = endTimeStamp
-          theCall.endReason = "viewer-network-error"
-          theCall.status = "ended"
-          theCall.callDuration = (+endTimeStamp - theCall.startTimeStamp) / 1000
-          const totalCallDuration =
-            (+endTimeStamp - theCall.startTimeStamp) /
-            60000 /* convert milliseconds to minutes */
-
-          if (totalCallDuration <= theCall.minCallDuration) {
-            amountToDeduct = 0
-          } else {
-            const billableCallDuration = Math.ceil(
-              totalCallDuration - theCall.minCallDuration
-            ) /* in minutes */
-            amountToDeduct = billableCallDuration * theCall.chargePerMin
-          }
-          viewerWallet.deductAmount(amountToDeduct)
-
-          return Promise.all([
-            viewerWallet.save(),
-            theCall.save(),
-            Model.findByIdAndUpdate(theCall.model._id, {
-              onCall: false,
-              isStreaming: false,
-            })
-              .select("sharePercent")
-              .lean(),
-            Wallet.findOne({ relatedUser: theCall.model._id }),
-          ])
-        }
       })
-      .then((values) => {
-        const sharePercent = values[2].sharePercent
-        modelWallet = values[3]
-        /* assign the latest values to theCall */
-        theCall = values[1]
-        amountAdded = amountToDeduct * (sharePercent / 100)
-        modelWallet.addAmount(amountAdded)
-        /* for admin account */
-        // adminWallet.addAmount(amountToDeduct * ((100 - sharePercent) / 100))
-        return modelWallet.save()
-      })
-      .then(() => {
-        /* now remove the pending calls from model & viewer */
-        const viewerPr = Viewer.updateOne(
-          {
-            _id: theCall.viewer._id,
-          },
-          {
-            $addToSet:
-              client.callType === "audioCall"
-                ? { audioCallHistory: theCall._id }
-                : { videoCallHistory: theCall._id },
-            $pull:
-              client.callType === "audioCall"
-                ? { "pendingCalls.audioCalls": theCall._id }
-                : { "pendingCalls.videoCalls": theCall._id },
-          },
-          { runValidators: true }
-        )
-
-        const modelPr = Model.updateOne(
-          {
-            _id: theCall.model._id,
-          },
-          {
-            $pull:
-              client.callType === "audioCall"
-                ? { "pendingCalls.audioCalls": theCall._id }
-                : { "pendingCalls.videoCalls": theCall._id },
-            $addToSet:
-              client.callType === "audioCall"
-                ? { audioCallHistory: theCall._id }
-                : { videoCallHistory: theCall._id },
-          },
-          { runValidators: true }
-        )
-        return Promise.all([viewerPr, modelPr])
-      })
-      .then((values) => {
-        if (values[1].n + values[0].n === 2) {
-          let modelSocketCleared = false /* model socket */
-          try {
-            /* try to clear models socket client also */ a
-            const modelSocket = io
-              .getIO()
-              .sockets.sockets.get(
-                Array.from(
-                  io
-                    .getIO()
-                    .sockets.adapter.rooms.get(
-                      `${theCall.model._id.toString()}-private`
-                    )
-                )?.[0]
-              )
-            delete modelSocket.onCall
-            delete modelSocket.callId
-            delete modelSocket.callType
-            delete modelSocket.sharePercent
-            modelSocketCleared = true
-          } catch (e) {
-            modelSocketCleared = false
-          }
-
-          /* update models local wallet  */
-          io.getIO()
-            .in(`${theCall.model._id.toString()}-private`)
-            .emit("model-wallet-updated", {
-              modelId: theCall.model._id,
-              operation: "add",
-              amount: amountAdded,
-            })
-
-          /* not have to show call end details of the  model, model already have viewers detail */
-          io.getIO()
-            .in(`${theCall.stream._id.toString()}-public`)
-            .emit(chatEvents.viewer_call_end_request_finished, {
-              theCall: theCall._doc,
-              modelGot: amountAdded,
-              totalCharges: amountToDeduct,
-              message: "Call was ended successfully by the model",
-              ended: "ok",
-              modelSocketCleared: modelSocketCleared,
-            })
-
-          /**
-           * as client has disconnected no need to clear socket
-           */
-        } else {
-          const error = new Error("pending calls were not removed successfully")
-          error.statusCode = 500
-          throw error
-        }
-      })
-      .catch((err) => {
-        console.error(
-          "Error while ending call after viewer disconnection Reason: ",
-          err?.message || err
-        )
-      })
-
     /**
      * 1. remove this call from pending calls of viewer & model
      * 2. bill & debit the amount respectively

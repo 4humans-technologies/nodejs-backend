@@ -5,6 +5,7 @@ const chatEventListeners = require("./chat/chatEventListeners")
 const { cloneDeep } = require("lodash")
 const io = require("../../socket")
 const { viewerJoined } = require("../socket/socketEvents")
+const { viewer_left_received } = require("./chat/chatEvents")
 
 module.exports = function updateClientInfo(client) {
   client.on("update-client-info", (data, callback) => {
@@ -23,8 +24,17 @@ module.exports = function updateClientInfo(client) {
 
           /* NEEDED of all this, because anyway this client NOT be deleted */
           /* leave all the rooms you were connected to as authed user */
-          Array.from(client.rooms).forEach((room) => {
-            client.leave(room)
+          Array.from(client.rooms).forEach((myRoom) => {
+            if (myRoom.endsWith("-public")) {
+              client.leave(myRoom)
+              client.in(myRoom).emit(viewer_left_received, {
+                roomSize: io.getIO().sockets.adapter.rooms.get(myRoom)?.size,
+                relatedUserId: client.data?.relatedUserId,
+              })
+              /* free data keys */
+              delete client.onStream
+              delete client.streamId
+            }
           })
 
           /* remove all chat listeners from user */
