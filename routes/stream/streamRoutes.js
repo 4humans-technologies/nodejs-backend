@@ -74,7 +74,7 @@ router.post(
 )
 
 router.get("/get-active-chat-plans", streamController.getChatPlans)
-router.get("/get-live-room-count/:room", streamController.getLiveRoomCount)
+router.get("/get-live-viewers/:room", streamController.getLiveRoomCount)
 router.post("/buy-chat-plan", tokenVerify, streamController.buyChatPlan)
 router.get(
   "/get-a-viewers-details/:viewerId",

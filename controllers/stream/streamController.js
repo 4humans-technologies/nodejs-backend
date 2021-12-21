@@ -7,6 +7,7 @@ const Wallet = require("../../models/globals/wallet")
 const Model = require("../../models/userTypes/Model")
 const Viewer = require("../../models/userTypes/Viewer")
 const io = require("../../socket")
+const redisClient = require("../../redis")
 const socketEvents = require("../../utils/socket/socketEvents")
 const PrivateChatPlan = require("../../models/management/privateChatPlan")
 const chatEvents = require("../../utils/socket/chat/chatEvents")
@@ -88,10 +89,15 @@ exports.handleEndStream = (req, res, next) => {
       /* destroy the stream chat rooms, heave to leave rooms on server as on client side it will overwhelm the client */
       io.getIO().in(`${streamId}-public`).socketsLeave(`${streamId}-public`)
 
-      return res.status(200).json({
-        actionStatus: "success",
-        message:
-          "stream ended successfully, If you have pending call, then please call the customer fast 👍👍🤘",
+      redisClient.del(`${streamId}-public`, (err) => {
+        if (err) {
+          console.error("Redis delete err", err)
+        }
+        return res.status(200).json({
+          actionStatus: "success",
+          message:
+            "stream ended successfully, If you have pending call, then please call the customer fast 👍👍🤘",
+        })
       })
     })
     .catch((err) => {
@@ -450,17 +456,23 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         "sec"
       )
 
-      return res.status(200).json({
-        actionStatus: "success",
-        viewerDoc: viewer,
-        callDoc: callDoc,
-        callStartTs: callStartTimeStamp /* not ISO, its in milliseconds */,
-        socketDataUpdated: socketDataUpdated,
-        sharePercent: +req.user.relatedUser.sharePercent,
-        rtcToken: modelToken.rtcToken,
-        privilegeExpiredTs: modelToken.privilegeExpiredTs,
-        canAffordNextMinute,
-        modelTokenValidity,
+      redisClient.del(`${streamId}-public`, (err, response) => {
+        if (err) {
+          console.error("Redis delete err", err)
+        }
+        console.log("Stream delete redis response:", response)
+        return res.status(200).json({
+          actionStatus: "success",
+          viewerDoc: viewer,
+          callDoc: callDoc,
+          callStartTs: callStartTimeStamp /* not ISO, its in milliseconds */,
+          socketDataUpdated: socketDataUpdated,
+          sharePercent: +req.user.relatedUser.sharePercent,
+          rtcToken: modelToken.rtcToken,
+          privilegeExpiredTs: modelToken.privilegeExpiredTs,
+          canAffordNextMinute,
+          modelTokenValidity,
+        })
       })
     })
     .catch((err) => {
@@ -1525,28 +1537,41 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
   }
 
   try {
-    const model = await Promise.all(
-      Model.findById(modelId),
+    const [model, viewer] = await Promise.all([
+      Model.findById(modelId).select("currentStream isStreaming").lean(),
       Viewer.findById(req.user.relatedUser._id)
-    )
-      .select("currentStream isStreaming")
-      .lean()
+        .lean()
+        .select("name isChatPlanActive profileImage")
+        .populate({
+          path: "wallet",
+          select: "currentAmount",
+          options: { lean: true },
+        })
+        .populate({
+          path: "rootUser",
+          select: "username",
+          options: { lean: true },
+        }),
+    ])
 
-    /* ========================== */
     /**
      * all the viewers will rejoin on the same will over whelm the system
      * so dont't emit during rejoin only emit to the model
      */
     if (model.isStreaming) {
       /* if model is streaming */
-      /* if rejoin it means model already have your data */
-      io.getIO()
-        .in(`${modelId}-private`)
-        .emit(`${socketEvents.viewerJoined}-private`, {
-          // roomSize: roomSize, /* hey model ask the room size with a http request after a time gap  */
-          reJoin: true /* hey, model if rejoin then don't update live count*/,
-          relatedUserId: req.user.relatedUser._id,
-        })
+
+      /**
+       * no need to emit this 👇 to model,she can get all viewers when fetching live viewers count
+       */
+
+      // io.getIO()
+      //   .in(`${modelId}-private`)
+      //   .emit(`${socketEvents.viewerJoined}-private`, {
+      //     // roomSize: roomSize, /* hey model ask the room size with a http request after a time gap  */
+      //     reJoin: true /* hey, model if rejoin then don't update live count*/,
+      //     relatedUserId: req.user.relatedUser._id,
+      // })
 
       /**
        * ============
@@ -1570,33 +1595,60 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
         socketUpdated = false
       }
 
-      if (getNewToken) {
-        const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-          "viewer",
-          req.user.relatedUser._id,
-          modelId
-        )
-        return res.status(200).json({
-          actionStatus: "success",
-          isChatPlanActive: req.user.relatedUser.isChatPlanActive,
-          streamId: model.currentStream._id,
-          socketUpdated: socketUpdated,
-          privilegeExpiredTs: privilegeExpiredTs,
-          rtcToken: rtcToken,
+      /**
+       * REDIS-->
+       */
+      redisClient.get(`${model.currentStream._id}-public`, (err, viewers) => {
+        console.log("Redis-rejoin: room-viewers", viewers)
+        viewers = JSON.parse(viewers)
+        viewers.push({
+          ...viewer,
+          username: viewer.rootUser.username,
+          walletCoins: viewer.wallet.currentAmount,
         })
-      }
+        redisClient.set(
+          `${model.currentStream._id}-public`,
+          JSON.stringify(viewers),
+          (err) => {
+            if (!err) {
+              // send the response
+              if (getNewToken) {
+                const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                  "viewer",
+                  req.user.relatedUser._id,
+                  modelId
+                )
+                return res.status(200).json({
+                  actionStatus: "success",
+                  isChatPlanActive: req.user.relatedUser.isChatPlanActive,
+                  streamId: model.currentStream._id,
+                  socketUpdated: socketUpdated,
+                  privilegeExpiredTs: privilegeExpiredTs,
+                  rtcToken: rtcToken,
+                  liveViewersList: viewers,
+                })
+              } else {
+                return res.status(200).json({
+                  actionStatus: "success",
+                  isChatPlanActive: req.user.relatedUser.isChatPlanActive,
+                  streamId: model.currentStream._id,
+                  socketUpdated: socketUpdated,
+                  liveViewersList: viewers,
+                })
+              }
+            } else {
+              return next(err)
+            }
+          }
+        )
+      })
+    } else {
       return res.status(200).json({
-        actionStatus: "success",
+        actionStatus: "failed",
+        message: "This model is currently no streaming, please comeback later.",
         isChatPlanActive: req.user.relatedUser.isChatPlanActive,
-        streamId: model.currentStream._id,
-        socketUpdated: socketUpdated,
       })
     }
-    return res.status(200).json({
-      actionStatus: "failed",
-      message: "This model is currently no streaming, please comeback later.",
-      isChatPlanActive: req.user.relatedUser.isChatPlanActive,
-    })
   } catch (e) {
     const err = new Error(e.message + "Stream chats not joined")
     err.statusCode = 500
@@ -1670,8 +1722,14 @@ exports.getLiveRoomCount = (req, res, next) => {
    */
   const { room } = req.params
 
-  return res.status(200).json({
-    roomSize: io.getIO().sockets.adapter.rooms.get(room)?.size,
+  redisClient.get(room, (err, viewers) => {
+    if (err) {
+      return console.error(err)
+    }
+    return res.status(200).json({
+      roomSize: io.getIO().sockets.adapter.rooms.get(room)?.size,
+      viewersList: viewers,
+    })
   })
 }
 

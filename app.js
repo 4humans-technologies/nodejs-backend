@@ -1,7 +1,7 @@
 require("dotenv").config()
 const mongoose = require("mongoose")
 const firebase = require("./firebase")
-const redis = require("./redis")
+const redisClient = require("./redis")
 const express = require("express")
 const socket = require("./socket")
 const app = express()
@@ -264,14 +264,36 @@ mongoose
             /* if viewer was on a stream */
             const myRoom = `${client.streamId}-public`
             if (client.authed) {
-              socket
-                .getIO()
-                .in(myRoom)
-                .emit(viewer_left_received, {
-                  roomSize: socket.getIO().sockets.adapter.rooms.get(myRoom)
-                    ?.size,
-                  relatedUserId: client.data.relatedUserId,
-                })
+              redisClient.get(myRoom, (err, viewers) => {
+                if (viewers) {
+                  viewers = JSON.parse(viewers)
+                  viewers = viewers.filter(
+                    (viewer) => viewer._id !== client.data.relatedUserId
+                  )
+                  redisClient.set(myRoom, JSON.stringify(viewers), (err) => {
+                    if (err) {
+                      return console.error(
+                        "Viewer not removed from viewers list Redis err: ",
+                        err
+                      )
+                    }
+                    socket
+                      .getIO()
+                      .in(myRoom)
+                      .emit(viewer_left_received, {
+                        roomSize: socket
+                          .getIO()
+                          .sockets.adapter.rooms.get(myRoom)?.size,
+                        relatedUserId: client.data.relatedUserId,
+                      })
+                  })
+                } else {
+                  return console.error(
+                    "No viewers in redis for room : ",
+                    myRoom
+                  )
+                }
+              })
             } else {
               socket
                 .getIO()

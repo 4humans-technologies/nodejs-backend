@@ -95,14 +95,10 @@ exports.createStreamAndToken = (req, res, next) => {
           w: 3,
           j: true,
         })
-        .select("profileImage") /* for live updating of the landing page */
+        .select("profileImage bannedStates")
         .lean()
     })
     .then((model) => {
-      // io.join(theStream._id)
-      // everybody will get the notification of new stream
-      /* 👉👉 return data so as to compose the complete card on the main page */
-
       const streamRoomPublic = `${theStream._id}-public`
       try {
         clientSocket.isStreaming = true
@@ -114,20 +110,33 @@ exports.createStreamAndToken = (req, res, next) => {
       } catch (err) {
         /* try catch just for safety */
       }
-      io.getIO().emit(socketEvents.streamCreated, {
-        modelId: req.user.relatedUser._id,
-        profileImage: model.profileImage,
-        liveNow: io.increaseLiveCount({
-          _id: req.user.relatedUser._id.toString(),
-          username: req.user.username,
-        }),
-      })
 
-      return res.status(200).json({
-        actionStatus: "success",
-        rtcToken: rtcToken,
-        privilegeExpiredTs: privilegeExpiredTs,
-        streamId: theStream._id,
+      redisClient.set(`${theStream._id.toString()}-public`, "[]", (err) => {
+        if (!err) {
+          /**
+           * notify user about new stream
+           */
+          console.log("Redis viewerList created")
+          io.getIO().emit(socketEvents.streamCreated, {
+            modelId: req.user.relatedUser._id,
+            profileImage: model.profileImage,
+            streamId: theStream._id,
+            bannedStates: model.bannedStates,
+            liveNow: io.increaseLiveCount({
+              _id: req.user.relatedUser._id.toString(),
+              username: req.user.username,
+            }),
+          })
+
+          return res.status(200).json({
+            actionStatus: "success",
+            rtcToken: rtcToken,
+            privilegeExpiredTs: privilegeExpiredTs,
+            streamId: theStream._id,
+          })
+        } else {
+          return next(err)
+        }
       })
     })
     .catch((err) => {
@@ -301,8 +310,9 @@ exports.genRtcTokenViewer = (req, res, next) => {
             // redis
             redisClient.get(streamRoom, (err, viewers) => {
               console.log("Redis: room-viewers", viewers)
+              viewers = JSON.parse(viewers)
               viewers.push(viewerDetails)
-              redisClient.set(streamRoom, (err, response) => {
+              redisClient.set(streamRoom, JSON.stringify(viewers), (err) => {
                 if (!err) {
                   const roomSize = io
                     .getIO()
@@ -337,6 +347,8 @@ exports.genRtcTokenViewer = (req, res, next) => {
                     viewerDetails: viewerDetails,
                     liveViewersList: viewers,
                   })
+                } else {
+                  return next(err)
                 }
               })
             })

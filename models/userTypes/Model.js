@@ -66,6 +66,10 @@ const modelSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
+  bannedStates: {
+    type: [String],
+    default: [],
+  },
   tags: [
     {
       type: mongoose.Schema.Types.ObjectId,

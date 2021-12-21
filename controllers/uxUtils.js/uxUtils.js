@@ -50,7 +50,13 @@ exports.getRankingOnlineModels = (req, res, next) => {
   //   select: { 'field_name': 1, 'field_name': 1 },
   // })
   paginator
-    .withNormal(null, query, "rating onCall isStreaming profileImage", req, res)
+    .withNormal(
+      null,
+      query,
+      "rating onCall isStreaming profileImage bannedStates",
+      req,
+      res
+    )
     .catch((err) => next(err))
 }
 

@@ -1,6 +1,7 @@
 const Stream = require("../../../models/globals/Stream")
 const Model = require("../../../models/userTypes/Model")
 const io = require("../../../socket")
+const redisClient = require("../../../redis")
 const socketEvents = require("../socketEvents")
 
 module.exports = function onDisconnectStreamEndHandler(client) {
@@ -41,24 +42,29 @@ module.exports = function onDisconnectStreamEndHandler(client) {
          * then only emit the event
          */
 
-        io.getIO().emit(socketEvents.deleteStreamRoom, {
-          modelId: client.data.relatedUserId,
-          liveNow: io.decreaseLiveCount(client.data.relatedUserId),
+        const publicRoom = `${client.streamId}-public`
+        redisClient.del(publicRoom, (err, response) => {
+          if (!err) {
+            console.log("Stream delete redis response:", response)
+            io.getIO().emit(socketEvents.deleteStreamRoom, {
+              modelId: client.data.relatedUserId,
+              liveNow: io.decreaseLiveCount(client.data.relatedUserId),
+            })
+
+            /* destroy the stream chat rooms, 
+              adding timeout so that isModelOffline ste can be set the later
+              when the "you-left-the-room" event occurs safely get out of the
+              room (problem due to setInterval running in loop)
+              will definitely look to improve this strategy in future
+            */
+            setTimeout(() => {
+              io.getIO().in(publicRoom).socketsLeave(publicRoom)
+            }, 1000)
+          } else {
+            throw err
+          }
         })
       }
-
-      /* end the stream of every user, as the model has disconnected */
-      const publicRoom = `${client.streamId}-public`
-
-      /* destroy the stream chat rooms, 
-        adding timeout so that isModelOffline ste can be set the later
-        when the "you-left-the-room" event occurs safely get out of the
-        room (problem due to setInterval running in loop)
-        will definitely look to improve this strategy in future
-      */
-      setTimeout(() => {
-        io.getIO().in(publicRoom).socketsLeave(publicRoom)
-      }, 1000)
     })
     .catch((err) => {
       /* may emit to the user */
