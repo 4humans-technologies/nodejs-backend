@@ -111,6 +111,11 @@ app.use("/api/website/coupon", couponRouter)
 app.use("/api/website/verification", verificationRouter)
 
 /* aws setup */
+app.get("/api/website/get-geo-location", (req, res, next) => {
+  return res.status(200).json({
+    regionName: "delta",
+  })
+})
 app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
   const { type } = req.query
   if (!type) {
