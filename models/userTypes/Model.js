@@ -244,8 +244,14 @@ const modelSchema = new mongoose.Schema({
     default: "I will soon come online, I Know you are waiting for me 🥰🥰",
     maxlength: 164,
   },
-  backGroundImage: String,
-  coverImage: String,
+  backGroundImage: {
+    type: String,
+    default: "",
+  },
+  coverImage: {
+    type: String,
+    default: "",
+  },
   streams: [
     {
       type: mongoose.Schema.Types.ObjectId,

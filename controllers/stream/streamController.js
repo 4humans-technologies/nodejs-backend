@@ -343,7 +343,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
           { _id: callDoc.viewer },
           {
             $push:
-              callDoc.callType === "AudioCall"
+              callType === "AudioCall"
                 ? { "pendingCalls.audioCalls": callDoc._id }
                 : { "pendingCalls.videoCalls": callDoc._id },
           }
@@ -361,7 +361,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
           { _id: req.user.relatedUser._id },
           {
             $push:
-              callDoc.callType === "AudioCall"
+              callType === "AudioCall"
                 ? { "pendingCalls.audioCalls": callDoc._id }
                 : { "pendingCalls.videoCalls": callDoc._id },
             isStreaming: false,
@@ -386,7 +386,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         /* all the necessary details to do the billing in case of a disconnect */
         clientSocket.onCall = true
         clientSocket.callId = callDoc._id.toString()
-        clientSocket.callType = callDoc.callType
+        clientSocket.callType = callType
         clientSocket.sharePercent = +req.user.relatedUser.sharePercent
 
         socketDataUpdated = true
@@ -1067,7 +1067,7 @@ exports.setCallOngoing = (req, res, next) => {
 
         clientSocket.onCall = true
         clientSocket.callId = callDoc._id.toString()
-        clientSocket.callType = callDoc.callType
+        clientSocket.callType = callType
         clientSocket.sharePercent = +callDoc.sharePercent
 
         socketUpdated = true

@@ -17,5 +17,10 @@ router.put(
   tokenVerifyWithOutPopulate,
   viewerProfileController.updateProfileInfo
 )
+router.get(
+  "/get-viewer-token-history",
+  tokenVerifyWithOutPopulate,
+  viewerProfileController.getTokenHistoryOfModel
+)
 
 module.exports = router

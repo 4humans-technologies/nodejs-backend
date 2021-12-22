@@ -22,16 +22,21 @@ exports.createStreamAndToken = (req, res, next) => {
   const { socketId } = req.query
 
   let clientSocket = io.getIO().sockets.sockets.get(socketId)
-  if (!clientSocket) {
-    clientSocket = io
-      .getIO()
-      .sockets.sockets.get(
-        Array.from(
-          io
-            .getIO()
-            .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-        )?.[0]
-      )
+
+  try {
+    if (!clientSocket) {
+      clientSocket = io
+        .getIO()
+        .sockets.sockets.get(
+          Array.from(
+            io
+              .getIO()
+              .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+          )?.[0]
+        )
+    }
+  } catch (err) {
+    /* error */
   }
 
   // check if the model is approved or not,
@@ -167,7 +172,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
 
   let theModel
   let selectString =
-    "currentStream numberOfFollowers minCallDuration callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
+    "currentStream numberOfFollowers minCallDuration backGroundImage callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
   Model.findOne({
     _id: modelId,
   })
@@ -422,7 +427,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
   let socketUpdated
   Model.findById(modelId)
     .select(
-      "currentStream numberOfFollowers minCallDuration callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
+      "currentStream numberOfFollowers minCallDuration backGroundImage callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges"
     )
     .populate({
       path: "tags",

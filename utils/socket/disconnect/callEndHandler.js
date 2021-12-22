@@ -294,8 +294,8 @@ module.exports = function (client) {
          * destroy the public channel
          */
         io.getIO()
-          .in(`${theCall.stream.toString()}-public`)
-          .socketsLeave(`${theCall.stream.toString()}-public`)
+          .in(`${theCall.stream._id.toString()}-public`)
+          .socketsLeave(`${theCall.stream._id.toString()}-public`)
 
         /**
          * remove this model from live models list
@@ -345,6 +345,7 @@ module.exports = function (client) {
 
     query
       .then(([lockResult, callDoc]) => {
+        theCall = callDoc
         if (lockResult.nModified !== 1) {
           /**
            * processing of transaction for this call is already done
@@ -353,7 +354,6 @@ module.exports = function (client) {
             "Model has ended the call before you, please wait while the transaction is processing!"
           )
         }
-        theCall = callDoc
         theCall.endTimeStamp = endTimeStamp
         theCall.endReason = "viewer-ended"
         theCall.status = "ended"
@@ -489,7 +489,7 @@ module.exports = function (client) {
          */
         io.getIO().emit(
           chatEvents.call_end,
-          io.decreaseLiveCount(theCall.model.toString())
+          io.decreaseLiveCount(theCall.model._id.toString())
         )
       })
     /**
