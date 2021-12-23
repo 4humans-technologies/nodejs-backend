@@ -315,13 +315,7 @@ mongoose
         console.error("Error: ", err)
       }
 
-      try {
-        /* room handlers */
-        requestRoomHandlers(client)
-      } catch (err) {
-        console.error("Error while handling room join and leave!")
-        console.error("Error: ", err)
-      }
+      requestRoomHandlers(client)
 
       try {
         /* update client info on viewers request */
