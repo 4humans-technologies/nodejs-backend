@@ -6,15 +6,7 @@ client.on("error", function (error) {
 })
 
 client.on("connect", function () {
-  console.log("Connected!")
-})
-
-client.get("name", (error, name) => {
-  console.log("value from name", name)
-})
-
-client.set("name", "kkkkkkk", (error, name) => {
-  console.log("value from name", name)
+  console.log("====connected to redis=====")
 })
 
 module.exports = client

@@ -39,7 +39,7 @@ module.exports = {
      * modelId should be string
      */
     liveModels = liveModels.filter((model) => {
-      if (model._id !== modelId) {
+      if (model._id === modelId) {
         console.log(`Model @${model.username} is now offline ::>`)
       }
       return model._id !== modelId

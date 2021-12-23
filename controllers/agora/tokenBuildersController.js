@@ -292,7 +292,6 @@ exports.genRtcTokenViewer = (req, res, next) => {
               clientSocket.join(streamRoom)
               /* deliberately making him rejoin just incase he has left the private room */
               clientSocket.join(`${req.user.relatedUser._id}-private`)
-
               socketUpdated = true
             } catch (err) {
               socketUpdated = false
@@ -314,10 +313,16 @@ exports.genRtcTokenViewer = (req, res, next) => {
 
             // redis
             redisClient.get(streamRoom, (err, viewers) => {
-              console.log("Redis: room-viewers", viewers)
-              viewers = JSON.parse(viewers)
-              viewers.push(viewerDetails)
-              redisClient.set(streamRoom, JSON.stringify(viewers), (err) => {
+              const myViewers = JSON.parse(viewers || "[]")
+              if (
+                !myViewers.find(
+                  (viewer) => viewer._id === req.user.relatedUser._id
+                )
+              ) {
+                myViewers.push(viewerDetails)
+                viewers = JSON.stringify(myViewers)
+              }
+              redisClient.set(streamRoom, viewers, (err) => {
                 if (!err) {
                   const roomSize = io
                     .getIO()
@@ -350,7 +355,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
                     isChatPlanActive: viewer.isChatPlanActive,
                     socketUpdated: socketUpdated,
                     viewerDetails: viewerDetails,
-                    liveViewersList: viewers,
+                    liveViewersList: myViewers,
                   })
                 } else {
                   return next(err)

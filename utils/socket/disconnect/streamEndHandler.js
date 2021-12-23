@@ -5,7 +5,7 @@ const redisClient = require("../../../redis")
 const socketEvents = require("../socketEvents")
 
 module.exports = function onDisconnectStreamEndHandler(client) {
-  const duration = (Date.now() - client.createdAt) / 60000
+  const duration = (Date.now() - client.createdAt) / 1000 /* in seconds */
 
   Promise.all([
     Stream.findOneAndUpdate(
@@ -15,7 +15,8 @@ module.exports = function onDisconnectStreamEndHandler(client) {
       {
         endReason: "socket-disconnect",
         status: "ended",
-        duration: duration,
+        duration: Math.round(duration),
+        // moneySpent: Number, Have to run seaprate query to find all the token histories related to this stream
       }
     )
       .select("status endReason")

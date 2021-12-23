@@ -42,16 +42,12 @@ exports.handleEndStream = (req, res, next) => {
         model.isStreaming &&
         model.currentStream
       ) {
-        io.getIO().emit(socketEvents.deleteStreamRoom, {
-          modelId: req.user.relatedUser._id,
-          liveNow: io.decreaseLiveCount(req.user.relatedUser._id.toString()),
-        })
         const duration =
           (new Date().getTime() - new Date(stream.createdAt).getTime()) /
-          60000 /* in minutes */
-        stream.endReason = "Manual"
+          1000 /* in minutes */
+        stream.endReason = "manual"
         stream.status = "ended"
-        stream.meta.set("duration", duration)
+        stream.duration = Math.round(duration)
 
         /* emit to all about delete stream room */
         return Promise.all([
@@ -105,6 +101,10 @@ exports.handleEndStream = (req, res, next) => {
     })
     .finally(() => {
       /* to execute absolute necessary code */
+      io.getIO().emit(socketEvents.deleteStreamRoom, {
+        modelId: req.user.relatedUser._id,
+        liveNow: io.decreaseLiveCount(req.user.relatedUser._id.toString()),
+      })
     })
 }
 
@@ -268,8 +268,9 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       relatedUser: req.user.relatedUser._id,
     }),
     Wallet.findOne({ relatedUser: viewerId }),
+    Stream.findById(streamId).lean().select("createdAt"),
   ])
-    .then(([call, modelWallet, viewerWallet]) => {
+    .then(([call, modelWallet, viewerWallet, stream]) => {
       /* deduct min charges from viewer and add to model wallet */
       callDoc = call
       callingViewerSocketData.callId = callDoc._id.toString()
@@ -324,18 +325,39 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       )
       // rest add to the admin wallet
       // TODO: transfer coins to admin also 🔺🔻
-      return Promise.all([modelWallet.save(), viewerWallet.save(), call.save()])
+      return Promise.all([
+        modelWallet.save(),
+        viewerWallet.save(),
+        call.save(),
+        Stream.updateOne(
+          {
+            _id: streamId,
+          },
+          {
+            status: "ended",
+            endReason: callType,
+            duration: Math.round(
+              (Date.now() - new Date(stream.createdAt).getTime()) / 1000
+            ),
+            endCall: {
+              callId: call._id,
+              callType: callType,
+            },
+          }
+        ),
+      ])
     })
     .then(([modelWallet, viewerWallet, call]) => {
-      /* update the local wallet of model */
       theCall = call
-      io.getIO()
+
+      /* update the local wallet of model */
+      /* io.getIO()
         .in(`${req.user.relatedUser._id}-private`)
         .emit("model-wallet-updated", {
           modelId: req.user.relatedUser._id,
           operation: "set",
           amount: modelWallet.currentAmount,
-        })
+        }) */
 
       /* add the call as pending call for both model and viewer */
       return Promise.all([
@@ -513,6 +535,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
 
   query
     .then(([lockResult, callDoc]) => {
+      theCall = callDoc
       if (lockResult.nModified !== 1) {
         /**
          * processing of transaction for this call is already done
@@ -666,7 +689,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
        */
       io.getIO().emit(
         chatEvents.call_end,
-        io.decreaseLiveCount(theCall.model.toString())
+        io.decreaseLiveCount(theCall.model._id.toString())
       )
     })
 }
@@ -1529,15 +1552,19 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
   let { socketId } = req.query
 
   if (!socketId) {
-    socketId = Array.from(
-      io
-        .getIO()
-        .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-    )[0]
+    try {
+      socketId = Array.from(
+        io
+          .getIO()
+          .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+      )[0]
+    } finally {
+      console.info("socketId not found even from private room")
+    }
   }
 
   try {
-    const [model, viewer] = await Promise.all([
+    var [model, viewer] = await Promise.all([
       Model.findById(modelId).select("currentStream isStreaming").lean(),
       Viewer.findById(req.user.relatedUser._id)
         .lean()
@@ -1599,54 +1626,57 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
        * REDIS-->
        */
       redisClient.get(`${model.currentStream._id}-public`, (err, viewers) => {
-        console.log("Redis-rejoin: room-viewers", viewers)
-        viewers = JSON.parse(viewers)
-        viewers.push({
-          ...viewer,
-          username: viewer.rootUser.username,
-          walletCoins: viewer.wallet.currentAmount,
-        })
-        redisClient.set(
-          `${model.currentStream._id}-public`,
-          JSON.stringify(viewers),
-          (err) => {
-            if (!err) {
-              // send the response
-              if (getNewToken) {
-                const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-                  "viewer",
-                  req.user.relatedUser._id,
-                  modelId
-                )
-                return res.status(200).json({
-                  actionStatus: "success",
-                  isChatPlanActive: req.user.relatedUser.isChatPlanActive,
-                  streamId: model.currentStream._id,
-                  socketUpdated: socketUpdated,
-                  privilegeExpiredTs: privilegeExpiredTs,
-                  rtcToken: rtcToken,
-                  liveViewersList: viewers,
-                })
-              } else {
-                return res.status(200).json({
-                  actionStatus: "success",
-                  isChatPlanActive: req.user.relatedUser.isChatPlanActive,
-                  streamId: model.currentStream._id,
-                  socketUpdated: socketUpdated,
-                  liveViewersList: viewers,
-                })
-              }
+        const myViewers = JSON.parse(viewers)
+        /**
+         * check is viewer is already in the list
+         */
+        if (
+          !myViewers.find((viewer) => viewer._id === req.user.relatedUser._id)
+        ) {
+          myViewers.push({
+            ...viewer,
+            username: viewer.rootUser.username,
+            walletCoins: viewer.wallet.currentAmount,
+          })
+          viewers = JSON.stringify(myViewers)
+        }
+        redisClient.set(`${model.currentStream._id}-public`, viewers, (err) => {
+          if (!err) {
+            // send the response
+            if (getNewToken) {
+              const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                "viewer",
+                req.user.relatedUser._id,
+                modelId
+              )
+              return res.status(200).json({
+                actionStatus: "success",
+                isChatPlanActive: viewer.isChatPlanActive,
+                streamId: model.currentStream._id,
+                socketUpdated: socketUpdated,
+                privilegeExpiredTs: privilegeExpiredTs,
+                rtcToken: rtcToken,
+                liveViewersList: myViewers,
+              })
             } else {
-              return next(err)
+              return res.status(200).json({
+                actionStatus: "success",
+                isChatPlanActive: viewer.isChatPlanActive,
+                streamId: model.currentStream._id,
+                socketUpdated: socketUpdated,
+                liveViewersList: viewers,
+              })
             }
+          } else {
+            return next(err)
           }
-        )
+        })
       })
     } else {
       return res.status(200).json({
         actionStatus: "failed",
         message: "This model is currently no streaming, please comeback later.",
-        isChatPlanActive: req.user.relatedUser.isChatPlanActive,
+        isChatPlanActive: viewer.isChatPlanActive,
       })
     }
   } catch (e) {

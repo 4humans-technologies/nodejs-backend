@@ -19,22 +19,20 @@ const streamSchema = new mongoose.Schema({
   },
   endReason: {
     type: String,
-    default: "Error",
-    enum: ["AudioCall", "VideoCall", "Manual", "Error", "socket-disconnect"],
+    default: "error",
+    enum: ["audioCall", "videoCall", "manual", "error", "socket-disconnect"],
   },
-  meta: {
-    duration: Number,
-    moneySpent: Number,
+  duration: Number /* seconds */,
+  moneySpent: {
+    type: Number,
+    default: 0,
   },
-  endAudioCall: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "AudioCall",
-    default: null,
-  },
-  endVideoCall: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "VideoCall",
-    default: null,
+  endCall: {
+    callId: mongoose.Schema.Types.ObjectId,
+    callType: {
+      type: String,
+      enum: ["audioCall", "videoCall"],
+    },
   },
   viewers: [
     {

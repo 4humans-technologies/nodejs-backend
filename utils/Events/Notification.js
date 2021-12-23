@@ -3,6 +3,9 @@ const NotificationHolder = require("../../models/globals/notifications")
 const io = require("../../socket")
 
 class NotificationEmmiter extends EventEmmiter {
+  /**
+   * will later add more events with different signatures
+   */
   newModelNotification(subEvent, modelId, data) {
     this.emit("new-notification", subEvent, modelId, data)
   }

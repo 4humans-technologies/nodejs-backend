@@ -20,7 +20,7 @@ router.post(
 )
 router.post(
   "/re-join-models-currentstream-authed",
-  tokenVerify,
+  tokenVerifyWithOutPopulate,
   streamController.reJoinModelsCurrentStreamAuthed
 )
 router.post(
