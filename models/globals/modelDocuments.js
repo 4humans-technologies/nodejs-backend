@@ -5,7 +5,6 @@ const documentSchema = new mongoose.Schema(
     model: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Model",
-      index: true,
     },
     isVerified: {
       type: Boolean,

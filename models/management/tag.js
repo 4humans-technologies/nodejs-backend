@@ -1,17 +1,16 @@
 const mongoose = require("mongoose")
 
-const tagSchema = new mongoose.Schema({
+const tagSchema = new mongoose.Schema(
+  {
     name: {
-        type: String,
-        required: true,
-        unique: true
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
     },
-    description: String,
-    modelCount: {
-        type: Number,
-        default: 0
-    },
-}, { timestamps: true })
+  },
+  { timestamps: true }
+)
 
 const Tag = mongoose.model("Tag", tagSchema)
 

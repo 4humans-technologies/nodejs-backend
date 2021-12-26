@@ -5,7 +5,6 @@ const streamSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: "userType",
-    index: true,
   },
   createdAt: {
     type: Date,
@@ -15,7 +14,6 @@ const streamSchema = new mongoose.Schema({
     type: String,
     default: "initializing",
     enum: ["initializing", "ongoing", "ended"],
-    index: true,
   },
   endReason: {
     type: String,

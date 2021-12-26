@@ -3,15 +3,14 @@ const mongoose = require("mongoose")
 const modelSchema = new mongoose.Schema({
   rootUser: {
     type: mongoose.Schema.Types.ObjectId,
-    // required: true,
+    required: true,
     ref: "User",
-    unique: true,
-    index: true,
   },
   followers: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Viewer",
+      select: false,
     },
   ],
   numberOfFollowers: {
@@ -21,9 +20,7 @@ const modelSchema = new mongoose.Schema({
   approval: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Approval",
-    default: null,
-    unique: true,
-    index: true,
+    select: false,
   },
   name: {
     type: String,
@@ -39,12 +36,14 @@ const modelSchema = new mongoose.Schema({
     required: true,
     unique: true,
     index: true,
+    select: false,
   },
   phone: {
     type: String,
     required: true,
     unique: true,
     index: true,
+    select: false,
   },
   dob: {
     // will store only year
@@ -116,6 +115,7 @@ const modelSchema = new mongoose.Schema({
   dynamicFields: {
     type: [
       {
+        _id: false,
         name: {
           type: String /* reference name for backend */,
           required: true,
@@ -131,6 +131,9 @@ const modelSchema = new mongoose.Schema({
       },
     ],
     default: [],
+  },
+  adminRemark: {
+    type: String,
   },
   tipMenuActions: {
     actions: {
@@ -158,6 +161,7 @@ const modelSchema = new mongoose.Schema({
   adminPriceRange: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "PriceRange",
+    select: false,
   },
   charges: {
     audioCall: {
@@ -215,12 +219,11 @@ const modelSchema = new mongoose.Schema({
   currentStream: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Stream",
-    index: true,
   },
   documents: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Document",
-    index: true,
+    select: false,
   },
   profileImage: {
     type: String,
@@ -256,18 +259,21 @@ const modelSchema = new mongoose.Schema({
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Streams",
+      select: false,
     },
   ],
   videoCallHistory: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "VideoCall",
+      select: false,
     },
   ],
   audioCallHistory: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "AudioCall",
+      select: false,
     },
   ],
   pendingCalls: {
@@ -275,12 +281,14 @@ const modelSchema = new mongoose.Schema({
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "AudioCall",
+        select: false,
       },
     ],
     videoCalls: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "VideoCall",
+        select: false,
       },
     ],
   },
@@ -288,35 +296,40 @@ const modelSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: "Wallet",
-    unique: true,
-    index: true,
+    select: false,
   },
   bankDetails: {
     bankName: {
       type: String,
       default: "",
+      select: false,
     },
     IfscCode: {
       type: String,
       default: "",
+      select: false,
     },
     holderName: {
       type: String,
       default: "",
+      select: false,
     },
     accountNumber: {
       type: Number,
+      select: false,
     },
     accountType: {
       type: String,
       enum: ["savings", "current"],
       default: "savings",
+      select: false,
     },
   },
   privateChats: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ModelViewerPrivateChat",
+      select: false,
     },
   ],
 })

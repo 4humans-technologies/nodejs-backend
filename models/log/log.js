@@ -15,3 +15,7 @@ const logSchema = new mongoose.Schema({
     ref: "User",
   },
 })
+
+const Log = mongoose.model("Log", logSchema)
+
+module.exports = Log

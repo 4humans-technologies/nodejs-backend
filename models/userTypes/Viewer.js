@@ -37,7 +37,6 @@ const viewerSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: "Wallet",
-    unique: true,
   },
   following: [
     {

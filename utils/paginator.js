@@ -113,3 +113,30 @@ exports.withNormal = (Model, qry, select, req, res, populate = null) => {
 //         ]
 //     }
 // }])
+
+exports.withConditionAndSendTheResponse = (model, options, req, res) => {
+  return Promise.all([
+    model
+      .find(options.filter)
+      .select(options.select)
+      .sort(options.sort)
+      .populate(options.populate)
+      .skip(options.skip)
+      .limit(options.limit)
+      .lean(),
+    model.countDocuments(options.filter),
+  ]).then(([records, totalCount]) => {
+    res.setHeader(
+      "Content-Range",
+      `${options.skip}-${
+        options.range[1] < totalCount ? options.range[1] - 1 : totalCount - 1
+      }/${totalCount}`
+    )
+    return res.status(200).json(
+      records.map((record) => ({
+        id: record._id,
+        ...record,
+      }))
+    )
+  })
+}

@@ -17,7 +17,7 @@ const {
 const requestRoomHandlers = require("./utils/socket/requestedRoomHandlers")
 const verificationRouter = require("./routes/management/verificationRoutes")
 const { viewer_left_received } = require("./utils/socket/chat/chatEvents")
-if (process.env.RUN_ENV !== "ubuntu") {
+if (process.env.RUN_ENV == "windows") {
   app.use(express.static(__dirname + "/images"))
   app.use("/images/gifts", express.static(__dirname + "/images/gifts"))
   app.use("/images/model", express.static(__dirname + "/images/model"))
@@ -59,6 +59,8 @@ const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
 const privateChatRouter = require("./routes/ADMIN/privateChat")
 const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
+// ra-admin routes
+const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
 
 // CONNECT-URL--->
 let CONNECT_URL
@@ -82,7 +84,7 @@ app.use((req, res, next) => {
   )
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type,Authorization,Content-Range"
+    "Content-Type,Authorization,range"
   )
   res.setHeader("Access-Control-Expose-Headers", "Content-Range")
   next()
@@ -173,6 +175,9 @@ app.use("/api/admin/privatechat", privateChatRouter)
 app.use("/api/admin/coupon", couponAdminRouter)
 app.use("/api/admin/role", roleRouter)
 
+// ra-admin
+app.use("/api/admin/dashboard", getLists)
+
 app.use("/test", testRouter)
 
 // EXPRESS ERROR HANDLER--->
@@ -195,7 +200,7 @@ app.use((err, req, res, next) => {
 })
 
 // MONGODB CONNECTION SETUP--->
-// mongoose.set("debug", true)
+mongoose.set("debug", true)
 mongoose
   .connect(CONNECT_URL, {
     useNewUrlParser: true,
@@ -224,7 +229,7 @@ mongoose
       },
     }
     const io = socket.init(server, socketOptions)
-    if (process.env.RUN_ENV !== "ubuntu") {
+    if (process.env.RUN_ENV === "windows") {
       const { instrument } = require("@socket.io/admin-ui")
       instrument(io, {
         auth: false,

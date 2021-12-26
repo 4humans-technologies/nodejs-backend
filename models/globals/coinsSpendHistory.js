@@ -25,7 +25,7 @@ const coinsSendHistorySchema = new mongoose.Schema({
   },
 })
 
-const CoinsSpendHistory = new mongoose.model(
+const CoinsSpendHistory = mongoose.model(
   "CoinsSpendHistory",
   coinsSendHistorySchema
 )
