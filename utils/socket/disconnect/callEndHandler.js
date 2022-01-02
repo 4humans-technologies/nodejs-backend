@@ -5,6 +5,8 @@ const Model = require("../../../models/userTypes/Model")
 const Viewer = require("../../../models/userTypes/Viewer")
 const chatEvents = require("../chat/chatEvents")
 const io = require("../../../socket")
+const CoinsSpendHistory = require("../../../models/globals/coinsSpendHistory")
+const coinsUses = require("../../../utils/coinsUseCaseStrings")
 
 module.exports = function (client) {
   /* if anyone viewer or model leaves the call also means model has is not live she's offline */
@@ -126,6 +128,13 @@ module.exports = function (client) {
               }
             ),
             /* DELETE THE CALL ALSO */
+            CoinsSpendHistory({
+              tokenAmount: amountToRefundViewer,
+              forModel: theCall.model._id,
+              by: theCall.viewer._id,
+              sharePercent: theCall.sharePercent,
+              givenFor: coinsUses.VIEWER_REFUND,
+            }).save(),
           ])
         } else {
           /**
@@ -217,6 +226,16 @@ module.exports = function (client) {
             Wallet.findOne({
               relatedUser: client.data.relatedUserId,
             }).lean(),
+            CoinsSpendHistory({
+              tokenAmount: viewerDeducted,
+              forModel: theCall.model._id,
+              by: theCall.viewer._id,
+              sharePercent: theCall.sharePercent,
+              givenFor:
+                callType === "audioCall"
+                  ? coinsUses.AUDIO_CALL_COMPLETE
+                  : coinsUses.VIDEO_CALL_COMPLETE,
+            }).save(),
           ])
         }
       })
@@ -285,7 +304,7 @@ module.exports = function (client) {
               totalCharges: viewerDeducted,
               message: "Call was ended successfully by the model",
               ended: "ok",
-              wallet: viewerWallet,
+              currentAmount: viewerWallet.currentAmount,
             })
         }
       })
@@ -437,6 +456,16 @@ module.exports = function (client) {
           Wallet.findOne({
             relatedUser: theCall.model,
           }).lean(),
+          CoinsSpendHistory({
+            tokenAmount: viewerDeducted,
+            forModel: theCall.model._id,
+            by: theCall.viewer._id,
+            sharePercent: theCall.sharePercent,
+            givenFor:
+              callType === "audioCall"
+                ? coinsUses.AUDIO_CALL_COMPLETE
+                : coinsUses.VIDEO_CALL_COMPLETE,
+          }).save(),
         ])
       })
       .then(
@@ -465,7 +494,7 @@ module.exports = function (client) {
               totalCharges: viewerDeducted,
               message: "Call was ended successfully by the model",
               ended: "ok",
-              wallet: modelWallet,
+              currentAmount: modelWallet.currentAmount,
             })
         }
       )
