@@ -70,7 +70,7 @@ exports.createModel = (req, res, next) => {
         permissions: [],
         userType: "Model",
         relatedUser: advRelatedUserId,
-        needApproval: true, //🔴🔴 set to false only for testing
+        needApproval: false, //🔴🔴 set to false only for testing
         meta: {
           lastLogin: new Date(),
         },
