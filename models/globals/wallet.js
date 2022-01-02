@@ -31,8 +31,8 @@ const walletSchema = new mongoose.Schema({
     type: Map,
     required: true,
     default: {
-      amount: null,
-      time: null,
+      amount: undefined,
+      time: undefined,
     },
   },
 })

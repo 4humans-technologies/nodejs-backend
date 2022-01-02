@@ -32,7 +32,7 @@ module.exports = (req, res, next) => {
    * get the single document from db
    * based on :id,
    */
-  const { resource, id } = req.params
+  const { resource, ids } = req.params
 
   var model, select, populate
   switch (resource) {
@@ -40,32 +40,13 @@ module.exports = (req, res, next) => {
       model = Model
       populate = [
         {
-          path: "wallet",
-          select: "currentAmount",
-        },
-        {
           path: "rootUser",
-          select: "username lasLogin",
-        },
-        {
-          path: "approval",
-          select: "-forModel",
-          populate: [
-            {
-              path: "by",
-              select: "username role",
-            },
-          ],
-        },
-        {
-          path: "adminPriceRange",
-        },
-        {
-          path: "documents",
+          select: "username",
         },
       ]
       break
     case "Viewer":
+      model = Viewer
       populate = [
         {
           path: "wallet",
@@ -79,16 +60,7 @@ module.exports = (req, res, next) => {
           path: "currentChatPlan",
           select: "name validityDays price",
         },
-        {
-          path: "privateImagesPlans",
-          select: "name thumbnails price",
-        },
-        {
-          path: "privateVideosPlans",
-          select: "name thumbnails price",
-        },
       ]
-      model = Viewer
       break
     case "Stream":
       model = Stream
@@ -128,32 +100,6 @@ module.exports = (req, res, next) => {
       break
     case "Coupon":
       model = Coupon
-      model = Coupon
-      select = "generatedBy code forCoins redeemed redeemedBy redeemDate"
-      populate = [
-        {
-          path: "generatedBy",
-          select: "name profileImage",
-          populate: {
-            path: "rootUser",
-            select: "username role",
-          },
-        },
-        {
-          path: "redeemedBy",
-          select: "name profileImage isChatPlanActive",
-          populate: [
-            {
-              path: "rootUser",
-              select: "username",
-            },
-            {
-              path: "wallet",
-              select: "currentAmount",
-            },
-          ],
-        },
-      ]
       break
     case "PriceRange":
       model = PriceRange
@@ -175,7 +121,9 @@ module.exports = (req, res, next) => {
   }
 
   model
-    .findById(id)
+    .find({
+      _id: { $in: ids },
+    })
     .select(select)
     .populate(populate)
     .lean()

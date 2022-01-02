@@ -8,15 +8,10 @@ const couponSchema = new mongoose.Schema(
       required: true,
       ref: "Staff",
     },
-    acknowledged: {
-      /* was it acknowledged by it's creator */
-      type: Boolean,
-      default: true,
-    },
     code: {
       type: String,
       required: true,
-      default: () => nanoid(32),
+      default: () => nanoid(64),
       index: true,
       unique: true,
     },
@@ -38,10 +33,6 @@ const couponSchema = new mongoose.Schema(
     },
     redeemDate: {
       type: Date,
-    },
-    createdAt: {
-      type: Date,
-      default: Date,
     },
   },
   { timestamps: true }

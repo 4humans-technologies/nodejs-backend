@@ -6,7 +6,11 @@ client.on("error", function (error) {
 })
 
 client.on("connect", function () {
-  console.log("====connected to redis=====")
+  console.log("==== connected to redis =====")
+  /**
+   * load all the roles in the memory
+   */
+  
 })
 
 module.exports = client

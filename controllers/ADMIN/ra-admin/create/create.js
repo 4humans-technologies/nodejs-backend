@@ -7,6 +7,8 @@ const Tag = require("../../../../models/management/tag")
 const Role = require("../../../../models/Role")
 const Permission = require("../../../../models/Permission")
 const Log = require("../../../../models/log/log")
+const Coupon = require("../../../../models/management/coupon")
+
 const createModel = require("./createModel")
 const createViewer = require("./createViewer")
 
@@ -50,41 +52,24 @@ module.exports = (req, res, next) => {
       })
       break
     case "Role":
-      Permission.find(
-        {
-          _id: {
-            $in: data.permissions,
-          },
-        },
-        "value"
-      )
-        .then((permissions) => {
-          if (permissions.length !== 0) {
-            return Role({
-              permissions: permissions.map((permission) => permission.value),
-              permissionIds: data.permissions,
-              roleName: data.name,
-              createdBy: req.user._id,
-            })
-              .save()
-              .then((role) => {
-                res.status(201).json({
-                  message: `role ${data.name} was created successfully`,
-                  actionStatus: "success",
-                  doc: role,
-                })
-              })
-          } else {
-            const error = new Error("selected permission(s) were not found")
-            error.statusCode = 400
-            throw error
-          }
-        })
-        .catch((err) => {
-          const error = new Error("Role not created")
-          error.statusCode = err.status || err.statusCode || 500
-          return next(err)
-        })
+      /**
+       *
+       */
+      break
+    case "Coupon":
+      /**
+       * can put check on the max "coin value" generation
+       */
+      Coupon({
+        generatedBy: req.user.relatedUser._id,
+        forCoins: data.forCoins,
+      }).then((coupon) => {
+        return {
+          createdResources: coupon,
+          logField: "coin value",
+          logFieldValue: data.forCoins,
+        }
+      })
       break
     default:
       break
@@ -108,7 +93,7 @@ module.exports = (req, res, next) => {
       /**
        * add a log entry also after  successful creation of a record
        */
-      return res.status(2001).json(createdResources)
+      return res.status(201).json(createdResources)
     })
     .catch((err) => next(err))
 }

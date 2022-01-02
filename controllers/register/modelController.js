@@ -70,7 +70,7 @@ exports.createModel = (req, res, next) => {
         permissions: [],
         userType: "Model",
         relatedUser: advRelatedUserId,
-        needApproval: false, //🔴🔴 set to false only for testing
+        needApproval: true, //🔴🔴 set to false only for testing
         meta: {
           lastLogin: new Date(),
         },
@@ -81,7 +81,7 @@ exports.createModel = (req, res, next) => {
     })
     .then((userDoc) => {
       theUserId = userDoc._id
-      const hours = 12
+      const hours = 1
       const token = generateJwt({
         hours: hours,
         userId: theUserId,

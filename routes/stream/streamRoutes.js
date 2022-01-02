@@ -63,7 +63,7 @@ router.post(
     body("modelId").isString(),
     body("room").isString(),
   ],
-  tokenVerify,
+  tokenVerifyWithOutPopulate,
   streamController.processTipMenuRequest
 )
 

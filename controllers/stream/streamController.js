@@ -33,7 +33,9 @@ exports.handleEndStream = (req, res, next) => {
         currentStream: null,
         onCall: false,
       }
-    ),
+    )
+      .select("isStreaming onCall currentStream")
+      .lean(),
     Stream.findById(streamId),
   ])
     .then(([model, stream]) => {
@@ -58,6 +60,8 @@ exports.handleEndStream = (req, res, next) => {
         const error = new Error(
           "Stream is already ended and models was not streaming"
         )
+        console.error("model > ", model)
+        console.error("stream > ", stream)
         error.statusCode = 422
         throw error
       }
@@ -74,7 +78,7 @@ exports.handleEndStream = (req, res, next) => {
                 .sockets.adapter.rooms.get(
                   `${req.user.relatedUser._id}-private`
                 )
-            )[0]
+            )?.[0]
           )
       }
 
@@ -87,12 +91,15 @@ exports.handleEndStream = (req, res, next) => {
 
       redisClient.del(`${streamId}-public`, (err) => {
         if (err) {
-          console.error("Redis delete err", err)
+          console.error("Redis viewer list delete err", err)
         }
-        return res.status(200).json({
-          actionStatus: "success",
-          message:
-            "stream ended successfully, If you have pending call, then please call the customer fast 👍👍🤘",
+        redisClient.del(`${streamId}-transactions`, (err) => {
+          if (err) {
+            console.error("Redis transaction history delete err", err)
+          }
+          return res.status(200).json({
+            actionStatus: "success",
+          })
         })
       })
     })
@@ -482,18 +489,23 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
         if (err) {
           console.error("Redis delete err", err)
         }
-        console.log("Stream delete redis response:", response)
-        return res.status(200).json({
-          actionStatus: "success",
-          viewerDoc: viewer,
-          callDoc: callDoc,
-          callStartTs: callStartTimeStamp /* not ISO, its in milliseconds */,
-          socketDataUpdated: socketDataUpdated,
-          sharePercent: +req.user.relatedUser.sharePercent,
-          rtcToken: modelToken.rtcToken,
-          privilegeExpiredTs: modelToken.privilegeExpiredTs,
-          canAffordNextMinute,
-          modelTokenValidity,
+        redisClient.del(`${streamId}-transactions`, (err, response) => {
+          if (err) {
+            console.error("Redis delete err", err)
+          }
+          console.log("Stream delete redis response:", response)
+          return res.status(200).json({
+            actionStatus: "success",
+            viewerDoc: viewer,
+            callDoc: callDoc,
+            callStartTs: callStartTimeStamp /* not ISO, its in milliseconds */,
+            socketDataUpdated: socketDataUpdated,
+            sharePercent: +req.user.relatedUser.sharePercent,
+            rtcToken: modelToken.rtcToken,
+            privilegeExpiredTs: modelToken.privilegeExpiredTs,
+            canAffordNextMinute,
+            modelTokenValidity,
+          })
         })
       })
     })
@@ -630,6 +642,16 @@ exports.handleEndCallFromViewer = (req, res, next) => {
         Wallet.findOne({
           relatedUser: theCall.model,
         }).lean(),
+        CoinsSpendHistory({
+          tokenAmount: viewerDeducted,
+          forModel: theCall.model._id,
+          by: theCall.viewer._id,
+          sharePercent: theCall.sharePercent,
+          givenFor:
+            callType === "audioCall"
+              ? coinsUses.AUDIO_CALL_COMPLETE
+              : coinsUses.VIDEO_CALL_COMPLETE,
+        }).save(),
       ])
     })
     .then(
@@ -658,7 +680,7 @@ exports.handleEndCallFromViewer = (req, res, next) => {
             totalCharges: viewerDeducted,
             message: "Call was ended successfully by the model",
             ended: "ok",
-            wallet: modelWallet,
+            currentAmount: modelWallet.currentAmount,
           })
 
         return res.status(200).json({
@@ -805,6 +827,13 @@ exports.handleEndCallFromModel = (req, res, next) => {
               $inc: { currentAmount: -deductFromModel },
             }
           ),
+          CoinsSpendHistory({
+            tokenAmount: amountToRefundViewer,
+            forModel: theCall.model._id,
+            by: theCall.viewer._id,
+            sharePercent: theCall.sharePercent,
+            givenFor: coinsUses.VIEWER_REFUND,
+          }).save(),
           /* DELETE THE CALL ALSO */
         ])
       } else {
@@ -897,6 +926,16 @@ exports.handleEndCallFromModel = (req, res, next) => {
           Wallet.findOne({
             relatedUser: req.user.relatedUser._id,
           }).lean(),
+          CoinsSpendHistory({
+            tokenAmount: viewerDeducted,
+            forModel: theCall.model._id,
+            by: theCall.viewer._id,
+            sharePercent: theCall.sharePercent,
+            givenFor:
+              callType === "audioCall"
+                ? coinsUses.AUDIO_CALL_COMPLETE
+                : coinsUses.VIDEO_CALL_COMPLETE,
+          }).save(),
         ])
       }
     })
@@ -971,7 +1010,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
             totalCharges: viewerDeducted,
             message: "Call was ended successfully by the model",
             ended: "ok",
-            wallet: viewerWallet,
+            currentAmount: viewerWallet.currentAmount,
           })
 
         return res.status(200).json({
@@ -983,6 +1022,7 @@ exports.handleEndCallFromModel = (req, res, next) => {
           message: "call was ended successfully",
           wasFirst: "yes",
           wallet: modelWallet,
+          callWasNotSetupProperly: false,
         })
       }
     })
@@ -1256,7 +1296,9 @@ exports.unFollowModel = (req, res, next) => {
 exports.processTokenGift = (req, res, next) => {
   /* handle the gifting of token by the user to model */
 
-  const { modelId, tokenAmount, socketData } = req.body
+  var { modelId, tokenAmount, socketData } = req.body
+
+  tokenAmount = +tokenAmount
 
   let sharePercent
   let viewerNewWalletAmount
@@ -1299,10 +1341,14 @@ exports.processTokenGift = (req, res, next) => {
         ),
         Viewer.findById(req.user.relatedUser._id)
           .lean()
-          .select("name profileImage"),
+          .select("name profileImage")
+          .populate("rootUser", "username"),
       ])
     })
     .then(([_r, viewer]) => {
+      req.user.username = viewer.rootUser.username
+      req.user.relatedUser.name = viewer.name
+      req.user.relatedUser.profileImage = viewer.profileImage
       io.getIO()
         .in(`${modelId}-private`)
         .emit("model-wallet-updated", {
@@ -1322,6 +1368,7 @@ exports.processTokenGift = (req, res, next) => {
         tokenAmount: tokenAmount,
         forModel: modelId,
         by: req.user.relatedUser._id,
+        sharePercent: sharePercent,
         givenFor: coinsUses.ON_STREAM_COINS,
       }).save()
     })
@@ -1337,12 +1384,126 @@ exports.processTokenGift = (req, res, next) => {
     .then((value) => {
       // const clientSocket = io.getIO().sockets.sockets.get(socketId)
       if (value !== "Model not streaming") {
-        io.getIO()
-          .in(socketData.room)
-          .emit(chatEvents.viewer_super_message_public_received, socketData)
-        return res.status(200).json({
-          actionStatus: "success",
-          viewerNewWalletAmount: viewerNewWalletAmount,
+        redisClient.get(`${streamId}-transactions`, (err, transactions) => {
+          /**
+           * transactions = [
+           *  {
+           *    viewerId:_id,
+           *    spent:Number
+           *  }
+           * ]
+           */
+          if (transactions && !err) {
+            transactions = JSON.parse(transactions).map((entry) => ({
+              ...entry,
+              spent: +entry.spent,
+            }))
+            if (transactions?.[0]) {
+              /**
+               * if not the first one, check if this user is already in the list
+               */
+              const thisUserTransactions = transactions.find(
+                (item) => item.viewerId === req.user.relatedUser._id
+              )
+              if (thisUserTransactions) {
+                /**
+                 * if user has already spent, check if more than existing max
+                 */
+                thisUserTransactions.spent =
+                  thisUserTransactions.spent + tokenAmount
+                if (thisUserTransactions.spent > transactions[0].spent) {
+                  /**
+                   * spent more than king, check he's already a king
+                   */
+                  if (
+                    transactions[0].viewerId === thisUserTransactions.viewerId
+                  ) {
+                    /**
+                     * this is already king of room, no sorting required as this viewer is already on top
+                     */
+                    transactions = JSON.stringify(transactions)
+                  } else {
+                    /**
+                     * new king, notify everyone
+                     */
+                    io.getIO()
+                      .in(`${streamId}-public`)
+                      .emit("new-king", thisUserTransactions)
+                    transactions.sort((t1, t2) => {
+                      return t2.spent - t1.spent
+                    })
+                    transactions = JSON.stringify(transactions)
+                  }
+                } else {
+                  /**
+                   * not topped the king yet
+                   */
+                  transactions.sort((t1, t2) => {
+                    return t2.spent - t1.spent
+                  })
+                  transactions = JSON.stringify(transactions)
+                }
+              } else {
+                /**
+                 * if users first gift in the room
+                 */
+                if (tokenAmount >= transactions[0].spent) {
+                  /* new king, beat king in one donation */
+                  io.getIO().in(`${streamId}-public`).emit("new-king", {
+                    viewerId: req.user.relatedUser._id,
+                    username: req.user.username,
+                    profileImage: req.user.relatedUser.profileImage,
+                    spent: tokenAmount,
+                  })
+                }
+                transactions.push({
+                  viewerId: req.user.relatedUser._id,
+                  username: req.user.username,
+                  profileImage: req.user.relatedUser.profileImage,
+                  spent: tokenAmount,
+                })
+                transactions.sort((t1, t2) => {
+                  return t2.spent - t1.spent
+                })
+                transactions = JSON.stringify(transactions)
+              }
+            } else {
+              /**
+               * if first viewer to gift token
+               */
+              transactions = JSON.stringify([
+                {
+                  viewerId: req.user.relatedUser._id,
+                  username: req.user.username,
+                  profileImage: req.user.relatedUser.profileImage,
+                  spent: tokenAmount,
+                },
+              ])
+              io.getIO().in(`${streamId}-public`).emit("new-king", {
+                viewerId: req.user.relatedUser._id,
+                username: req.user.username,
+                profileImage: req.user.relatedUser.profileImage,
+                spent: tokenAmount,
+              })
+            }
+
+            redisClient.set(`${streamId}-transactions`, transactions, (err) => {
+              if (!err) {
+                io.getIO()
+                  .in(socketData.room)
+                  .emit(
+                    chatEvents.viewer_super_message_public_received,
+                    socketData
+                  )
+                return res.status(200).json({
+                  actionStatus: "success",
+                  viewerNewWalletAmount: viewerNewWalletAmount,
+                })
+              }
+            })
+          } else {
+            return next(err)
+          }
         })
       } else {
         return res.status(200).json({
@@ -1366,8 +1527,15 @@ exports.processTipMenuRequest = (req, res, next) => {
     Model.findById(modelId)
       .select("sharePercent currentStream tipMenuActions")
       .lean(),
+    Viewer.findById(req.user.relatedUser._id)
+      .select("name profileImage")
+      .populate("rootUser")
+      .lean(),
   ])
-    .then(([wallet, model]) => {
+    .then(([wallet, model, viewer]) => {
+      req.user.username = viewer.rootUser.username
+      req.user.relatedUser.name = viewer.name
+      req.user.relatedUser.profileImage = viewer.profileImage
       activity = model.tipMenuActions.actions.find(
         (action) => action._id.toString() === activity._id
       )
@@ -1392,7 +1560,8 @@ exports.processTipMenuRequest = (req, res, next) => {
           CoinsSpendHistory({
             tokenAmount: activity.price,
             forModel: modelId,
-            by: req.user.relatedUser,
+            by: req.user.relatedUser._id,
+            sharePercent: sharePercent,
             givenFor: coinsUses.ON_STREAM_ACTIVITY,
           }).save(),
           wallet.save(),
@@ -1405,6 +1574,7 @@ exports.processTipMenuRequest = (req, res, next) => {
             getDatabase().ref(path).child("chats").push(socketData)
           )
         }
+        return promiseArray
       } else {
         const error = new Error(
           `You dont have sufficient amount of coins to gift the model, ${activity.price} coins are required you have only ${wallet.currentAmount} coins`
@@ -1413,23 +1583,146 @@ exports.processTipMenuRequest = (req, res, next) => {
         throw error
       }
     })
-    .then((result) => {
-      io.getIO()
-        .in(`${modelId}-private`)
-        .emit("model-wallet-updated", {
-          modelId: modelId,
-          operation: "add",
-          amount: activity.price * (sharePercent / 100),
+    .then(() => {
+      if (streamId) {
+        redisClient.get(`${streamId}-transactions`, (err, transactions) => {
+          /**
+           * transactions = [
+           *  {
+           *    viewerId:_id,
+           *    ...
+           *    spent:Number
+           *  }
+           * ]
+           */
+          if (transactions && !err) {
+            transactions = JSON.parse(transactions).map((entry) => ({
+              ...entry,
+              spent: +entry.spent,
+            }))
+            if (transactions?.[0]) {
+              /**
+               * if not the first one, check if this user is already in the list
+               */
+              const thisUserTransactions = transactions.find(
+                (item) => item.viewerId === req.user.relatedUser._id
+              )
+              if (thisUserTransactions) {
+                /**
+                 * if user has already spent, check if more than existing max
+                 */
+                thisUserTransactions.spent += activity.price
+                if (thisUserTransactions.spent > transactions[0].spent) {
+                  /**
+                   * spent more than king, check he's already a king
+                   */
+                  if (
+                    transactions[0].viewerId === thisUserTransactions.viewerId
+                  ) {
+                    /**
+                     * this is already king of room, no sorting required as this viewer is already on top
+                     */
+                    transactions = JSON.stringify(transactions)
+                  } else {
+                    /**
+                     * new king, notify everyone
+                     */
+                    io.getIO()
+                      .in(`${streamId}-public`)
+                      .emit("new-king", thisUserTransactions)
+                    transactions.sort((t1, t2) => {
+                      t2.spent - t1.spent
+                    })
+                    transactions = JSON.stringify(transactions)
+                  }
+                } else {
+                  /**
+                   * not topped the king yet
+                   */
+                  transactions.sort((t1, t2) => {
+                    t2.spent - t1.spent
+                  })
+                  transactions = JSON.stringify(transactions)
+                }
+              } else {
+                /**
+                 * if users first gift in the room
+                 */
+                if (activity.price >= transactions[0].spent) {
+                  /* new king, beat king in one donation */
+                  io.getIO().in(`${streamId}-public`).emit("new-king", {
+                    viewerId: req.user.relatedUser._id,
+                    username: req.user.username,
+                    profileImage: req.user.relatedUser.profileImage,
+                    spent: activity.price,
+                  })
+                }
+                transactions.push({
+                  viewerId: req.user.relatedUser._id,
+                  username: req.user.username,
+                  profileImage: req.user.relatedUser.profileImage,
+                  spent: activity.price,
+                })
+                transactions.sort((t1, t2) => {
+                  t2.spent - t1.spent
+                })
+                transactions = JSON.stringify(transactions)
+              }
+            } else {
+              /**
+               * if first viewer to gift token
+               */
+              transactions = JSON.stringify([
+                {
+                  viewerId: req.user.relatedUser._id,
+                  username: req.user.username,
+                  profileImage: req.user.relatedUser.profileImage,
+                  spent: activity.price,
+                },
+              ])
+              io.getIO().in(`${streamId}-public`).emit("new-king", {
+                viewerId: req.user.relatedUser._id,
+                username: req.user.username,
+                profileImage: req.user.relatedUser.profileImage,
+                spent: activity.price,
+              })
+            }
+
+            redisClient.set(`${streamId}-transactions`, transactions, (err) => {
+              if (!err) {
+                io.getIO()
+                  .in(`${modelId}-private`)
+                  .emit("model-wallet-updated", {
+                    modelId: modelId,
+                    operation: "add",
+                    amount: activity.price * (sharePercent / 100),
+                  })
+
+                io.getIO()
+                  .in(room)
+                  .emit(
+                    chatEvents.viewer_super_message_public_received,
+                    socketData
+                  )
+
+                return res.status(200).json({
+                  actionStatus: "success",
+                  viewerNewWalletAmount: viewerNewWalletAmount,
+                })
+              } else {
+                throw err
+              }
+            })
+          } else {
+            return next(err)
+          }
         })
-
-      io.getIO()
-        .in(room)
-        .emit(chatEvents.viewer_super_message_public_received, socketData)
-
-      return res.status(200).json({
-        actionStatus: "success",
-        viewerNewWalletAmount: viewerNewWalletAmount,
-      })
+      } else {
+        return res.status(200).json({
+          actionStatus: "success",
+          viewerNewWalletAmount: viewerNewWalletAmount,
+        })
+      }
     })
     .catch((error) => next(error))
 }
@@ -1700,48 +1993,78 @@ exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
         throw err
       }
       if (model.isStreaming) {
-        /**
-         * ============
-         * user joined event will not be fired as it will overwhelm
-         * hence all the users will ask the live users count after a delay
-         * with a seprate http or socket request
-         * ============
-         */
-        let socketUpdated = false
-        try {
-          const clientSocket = io.getIO().sockets.sockets.get(socketId)
-          clientSocket.join(`${model.currentStream._id}-public`)
-          clientSocket.onStream = true
-          clientSocket.streamId = model.currentStream._id.toString()
-          socketUpdated = true
-        } catch (err) {
-          socketUpdated = false
-        }
-        if (getNewToken) {
-          const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-            "unAuthed",
-            unAuthedUserId,
-            modelId
-          )
-          return res.status(200).json({
-            actionStatus: "success",
-            streamId: model.currentStream._id,
-            socketUpdated: socketUpdated,
-            privilegeExpiredTs: privilegeExpiredTs,
-            rtcToken: rtcToken,
-          })
-        }
-        return res.status(200).json({
-          actionStatus: "success",
-          streamId: model.currentStream._id,
-          socketUpdated: socketUpdated,
+        redisClient.get(`${model.currentStream._id}-public`, (err, viewers) => {
+          if (!err) {
+            viewers = JSON.parse(viewers)
+            viewers.push({
+              unAuthed: true,
+            })
+            viewers = JSON.stringify(viewers)
+            redisClient.set(
+              `${model.currentStream._id}-public`,
+              viewers,
+              (err) => {
+                if (!err) {
+                  /**
+                   * ============
+                   * user joined event will not be fired as it will overwhelm
+                   * hence all the users will ask the live users count after a delay
+                   * with a seprate http or socket request
+                   * ============
+                   */
+                  let socketUpdated = false
+                  try {
+                    const clientSocket = io
+                      .getIO()
+                      .sockets.sockets.get(socketId)
+                    clientSocket.join(`${model.currentStream._id}-public`)
+                    clientSocket.onStream = true
+                    clientSocket.streamId = model.currentStream._id.toString()
+                    socketUpdated = true
+                  } catch (err) {
+                    socketUpdated = false
+                  }
+
+                  if (getNewToken) {
+                    const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+                      "unAuthed",
+                      unAuthedUserId,
+                      modelId
+                    )
+                    return res.status(200).json({
+                      actionStatus: "success",
+                      streamId: model.currentStream._id,
+                      socketUpdated: socketUpdated,
+                      privilegeExpiredTs: privilegeExpiredTs,
+                      rtcToken: rtcToken,
+                    })
+                  } else {
+                    return res.status(200).json({
+                      actionStatus: "success",
+                      streamId: model.currentStream._id,
+                      socketUpdated: socketUpdated,
+                    })
+                  }
+                } else {
+                  /* err */
+                  console.error("Redis set error", err)
+                  return next(err)
+                }
+              }
+            )
+          } else {
+            /* redis err */
+            console.error("Redis get error", err)
+            return next(err)
+          }
+        })
+      } else {
+        return res.status(400).json({
+          actionStatus: "failed",
+          message:
+            "This model is currently not streaming, please comeback later.",
         })
       }
-      return res.status(400).json({
-        actionStatus: "failed",
-        message:
-          "This model is currently not streaming, please comeback later.",
-      })
     })
     .catch((err) => next(err))
 }

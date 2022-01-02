@@ -54,12 +54,20 @@ module.exports = function updateClientInfo(client) {
 
           /* clear the data set on the client object */
           const dataCopy = cloneDeep(client.data)
-          delete dataCopy.userId
-          delete dataCopy.relatedUserId
+          try {
+            delete dataCopy.userId
+            delete dataCopy.relatedUserId
+          } catch (err) {
+            /**
+             * expired token in lc, socket picks up and makes request
+             * as token is expired no userId etc on client is added
+             * and token is expired readFromLocalStorage call logout but
+             * the user was never logged in on the socket in the first place
+             */
+          }
           client.data = { ...dataCopy }
           client.authed = false
           client.userType = "UnAuthedViewer"
-
           callback({
             ok: true,
           })
@@ -139,11 +147,11 @@ module.exports = function updateClientInfo(client) {
           client.streamId = data.streamId
           const streamRoom = `${data.streamId}-public`
           client.join(streamRoom)
-          io.getIO()
-            .in(streamRoom)
-            .emit(viewerJoined, {
-              roomSize: io.getIO().sockets.adapter.rooms.get(streamRoom)?.size,
-            })
+          // io.getIO()
+          //   .in(streamRoom)
+          //   .emit(viewerJoined, {
+          //     roomSize: io.getIO().sockets.adapter.rooms.get(streamRoom)?.size,
+          //   })
         }
         break
       case "join-the-stream-authed-viewer":

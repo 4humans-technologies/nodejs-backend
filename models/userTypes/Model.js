@@ -10,9 +10,19 @@ const modelSchema = new mongoose.Schema({
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Viewer",
-      select: false,
+      //select: false,
     },
   ],
+  // roomKings: [
+  //   {
+  //     id: {
+  //       type: mongoose.Schema.Types.ObjectId,
+  //       ref: "Viewer",
+  //       required: true,
+  //     },
+  //     totalSpent: Number,
+  //   },
+  // ],
   numberOfFollowers: {
     type: Number,
     default: 0,
@@ -20,7 +30,7 @@ const modelSchema = new mongoose.Schema({
   approval: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Approval",
-    select: false,
+    //select: false,
   },
   name: {
     type: String,
@@ -36,14 +46,14 @@ const modelSchema = new mongoose.Schema({
     required: true,
     unique: true,
     index: true,
-    select: false,
+    //select: false,
   },
   phone: {
     type: String,
     required: true,
     unique: true,
     index: true,
-    select: false,
+    //select: false,
   },
   dob: {
     // will store only year
@@ -61,6 +71,7 @@ const modelSchema = new mongoose.Schema({
     maxlength: 512,
     default: "I'am a super cool girl 😘😘💘",
   },
+
   hobbies: {
     type: [String],
     default: [],
@@ -161,7 +172,7 @@ const modelSchema = new mongoose.Schema({
   adminPriceRange: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "PriceRange",
-    select: false,
+    //select: false,
   },
   charges: {
     audioCall: {
@@ -223,7 +234,7 @@ const modelSchema = new mongoose.Schema({
   documents: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Document",
-    select: false,
+    //select: false,
   },
   profileImage: {
     type: String,
@@ -247,6 +258,11 @@ const modelSchema = new mongoose.Schema({
     default: "I will soon come online, I Know you are waiting for me 🥰🥰",
     maxlength: 164,
   },
+  welcomeMessage: {
+    type: String,
+    default: "Hello __name__ welcome to my stream 💕💕",
+    maxlength: 164,
+  },
   backGroundImage: {
     type: String,
     default: "",
@@ -259,21 +275,21 @@ const modelSchema = new mongoose.Schema({
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Streams",
-      select: false,
+      //select: false,
     },
   ],
   videoCallHistory: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "VideoCall",
-      select: false,
+      //select: false,
     },
   ],
   audioCallHistory: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "AudioCall",
-      select: false,
+      //select: false,
     },
   ],
   pendingCalls: {
@@ -281,14 +297,14 @@ const modelSchema = new mongoose.Schema({
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "AudioCall",
-        select: false,
+        //select: false,
       },
     ],
     videoCalls: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "VideoCall",
-        select: false,
+        //select: false,
       },
     ],
   },
@@ -296,42 +312,43 @@ const modelSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     required: true,
     ref: "Wallet",
-    select: false,
+    //select: false,
   },
   bankDetails: {
     bankName: {
       type: String,
       default: "",
-      select: false,
+      //select: false,
     },
     IfscCode: {
       type: String,
       default: "",
-      select: false,
+      //select: false,
     },
     holderName: {
       type: String,
       default: "",
-      select: false,
+      //select: false,
     },
     accountNumber: {
       type: Number,
-      select: false,
+      //select: false,
     },
     accountType: {
       type: String,
       enum: ["savings", "current"],
       default: "savings",
-      select: false,
+      //select: false,
     },
   },
   privateChats: [
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ModelViewerPrivateChat",
-      select: false,
+      //select: false,
     },
   ],
+  payOuts: [],
 })
 
 modelSchema.index(
@@ -350,6 +367,6 @@ modelSchema.index(
   }
 )
 
-const Model = new mongoose.model("Model", modelSchema)
+const Model = mongoose.model("Model", modelSchema)
 
 module.exports = Model

@@ -17,7 +17,6 @@ exports.getModelProfileData = (req, res, next) => {
     .populate("approval")
     .populate("adminPriceRange")
     .populate("currentStream")
-    // .populate("stream")
     .populate("videoCallHistory")
     .populate("audioCallHistory")
     .populate("pendingCalls.audioCalls")
@@ -37,31 +36,41 @@ exports.getModelProfileData = (req, res, next) => {
 exports.updateTipMenuActions = (req, res, next) => {
   /* will replace previous actions with the new ones, no merging */
   const { newActions } = req.body
-  const { socketId } = req.query
-  let { onStream } = req.body
-  if (typeof onStream === "undefined") {
-    onStream = false
-  }
 
-  Model.findById(req.user.relatedUser._id)
-    .select("tipMenuActions")
-    .then((model) => {
-      if (newActions.length !== 0) {
-        model.tipMenuActions = {
-          actions: newActions,
-          lastUpdated: new Date(),
+  var hasInvalidValue = false
+
+  newActions.forEach((entry) => {
+    if (entry.action.trim() === "") {
+      hasInvalidValue = true
+    }
+  })
+
+  if (!hasInvalidValue) {
+    Model.findById(req.user.relatedUser._id)
+      .select("tipMenuActions")
+      .then((model) => {
+        if (newActions.length !== 0) {
+          model.tipMenuActions = {
+            actions: newActions,
+            lastUpdated: new Date(),
+          }
         }
-      }
-      return model.save()
+        return model.save()
+      })
+      .then((model) => {
+        if (model) {
+          res.status(200).json({
+            actionStatus: "success",
+          })
+        }
+      })
+      .catch((err) => next(err))
+  } else {
+    return res.status(422).json({
+      actionStatus: "failed",
+      message: "activity name cannot be empty!",
     })
-    .then((model) => {
-      if (model) {
-        res.status(200).json({
-          actionStatus: "success",
-        })
-      }
-    })
-    .catch((err) => next(err))
+  }
 }
 
 exports.getCallHistory = (req, res, next) => {}

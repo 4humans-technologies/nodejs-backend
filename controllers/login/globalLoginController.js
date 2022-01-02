@@ -43,11 +43,38 @@ exports.loginHandler = (req, res, next) => {
           path: "wallet",
           select: "currentAmount",
         },
+        {
+          path: "approval",
+        },
+        {
+          path: "adminPriceRange",
+        },
+        {
+          path: "pendingCalls.audioCalls",
+        },
+        {
+          path: "pendingCalls.videoCalls",
+        },
+        {
+          path: "documents",
+        },
+        {
+          path: "privateImages",
+        },
+        {
+          path: "privateVideos",
+        },
       ],
     })
     .then((user) => {
       if (!user) {
         const error = new Error("Invalid credentials, User does not exists")
+        error.statusCode = 422
+        throw error
+      } else if (user.needApproval) {
+        const error = new Error(
+          "You are either banned or not approved to proceed!"
+        )
         error.statusCode = 422
         throw error
       }
@@ -70,7 +97,7 @@ exports.loginHandler = (req, res, next) => {
         throw error
       }
       User.updateOne({ _id: theUser._id }, { lastLogin: new Date() })
-      const hours = 12
+      const hours = 24
       /**
        * my view is may be for some reason socketId may not be sent but,
        * because of that right user should not be devoid of registration or login

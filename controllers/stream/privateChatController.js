@@ -1,4 +1,3 @@
-const Model = require("../../models/userTypes/Model")
 const Viewer = require("../../models/userTypes/Viewer")
 const ModelViewerPrivateChat = require("../../models/ModelViewerPrivateChat")
 const Wallet = require("../../models/globals/wallet")
@@ -312,13 +311,9 @@ exports.getActiveChatPlans = (req, res, next) => {
 }
 
 exports.buyPrivateImagesVideosForViewer = (req, res, next) => {
-  
-  const {modelId} = req.body
+  const { modelId } = req.body
 
   Wallet.findOne({
-    rootUser:req.user._id
-  })
-  .then(wallet => {
-    
-  })
+    rootUser: req.user._id,
+  }).then((wallet) => {})
 }

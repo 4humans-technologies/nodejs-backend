@@ -5,6 +5,10 @@ const coinsSendHistorySchema = new mongoose.Schema({
     type: Date,
     default: Date,
   },
+  sharePercent: {
+    type: Number,
+    required: true,
+  },
   tokenAmount: {
     type: Number,
     required: true,

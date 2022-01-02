@@ -119,8 +119,8 @@ exports.withConditionAndSendTheResponse = (model, options, req, res) => {
     model
       .find(options.filter)
       .select(options.select)
-      .sort(options.sort)
       .populate(options.populate)
+      .sort(options?.sort)
       .skip(options.skip)
       .limit(options.limit)
       .lean(),

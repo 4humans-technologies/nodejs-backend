@@ -17,7 +17,8 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         status: "ended",
         duration: Math.round(duration),
         // moneySpent: Number, Have to run seaprate query to find all the token histories related to this stream
-      }
+      },
+      { new: false }
     )
       .select("status endReason")
       .lean(),
@@ -27,7 +28,8 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         isStreaming: false,
         currentStream: null,
         onCall: false,
-      }
+      },
+      { new: false }
     )
       .select("currentStream isStreaming")
       .lean(),

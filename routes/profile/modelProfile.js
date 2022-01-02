@@ -11,7 +11,7 @@ router.get(
 )
 router.post(
   "/update-model-tipmenu-actions",
-  tokenVerify,
+  tokenVerifyWithOutPopulate,
   modelProfileData.updateTipMenuActions
 )
 

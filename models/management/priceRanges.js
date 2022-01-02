@@ -19,32 +19,38 @@ const priceRangeSchema = new mongoose.Schema(
         default: 30,
       },
       activity: {
+        type: Number,
         default: -1 /* no limit imposition */,
       },
-      perImage:{
-        default:-1 /* min price for an image in an album */
+      perImage: {
+        type: Number,
+        default: -1 /* min price for an image in an album */,
       },
-      perVideo:{
-        default:-1 /* min price for a video in an album */
+      perVideo: {
+        type: Number,
+        default: -1 /* min price for a video in an album */,
       },
-      numberOfImages:{
-        default:-1 /* min number of image in an video */
+      numberOfImages: {
+        type: Number,
+        default: -1 /* min number of image in an video */,
       },
-      numberOfVideos:{
-        default:-1 /* min number of videos in an video */
+      numberOfVideos: {
+        type: Number,
+        default: -1 /* min number of videos in an video */,
       },
     },
     maxCharges: {
       audioCall: {
-        type: Number, /* max  ==>> "MIN CALL DURATION" for a call */
+        type: Number /* max  ==>> "MIN CALL DURATION" for a call */,
         default: 30,
       },
       videoCall: {
-        type: Number, /* max ==>> "MIN CALL DURATION" for a call */
+        type: Number /* max ==>> "MIN CALL DURATION" for a call */,
         default: 90,
       },
       activity: {
-        default: null, /* no limit imposition */,
+        type: Number,
+        default: -1 /* no limit imposition */,
       },
     },
     createdBy: {

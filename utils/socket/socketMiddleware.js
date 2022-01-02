@@ -1,6 +1,4 @@
 const jwt = require("jsonwebtoken")
-const Viewer = require("../../models/userTypes/Viewer")
-const Model = require("../../models/userTypes/Model")
 
 module.exports = {
   verifyToken: (client, next) => {
@@ -29,6 +27,10 @@ module.exports = {
             client.authed = true
             client.userType = decodedToken.userType
             return next()
+          } else {
+            const error = new Error("Invalid Jwt")
+            error.statusCode = 422
+            return next(error)
           }
         })
       } catch (err) {

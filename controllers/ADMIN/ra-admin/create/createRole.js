@@ -5,7 +5,7 @@ module.exports = (data, req) => {
   Permission.find(
     {
       _id: {
-        $in: data.permissions,
+        $in: data.permissionIds,
       },
     },
     "value"
@@ -14,7 +14,7 @@ module.exports = (data, req) => {
       if (permissions.length !== 0) {
         return Role({
           permissions: permissions.map((permission) => permission.value),
-          permissionIds: data.permissions,
+          permissionIds: data.permissionIds,
           roleName: data.name,
           createdBy: req.user._id,
         }).save()

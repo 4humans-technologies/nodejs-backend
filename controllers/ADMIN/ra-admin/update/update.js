@@ -10,9 +10,9 @@ const Staff = require("../../../../models/userTypes/Staff")
 // management
 const Approval = require("../../../../models/management/approval")
 const Tag = require("../../../../models/management/tag")
-const PriceRange = require("../../../../models/management/priceRanges")
-const Coupon = require("../../../../models/management/coupon")
-const PrivateChatPlan = require("../../../../models/management/privateChatPlan")
+const PriceRange = require("../../../../management/priceRanges")
+const Coupon = require("../../../../management/coupon")
+const PrivateChatPlan = require("../../../../management/privateChatPlan")
 
 // globals
 const AudioCall = require("../../../../models/globals/audioCall")
@@ -32,38 +32,22 @@ module.exports = (req, res, next) => {
    * get the single document from db
    * based on :id,
    */
+
+  /**
+   * server must send either 200 or 204 (no content)
+   */
   const { resource, id } = req.params
+
+  const body = req.body
 
   var model, select, populate
   switch (resource) {
     case "Model":
+      /**
+       * do a special check if the sharePercent is being changed
+       * if it's being changed then it should be in the "priceRange"
+       */
       model = Model
-      populate = [
-        {
-          path: "wallet",
-          select: "currentAmount",
-        },
-        {
-          path: "rootUser",
-          select: "username lasLogin",
-        },
-        {
-          path: "approval",
-          select: "-forModel",
-          populate: [
-            {
-              path: "by",
-              select: "username role",
-            },
-          ],
-        },
-        {
-          path: "adminPriceRange",
-        },
-        {
-          path: "documents",
-        },
-      ]
       break
     case "Viewer":
       populate = [
@@ -127,33 +111,17 @@ module.exports = (req, res, next) => {
       model = Log
       break
     case "Coupon":
+      /**
+       * update coupon permission is a very crucial property
+       * and should distrupt things
+       */
+
+      /**
+       * can only update forCoins, redeemed,redeemDate,redeemedBy
+       */
+
       model = Coupon
-      model = Coupon
-      select = "generatedBy code forCoins redeemed redeemedBy redeemDate"
-      populate = [
-        {
-          path: "generatedBy",
-          select: "name profileImage",
-          populate: {
-            path: "rootUser",
-            select: "username role",
-          },
-        },
-        {
-          path: "redeemedBy",
-          select: "name profileImage isChatPlanActive",
-          populate: [
-            {
-              path: "rootUser",
-              select: "username",
-            },
-            {
-              path: "wallet",
-              select: "currentAmount",
-            },
-          ],
-        },
-      ]
+      Coupon.findOneAndUpdate(body)
       break
     case "PriceRange":
       model = PriceRange
@@ -168,23 +136,17 @@ module.exports = (req, res, next) => {
       model = PrivateChatPlan
       break
     default:
-      /**
-       * throw error invalid resource requested
-       */
       break
   }
 
   model
-    .findById(id)
     .select(select)
     .populate(populate)
     .lean()
+    .findById(id)
     .then((record) => {
       if (record) {
-        return res.status(200).json({
-          id: record._id,
-          ...record,
-        })
+        return res.status(200).json(record)
       } else {
         const error = new Error(
           `The requested ${resource} was not found, Invalid Id`

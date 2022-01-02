@@ -17,6 +17,11 @@ const {
 const requestRoomHandlers = require("./utils/socket/requestedRoomHandlers")
 const verificationRouter = require("./routes/management/verificationRoutes")
 const { viewer_left_received } = require("./utils/socket/chat/chatEvents")
+const {
+  callHasEnded,
+  deleteStreamRoom,
+} = require("./utils/socket/socketEvents")
+const Model = require("./models/userTypes/Model")
 if (process.env.RUN_ENV == "windows") {
   app.use(express.static(__dirname + "/images"))
   app.use("/images/gifts", express.static(__dirname + "/images/gifts"))
@@ -59,8 +64,10 @@ const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
 const privateChatRouter = require("./routes/ADMIN/privateChat")
 const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
+
 // ra-admin routes
 const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
+const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
 
 // CONNECT-URL--->
 let CONNECT_URL
@@ -112,12 +119,14 @@ app.use("/api/website/profile/viewer", viewerProfileRouter)
 app.use("/api/website/coupon", couponRouter)
 app.use("/api/website/verification", verificationRouter)
 
-/* aws setup */
+/* ip address blockage workaround */
 app.get("/api/website/get-geo-location", (req, res, next) => {
   return res.status(200).json({
     regionName: "delta",
   })
 })
+
+/* get-s3-upload-url */
 app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
   const { type } = req.query
   if (!type) {
@@ -163,6 +172,28 @@ app.get(
   }
 )
 
+app.get(
+  "/this-url-is-for-running-my-custom-script-for-database-updates/random-str-1/random-str-2",
+  (req, res, next) => {
+    Model.find()
+      .then((models) => {
+        const modelPrs = []
+        models.forEach((model) => {
+          model.welcomeMessage = "Hello __name__ welcome to my stream 💕💕"
+          modelPrs.push(model.save())
+        })
+        return Promise.all(modelPrs)
+      })
+      .then((models) => {
+        console.log("All models updated successfully")
+        return res.status(200).json(models)
+      })
+      .catch((err) => {
+        next(err)
+      })
+  }
+)
+
 // ADMIN PATHS
 /* 🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻 */
 /* comment after one time use */
@@ -177,6 +208,7 @@ app.use("/api/admin/role", roleRouter)
 
 // ra-admin
 app.use("/api/admin/dashboard", getLists)
+app.use("/api/admin/dashboard", getOne)
 
 app.use("/test", testRouter)
 
@@ -249,8 +281,7 @@ mongoose
        * by putting there 🚩🚩
        */
       if (
-        (client.handshake.query.userType === "Model" ||
-          client.handshake.query.userType === "Viewer") &&
+        (client.userType === "Model" || client.userType === "Viewer") &&
         client.authed
       ) {
         client.join(
@@ -260,21 +291,64 @@ mongoose
 
       try {
         client.on("disconnect", () => {
-          if (
-            client.userType === "Model" &&
-            client?.isStreaming &&
-            client.authed
-          ) {
-            /* check if the disconnecting model was streaming */
-            onDisconnectStreamEndHandler(client)
+          if (client.userType === "Model") {
+            if (client?.isStreaming && client.authed) {
+              /* check if the disconnecting model was streaming */
+              onDisconnectStreamEndHandler(client)
+            } else if (client.authed && client?.onCall) {
+              /* check if the disconnecting "USER" was on call */
+              onDisconnectCallEndHandler(client)
+            } else {
+              /* force check in DB*/
+              Model.findOneAndUpdate(
+                {
+                  _id: client.data.relatedUserId,
+                },
+                {
+                  isStreaming: false,
+                  onCall: false,
+                  currentStream: undefined,
+                }
+              )
+                .lean("isStreaming onCall currentStream")
+                .then((result) => {
+                  /* check is nModified */
+                  const newCount = socket.decreaseLiveCount(
+                    client.data.relatedUserId
+                  )
+                  /* if streaming, emit stream delete */
+                  if (
+                    result.isStreaming ||
+                    socket.getLiveCount() - newCount > 0
+                  ) {
+                    client.emit(deleteStreamRoom, {
+                      modelId: client.data.relatedUserId,
+                      liveNow: newCount,
+                    })
+                  } else if (
+                    result.onCall ||
+                    socket.getLiveCount() - newCount > 0
+                  ) {
+                    client.emit(callHasEnded, newCount)
+                  }
+                })
+                .catch((err) => {
+                  console.error("Error while model disconnecting : ", err)
+                })
+            }
           } else if (client.authed && client?.onCall) {
-            /* check if the disconnecting "user" was on call */
+            /* check if the disconnecting "USER" was on call */
             onDisconnectCallEndHandler(client)
-          } else if (client?.onStream) {
+          } else if (client?.onStream && client?.streamId) {
             /* if viewer was on a stream */
             const myRoom = `${client.streamId}-public`
             if (client.authed) {
               redisClient.get(myRoom, (err, viewers) => {
+                if (err) {
+                  console.error(
+                    "Redis error while authed viewer leaving redis room"
+                  )
+                }
                 if (viewers) {
                   viewers = JSON.parse(viewers)
                   viewers = viewers.filter(
@@ -305,13 +379,43 @@ mongoose
                 }
               })
             } else {
-              socket
-                .getIO()
-                .in(`${client.streamId}-public`)
-                .emit(viewer_left_received, {
-                  roomSize: socket.getIO().sockets.adapter.rooms.get(myRoom)
-                    ?.size,
+              try {
+                redisClient.get(myRoom, (err, viewers) => {
+                  if (!err) {
+                    viewers = JSON.parse(viewers)
+                    const i = viewers.findIndex(
+                      (viewer) => viewer?.unAuthed === true
+                    )
+                    if (i >= 0) {
+                      viewers.splice(i, 1)
+                    }
+                  } else {
+                    console.error(
+                      "Redis get Error un-authed viewer leaving stream",
+                      err
+                    )
+                  }
+                  redisClient.set(myRoom, JSON.stringify(viewers), (err) => {
+                    if (err) {
+                      console.error(
+                        "Redis set Error un-authed viewer leaving stream",
+                        err
+                      )
+                    }
+                    socket
+                      .getIO()
+                      .in(`${client.streamId}-public`)
+                      .emit(viewer_left_received, {
+                        roomSize: socket
+                          .getIO()
+                          .sockets.adapter.rooms.get(myRoom)?.size,
+                      })
+                  })
                 })
+              } catch (err) {
+                /* err */
+                console.error("Redis error : ", err)
+              }
             }
           }
         })

@@ -64,26 +64,6 @@ const viewerSchema = new mongoose.Schema({
       type: Date,
     },
   },
-  previousChatPlans: {
-    type: [
-      {
-        _id: false,
-        model: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Model",
-          required: true,
-        },
-        purchasedOn: {
-          type: Date,
-          default: Date,
-        },
-        albums: {
-          type: [mongoose.Schema.Types.ObjectId],
-        },
-      },
-    ],
-    default: [],
-  },
   privateImagesPlans: {
     type: [
       {

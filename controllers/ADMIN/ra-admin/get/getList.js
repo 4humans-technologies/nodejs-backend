@@ -1,9 +1,33 @@
+// root
+const Role = require("../../../../models/Role")
+const Permission = require("../../../../models/Permission")
+
+// userTypes
 const Model = require("../../../../models/userTypes/Model")
 const Viewer = require("../../../../models/userTypes/Viewer")
 const Staff = require("../../../../models/userTypes/Staff")
-const SuperAdmin = require("../../../../models/userTypes/SuperAdmin")
+
+// management
 const Approval = require("../../../../models/management/approval")
 const Tag = require("../../../../models/management/tag")
+const PriceRange = require("../../../../models/management/priceRanges")
+const Coupon = require("../../../../models/management/coupon")
+const PrivateChatPlan = require("../../../../models/management/privateChatPlan")
+
+// globals
+const AudioCall = require("../../../../models/globals/audioCall")
+const VideoCall = require("../../../../models/globals/videoCall")
+const CoinSpendHistory = require("../../../../models/globals/coinsSpendHistory")
+const CoinPurchase = require("../../../../models/globals/coinPurchase")
+const ImageAlbum = require("../../../../models/globals/ImageAlbum")
+const VideoAlbum = require("../../../../models/globals/VideosAlbum")
+const Stream = require("../../../../models/globals/Stream")
+const ModelDocuments = require("../../../../models/globals/modelDocuments")
+
+// log
+const Log = require("../../../../models/log/log")
+
+// function imports
 const paginator = require("../../../../utils/paginator")
 
 module.exports = (req, res, next) => {
@@ -37,12 +61,25 @@ module.exports = (req, res, next) => {
     }
     sortArray.push(entry === "ASC" ? sort[index - 1] : `-${sort[index - 1]}`)
   })
+  sort = sortArray.join(" ")
+
+  /**
+   * if sort on multiple can use below one down 👇
+   */
+
+  // const sortObj = {}
+  // sort.forEach((entry, index) => {
+  //   if ((index + 1) % 2 === 1) {
+  //     return
+  //   }
+  //   sortObj[sort[index - 1]] = entry === "ASC" ? 1 : -1
+  // })
+
+  // let sortObj = { [`${sort[0]}`]: sort[1] === "ASC" ? 1 : -1 }
 
   /**
    * generate sort string
    */
-
-  sort = sortArray.join(" ")
 
   const limit = range[1] - range[0]
   const skip = range[0]
@@ -57,21 +94,23 @@ module.exports = (req, res, next) => {
         {
           path: "rootUser",
           select: "username userType needApproval meta inProcessDetails",
+          sort: sort.includes("rootUser.") ? sort : undefined,
         },
         {
           path: "wallet",
           select: "currentAmount",
+          sort: sort.includes("wallet.") ? sort : undefined,
         },
         {
           path: "tag",
           select: "name",
+          sort: sort.includes("tag.") ? sort : undefined,
         },
         {
           path: "approval",
           select: "name",
         },
       ]
-
       break
     case "Viewer":
       model = Viewer
@@ -114,6 +153,29 @@ module.exports = (req, res, next) => {
           },
         },
       ]
+      break
+    case "Coupon":
+      model = Coupon
+      select = "generatedBy code forCoins redeemed redeemedBy redeemDate"
+      populate = [
+        {
+          path: "generatedBy",
+          select: "name",
+          populate: {
+            path: "rootUser",
+            select: "username",
+          },
+        },
+        {
+          path: "redeemedBy",
+          select: "name",
+          populate: {
+            path: "rootUser",
+            select: "username",
+          },
+        },
+      ]
+      break
   }
 
   return paginator
@@ -121,7 +183,7 @@ module.exports = (req, res, next) => {
       model,
       {
         skip: skip,
-        sort: sort,
+        sort: sort.includes(".") ? undefined : sort,
         limit: limit,
         range: range,
         populate: populate,
