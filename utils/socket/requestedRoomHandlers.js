@@ -83,11 +83,32 @@ module.exports = function requestRoomHandlers(client) {
     } else {
       try {
         redisClient.get(myRoom, (err, viewers) => {
-          if (!err) {
+          if (!err && viewers) {
             viewers = JSON.parse(viewers)
-            const i = viewers.findIndex((viewer) => viewer?.unAuthed === true)
-            if (i >= 0) {
-              viewers.splice(i, 1)
+            if (typeof viewers !== "object") {
+              console.error("viewers is not array ", viewers)
+            } else {
+              /* if viewers is an array */
+              const i = viewers.findIndex((viewer) => viewer?.unAuthed === true)
+              if (i >= 0) {
+                viewers.splice(i, 1)
+              }
+
+              redisClient.set(myRoom, JSON.stringify(viewers), (err) => {
+                if (err) {
+                  console.error(
+                    "Redis set Error un-authed viewer leaving stream",
+                    err
+                  )
+                }
+                io.getIO()
+                  .in(`${client.streamId}-public`)
+                  .emit(chatEvents.viewer_left_received, {
+                    roomSize: io.getIO().sockets.adapter.rooms.get(myRoom)
+                      ?.size,
+                  })
+                // callBack()
+              })
             }
           } else {
             console.error(
@@ -95,20 +116,6 @@ module.exports = function requestRoomHandlers(client) {
               err
             )
           }
-          redisClient.set(myRoom, JSON.stringify(viewers), (err) => {
-            if (err) {
-              console.error(
-                "Redis set Error un-authed viewer leaving stream",
-                err
-              )
-            }
-            io.getIO()
-              .in(`${client.streamId}-public`)
-              .emit(chatEvents.viewer_left_received, {
-                roomSize: io.getIO().sockets.adapter.rooms.get(myRoom)?.size,
-              })
-            // callBack()
-          })
         })
       } catch (err) {
         /* err */

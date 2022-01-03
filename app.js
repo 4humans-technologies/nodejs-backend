@@ -70,13 +70,12 @@ const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
 const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
 
 // CONNECT-URL--->
-let CONNECT_URL
 if (process.env.LOCAL_DB === "false") {
-  CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@dreamgirl-mongodb-3node-blr-1-c5185824.mongo.ondigitalocean.com/${process.env.DO_MONGO_DB_NAME}?authSource=${process.env.DO_MONGO_AUTH_SOURCE}&replicaSet=${process.env.DO_MONGO_REPLICA_SET}&ssl=true`
+  var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@dreamgirl-mongodb-3node-blr-1-c5185824.mongo.ondigitalocean.com/${process.env.DO_MONGO_DB_NAME}?authSource=${process.env.DO_MONGO_AUTH_SOURCE}&replicaSet=${process.env.DO_MONGO_REPLICA_SET}&ssl=true`
   // CONNECT_URL = `mongodb+srv://${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_USER}:${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_PASS}@nodejs.fsqgg.mongodb.net/${process.env.DB_NAME}?w=majority`
 } else {
   // CONNECT_URL = `mongodb://192.168.1.104:27017/${process.env.DB_NAME}`;
-  CONNECT_URL = `mongodb://localhost:27017/${process.env.DB_NAME}`
+  var CONNECT_URL = `mongodb://localhost:27017/${process.env.DB_NAME}`
 }
 
 app.use((req, res, next) => {
@@ -232,7 +231,7 @@ app.use((err, req, res, next) => {
 })
 
 // MONGODB CONNECTION SETUP--->
-mongoose.set("debug", true)
+// mongoose.set("debug", true)
 mongoose
   .connect(CONNECT_URL, {
     useNewUrlParser: true,
@@ -381,13 +380,38 @@ mongoose
             } else {
               try {
                 redisClient.get(myRoom, (err, viewers) => {
-                  if (!err) {
+                  if (!err && viewers) {
                     viewers = JSON.parse(viewers)
-                    const i = viewers.findIndex(
-                      (viewer) => viewer?.unAuthed === true
-                    )
-                    if (i >= 0) {
-                      viewers.splice(i, 1)
+                    if (typeof viewers !== "object") {
+                      console.error("viewers is not array ", viewers)
+                    } else {
+                      /* if viewers is an array */
+                      const i = viewers.findIndex(
+                        (viewer) => viewer?.unAuthed === true
+                      )
+                      if (i >= 0) {
+                        viewers.splice(i, 1)
+                      }
+                      redisClient.set(
+                        myRoom,
+                        JSON.stringify(viewers),
+                        (err) => {
+                          if (err) {
+                            console.error(
+                              "Redis set Error un-authed viewer leaving stream",
+                              err
+                            )
+                          }
+                          socket
+                            .getIO()
+                            .in(`${client.streamId}-public`)
+                            .emit(viewer_left_received, {
+                              roomSize: socket
+                                .getIO()
+                                .sockets.adapter.rooms.get(myRoom)?.size,
+                            })
+                        }
+                      )
                     }
                   } else {
                     console.error(
@@ -395,22 +419,6 @@ mongoose
                       err
                     )
                   }
-                  redisClient.set(myRoom, JSON.stringify(viewers), (err) => {
-                    if (err) {
-                      console.error(
-                        "Redis set Error un-authed viewer leaving stream",
-                        err
-                      )
-                    }
-                    socket
-                      .getIO()
-                      .in(`${client.streamId}-public`)
-                      .emit(viewer_left_received, {
-                        roomSize: socket
-                          .getIO()
-                          .sockets.adapter.rooms.get(myRoom)?.size,
-                      })
-                  })
                 })
               } catch (err) {
                 /* err */

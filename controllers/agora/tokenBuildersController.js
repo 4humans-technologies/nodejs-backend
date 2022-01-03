@@ -505,7 +505,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
         redisClient.get(
           `${theModel.currentStream._id}-public`,
           (err, viewers) => {
-            if (!err) {
+            if (!err && viewers) {
               viewers = JSON.parse(viewers)
               viewers.push({
                 unAuthed: true,
