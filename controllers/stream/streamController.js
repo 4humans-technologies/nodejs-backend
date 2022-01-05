@@ -60,6 +60,9 @@ exports.handleEndStream = (req, res, next) => {
           getDatabase().ref("publicChats").child(streamId).remove(),
         ])
       } else {
+        /**
+         * will happen when disconnection from socket happens before
+         */
         const error = new Error(
           "Stream is already ended and models was not streaming"
         )
