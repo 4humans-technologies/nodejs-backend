@@ -94,17 +94,14 @@ module.exports = (req, res, next) => {
         {
           path: "rootUser",
           select: "username userType needApproval meta inProcessDetails",
-          sort: sort.includes("rootUser.") ? sort : undefined,
         },
         {
           path: "wallet",
           select: "currentAmount",
-          sort: sort.includes("wallet.") ? sort : undefined,
         },
         {
           path: "tag",
           select: "name",
-          sort: sort.includes("tag.") ? sort : undefined,
         },
         {
           path: "approval",

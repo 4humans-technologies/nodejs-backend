@@ -136,25 +136,30 @@ module.exports = {
   unAuthedViewerListeners: (socket) => {
     /* un-authed public chat emitter */
     socket.on(chatEvents.viewer_message_public_emitted, (data) => {
-      realtimeDb
-        .ref("publicChats")
-        .child(data.room.split("-")[0])
-        .child("chats")
-        .push({
-          type: "normal-public-message",
-          ...data,
-        })
-        .then(() => {
-          io.getIO()
-            .in(data.room)
-            .emit(chatEvents.viewer_message_public_received, data)
-        })
-        .catch(() => {
-          /* even if error emmit the message */
-          io.getIO()
-            .in(data.room)
-            .emit(chatEvents.viewer_message_public_received, data)
-        })
+      try {
+        realtimeDb
+          .ref("publicChats")
+          .child(data.room.split("-")[0])
+          .child("chats")
+          .push({
+            type: "normal-public-message",
+            ...data,
+          })
+          .then(() => {
+            io.getIO()
+              .in(data.room)
+              .emit(chatEvents.viewer_message_public_received, data)
+          })
+          .catch(() => {
+            /* even if error emmit the message */
+            io.getIO()
+              .in(data.room)
+              .emit(chatEvents.viewer_message_public_received, data)
+          })
+      } catch (err) {
+        /*  */
+        console.error("Error while chat message", err)
+      }
     })
   },
 

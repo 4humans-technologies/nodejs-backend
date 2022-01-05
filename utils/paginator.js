@@ -2,7 +2,6 @@ exports.withAggregation = (Model, qry, req) => {
   const page = +req.query.page || 1
   const limit = +req.query.limit || 10
   const sort = req.query.sort || ""
-  // will be good if you learn mongodb aggregation pipeline
   return Model.aggregate([
     {
       $facet: {

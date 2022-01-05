@@ -92,6 +92,7 @@ app.use((req, res, next) => {
     "Access-Control-Allow-Headers",
     "Content-Type,Authorization,range"
   )
+  // res.setHeader("Access-Control-Allow-Headers", "*")
   res.setHeader("Access-Control-Expose-Headers", "Content-Range")
   next()
 })
