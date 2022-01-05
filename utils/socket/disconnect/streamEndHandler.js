@@ -46,7 +46,7 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         }
       }
       if (model) {
-        if (model?.isStreaming) {
+        if (model?.isStreaming === false) {
           console.error(
             "Model was not streaming still, on disconnect handler ran"
           )

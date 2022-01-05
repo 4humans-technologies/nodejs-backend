@@ -32,6 +32,9 @@ exports.handleEndStream = (req, res, next) => {
         isStreaming: false,
         currentStream: null,
         onCall: false,
+      },
+      {
+        new: false,
       }
     )
       .select("isStreaming onCall currentStream")
