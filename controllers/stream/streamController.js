@@ -90,12 +90,37 @@ exports.handleEndStream = (req, res, next) => {
 
       /* remove previous streams attributes from socket client */
       clientSocket.isStreaming = false
-      clientSocket.streamId = null
+      clientSocket.data.streamId = null
 
       /* destroy the stream chat rooms, heave to leave rooms on server as on client side it will overwhelm the client */
-      io.getIO().in(`${streamId}-public`).socketsLeave(`${streamId}-public`)
+      const streamRoom = `${streamId}-public`
+      io.getIO()
+        .in(streamRoom)
+        .fetchSockets()
+        .then((allClients) => {
+          allClients.forEach((client) => {
+            /**
+             * first delete on stream parameters
+             */
+            delete client.data.onStream
+            delete client.data.streamId
 
-      redisClient.del(`${streamId}-public`, (err) => {
+            /**
+             * after clearing stream details leave the room
+             */
+            client.leave(streamRoom)
+          })
+        })
+        .catch((err) => {
+          console.error(
+            "Stream room sockets data not cleared and no left : ",
+            err
+          )
+        })
+
+      io.getIO().in(streamRoom).socketsLeave(streamRoom)
+
+      redisClient.del(streamRoom, (err) => {
         if (err) {
           console.error("Redis viewer list delete err", err)
         }
@@ -415,7 +440,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
       try {
         let clientSocket = io.getIO().sockets.sockets.get(socketId)
         delete clientSocket.isStreaming
-        delete clientSocket.streamId
+        delete clientSocket.data.streamId
         delete clientSocket.createdAt
 
         /* all the necessary details to do the billing in case of a disconnect */
@@ -1131,8 +1156,8 @@ exports.setCallOngoing = (req, res, next) => {
       /* update the client socket and reflect the ongoing call */
       let socketUpdated = false
       try {
-        delete clientSocket.onStream
-        delete clientSocket.streamId
+        delete clientSocket.data.onStream
+        delete clientSocket.data.streamId
 
         clientSocket.onCall = true
         clientSocket.callId = callDoc._id.toString()
@@ -1910,8 +1935,8 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
       let socketUpdated = false
       try {
         const clientSocket = io.getIO().sockets.sockets.get(socketId)
-        clientSocket.onStream = true
-        clientSocket.streamId = model.currentStream._id.toString()
+        clientSocket.data.onStream = true
+        clientSocket.data.streamId = model.currentStream._id.toString()
         /* join the public channel */
         clientSocket.join(`${model.currentStream._id}-public`)
         /* deliberately making him rejoin just incase he has left the channel */
@@ -2024,8 +2049,8 @@ exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
                       .getIO()
                       .sockets.sockets.get(socketId)
                     clientSocket.join(`${model.currentStream._id}-public`)
-                    clientSocket.onStream = true
-                    clientSocket.streamId = model.currentStream._id.toString()
+                    clientSocket.data.onStream = true
+                    clientSocket.data.streamId = model.currentStream._id.toString()
                     socketUpdated = true
                   } catch (err) {
                     socketUpdated = false

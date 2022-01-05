@@ -50,7 +50,7 @@ exports.createStreamAndToken = (req, res, next) => {
     /**
      * currently have skipped the on call check as the call ending mechanism is not reliably working
      */
-    if (clientSocket?.isStreaming && clientSocket?.streamId) {
+    if (clientSocket?.isStreaming && clientSocket.data?.streamId) {
       /**
        * if model.isStreaming true and a client in private room
        * then the model is currently active and live streaming
@@ -106,7 +106,7 @@ exports.createStreamAndToken = (req, res, next) => {
       const streamRoomPublic = `${theStream._id}-public`
       try {
         clientSocket.isStreaming = true
-        clientSocket.streamId = theStream._id.toString()
+        clientSocket.data.streamId = theStream._id.toString()
         clientSocket.createdAt = Date.now()
         clientSocket.join(streamRoomPublic)
         /* redundency just to make sure */
@@ -301,8 +301,8 @@ exports.genRtcTokenViewer = (req, res, next) => {
                   )
               }
 
-              clientSocket.onStream = true
-              clientSocket.streamId = theModel.currentStream._id.toString()
+              clientSocket.data.onStream = true
+              clientSocket.data.streamId = theModel.currentStream._id.toString()
               /* join the public chat room */
               clientSocket.join(streamRoom)
               /* deliberately making him rejoin just incase he has left the private room */
@@ -552,8 +552,8 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                                     .getIO()
                                     .sockets.sockets.get(socketId)
                                   /* add stream data on the client */
-                                  clientSocket.onStream = true
-                                  clientSocket.streamId =
+                                  clientSocket.data.onStream = true
+                                  clientSocket.data.streamId =
                                     theModel.currentStream._id.toString()
                                   /* join the public room */
                                   clientSocket.join(streamRoom)
@@ -621,8 +621,8 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                                     .getIO()
                                     .sockets.sockets.get(socketId)
                                   clientSocket.join(streamRoom)
-                                  clientSocket.onStream = true
-                                  clientSocket.streamId =
+                                  clientSocket.data.onStream = true
+                                  clientSocket.data.streamId =
                                     theModel.currentStream._id.toString()
                                   roomSize = io
                                     .getIO()
@@ -676,8 +676,8 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                                         .getIO()
                                         .sockets.sockets.get(socketId)
                                       clientSocket.join(streamRoom)
-                                      clientSocket.onStream = true
-                                      clientSocket.streamId =
+                                      clientSocket.data.onStream = true
+                                      clientSocket.data.streamId =
                                         theModel.currentStream._id.toString()
                                       var roomSize = io
                                         .getIO()

@@ -214,7 +214,9 @@ app.use("/test", testRouter)
 
 // EXPRESS ERROR HANDLER--->
 app.use((err, req, res, next) => {
-  console.log(err, err.statusCode, err.status, err.data)
+  if (process.env.RUN_ENV === "windows") {
+    console.log(err, err.statusCode, err.status, err.data)
+  }
   if (!err.statusCode) {
     res.status(500).json({
       message: err.message || "error",
@@ -339,9 +341,9 @@ mongoose
           } else if (client.authed && client?.onCall) {
             /* check if the disconnecting "USER" was on call */
             onDisconnectCallEndHandler(client)
-          } else if (client?.onStream && client?.streamId) {
+          } else if (client.data?.onStream && client.data?.streamId) {
             /* if viewer was on a stream */
-            const myRoom = `${client.streamId}-public`
+            const myRoom = `${client.data.streamId}-public`
             if (client.authed) {
               redisClient.get(myRoom, (err, viewers) => {
                 if (err) {
@@ -405,7 +407,7 @@ mongoose
                           }
                           socket
                             .getIO()
-                            .in(`${client.streamId}-public`)
+                            .in(`${client.data.streamId}-public`)
                             .emit(viewer_left_received, {
                               roomSize: socket
                                 .getIO()
@@ -447,7 +449,9 @@ mongoose
         socket.emit("socket-err", err.message)
       })
 
-      console.log("👉", client.id, client.userType)
+      if (process.env.RUN_ENV === "windows") {
+        console.log("👉", client.id, client.userType)
+      }
       switch (client.userType) {
         case "Model":
           chatEventListeners.modelListeners(client)
@@ -465,14 +469,18 @@ mongoose
 
     io.of("/").adapter.on("join-room", (room, socketId) => {
       if (room.endsWith("-public") || room.endsWith("-private")) {
-        console.log("someone joined a room >>", room)
+        if (process.env.RUN_ENV === "windows") {
+          console.log("someone joined a room >>", room)
+        }
         io.sockets.sockets.get(socketId).emit("you-joined-a-room", room)
       }
     })
 
     io.of("/").adapter.on("leave-room", (room, socketId) => {
       if (room.endsWith("-public") || room.endsWith("-private")) {
-        console.log("someone left a room >>", room)
+        if (process.env.RUN_ENV === "windows") {
+          console.log("someone left a room >>", room)
+        }
         io.sockets.sockets.get(socketId).emit("you-left-a-room", room)
       }
     })

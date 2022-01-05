@@ -10,7 +10,7 @@ module.exports = function onDisconnectStreamEndHandler(client) {
   Promise.all([
     Stream.findOneAndUpdate(
       {
-        _id: client.streamId,
+        _id: client.data.streamId,
       },
       {
         endReason: "socket-disconnect",
@@ -52,7 +52,7 @@ module.exports = function onDisconnectStreamEndHandler(client) {
           )
         }
       }
-      const publicRoom = `${client.streamId}-public`
+      const publicRoom = `${client.data.streamId}-public`
       redisClient.del(publicRoom, (err, response) => {
         if (!err) {
           console.log("Stream delete redis response:", response)
@@ -67,8 +67,31 @@ module.exports = function onDisconnectStreamEndHandler(client) {
               room (problem due to setInterval running in loop)
               will definitely look to improve this strategy in future
             */
+
           setTimeout(() => {
-            io.getIO().in(publicRoom).socketsLeave(publicRoom)
+            io.getIO()
+              .in(publicRoom)
+              .fetchSockets()
+              .then((allClients) => {
+                allClients.forEach((client) => {
+                  /**
+                   * first delete on stream parameters
+                   */
+                  delete client.data.onStream
+                  delete client.data.streamId
+
+                  /**
+                   * after clearing stream details leave the room
+                   */
+                  client.leave(publicRoom)
+                })
+              })
+              .catch((err) => {
+                console.error(
+                  "Stream room sockets data not cleared and no left : ",
+                  err
+                )
+              })
           }, 100)
         } else {
           throw err
@@ -91,10 +114,32 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         liveNow: io.decreaseLiveCount(client.data.relatedUserId),
       })
 
-      const publicRoom = `${client.streamId}-public`
+      const publicRoom = `${client.data.streamId}-public`
       /* see reason written above to find the setTimeout reason */
       setTimeout(() => {
-        io.getIO().in(publicRoom).socketsLeave(publicRoom)
+        io.getIO()
+          .in(publicRoom)
+          .fetchSockets()
+          .then((allClients) => {
+            allClients.forEach((client) => {
+              /**
+               * first delete on stream parameters
+               */
+              delete client.data.onStream
+              delete client.data.streamId
+
+              /**
+               * after clearing stream details leave the room
+               */
+              client.leave(publicRoom)
+            })
+          })
+          .catch((err) => {
+            console.error(
+              "Stream room sockets data not cleared and no left : ",
+              err
+            )
+          })
       }, 100)
     })
 }

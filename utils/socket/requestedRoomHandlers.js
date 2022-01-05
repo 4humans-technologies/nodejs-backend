@@ -102,7 +102,7 @@ module.exports = function requestRoomHandlers(client) {
                   )
                 }
                 io.getIO()
-                  .in(`${client.streamId}-public`)
+                  .in(`${client.data.streamId}-public`)
                   .emit(chatEvents.viewer_left_received, {
                     roomSize: io.getIO().sockets.adapter.rooms.get(myRoom)
                       ?.size,
@@ -135,8 +135,8 @@ module.exports = function requestRoomHandlers(client) {
             relatedUserId: client.data?.relatedUserId || undefined,
           })
           /* free data keys */
-          delete client.onStream
-          delete client.streamId
+          delete client.data.onStream
+          delete client.data.streamId
 
           /**
            * remove and update viewer list redis

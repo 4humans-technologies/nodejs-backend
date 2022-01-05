@@ -37,8 +37,8 @@ module.exports = function updateClientInfo(client) {
           })
 
           /* free data keys */
-          delete client.onStream
-          delete client.streamId
+          delete client.data.onStream
+          delete client.data.streamId
           /* remove all chat listeners from user */
 
           switch (client.userType) {
@@ -138,7 +138,7 @@ module.exports = function updateClientInfo(client) {
           delete client.callType
 
           client.isStreaming = true
-          client.streamId = data.streamId
+          client.data.streamId = data.streamId
           client.createdAt = Date.now() - 800
         }
         break
@@ -149,8 +149,8 @@ module.exports = function updateClientInfo(client) {
            * public rooms and also due to this no was was notified
            * of this user
            */
-          client.onStream = true
-          client.streamId = data.streamId
+          client.data.onStream = true
+          client.data.streamId = data.streamId
           const streamRoom = `${data.streamId}-public`
           client.join(streamRoom)
         }
@@ -170,8 +170,8 @@ module.exports = function updateClientInfo(client) {
           if (!client.authed) {
             return
           }
-          client.onStream = true
-          client.streamId = data.streamId
+          client.data.onStream = true
+          client.data.streamId = data.streamId
           const streamRoom = `${data.streamId}-public`
           client.join(streamRoom)
           if (client.data?.relatedUserId) {
@@ -210,8 +210,8 @@ module.exports = function updateClientInfo(client) {
           if (!client.authed) {
             return
           }
-          client.onStream = true
-          client.streamId = data.streamId
+          client.data.onStream = true
+          client.data.streamId = data.streamId
           const streamRoom = `${data.streamId}-public`
           client.join(streamRoom)
 
@@ -242,6 +242,15 @@ module.exports = function updateClientInfo(client) {
           })
         }
         break
+      case "clear-stream-detail":
+        {
+          delete client.data.onStream
+          delete client.data.streamId
+          callback({
+            ok: true,
+          })
+        }
+        break
       case "set-call-data-viewer":
         {
           /**
@@ -249,8 +258,8 @@ module.exports = function updateClientInfo(client) {
            * add call details on the client socket
            */
           if (client.userType === "Viewer") {
-            delete client.onStream
-            delete client.streamId
+            delete client.data.onStream
+            delete client.data.streamId
 
             client.onCall = true
             client.sharePercent = data.sharePercent
@@ -271,7 +280,7 @@ module.exports = function updateClientInfo(client) {
            */
           if (client.userType === "Model") {
             delete client.isStreaming
-            delete client.streamId
+            delete client.data.streamId
             delete client.createdAt
 
             client.onCall = true
