@@ -69,7 +69,7 @@ module.exports = function onDisconnectStreamEndHandler(client) {
             */
           setTimeout(() => {
             io.getIO().in(publicRoom).socketsLeave(publicRoom)
-          }, 1000)
+          }, 100)
         } else {
           throw err
         }
@@ -95,6 +95,6 @@ module.exports = function onDisconnectStreamEndHandler(client) {
       /* see reason written above to find the setTimeout reason */
       setTimeout(() => {
         io.getIO().in(publicRoom).socketsLeave(publicRoom)
-      }, 1000)
+      }, 100)
     })
 }

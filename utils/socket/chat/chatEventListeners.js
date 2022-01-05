@@ -11,9 +11,10 @@ module.exports = {
     try {
       /* can get this message payload as string and streamId as other parameter😀 */
       socket.on(chatEvents.viewer_message_public_emitted, (data) => {
+        const toRoom = data.room.split("-")[0]
         realtimeDb
           .ref("publicChats")
-          .child(data.room.split("-")[0])
+          .child(toRoom)
           .child("chats")
           .push({
             type: "normal-public-message",
@@ -70,9 +71,10 @@ module.exports = {
     /* model public chat emitter */
     socket.on(chatEvents.model_message_public_emitted, (data) => {
       try {
+        const toRoom = data.room.split("-")[0]
         realtimeDb
           .ref("publicChats")
-          .child(data.room.split("-")[0])
+          .child(toRoom)
           .child("chats")
           .push({
             type: "model-public-message",
@@ -90,10 +92,7 @@ module.exports = {
               .emit(chatEvents.viewer_message_public_received, data)
           })
       } catch (err) {
-        console.error(
-          "Model's public message was not sent reason: ",
-          err.message
-        )
+        console.error("Model's public message was not sent reason: ", err)
       }
     })
 
@@ -137,9 +136,10 @@ module.exports = {
     /* un-authed public chat emitter */
     socket.on(chatEvents.viewer_message_public_emitted, (data) => {
       try {
+        const toRoom = data.room.split("-")[0]
         realtimeDb
           .ref("publicChats")
-          .child(data.room.split("-")[0])
+          .child(toRoom)
           .child("chats")
           .push({
             type: "normal-public-message",
