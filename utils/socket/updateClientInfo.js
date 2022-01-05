@@ -14,11 +14,11 @@ module.exports = function updateClientInfo(client) {
       case "logout":
         {
           /* end streaming also */
-          if (client.authed && client.isStreaming) {
+          if (client.authed && client?.isStreaming) {
             onDisconnectStreamEndHandler(client)
           }
           /* end call properly */
-          if (client.authed && client.onCall) {
+          if (client.authed && client?.onCall) {
             onDisconnectCallEndHandler(client)
           }
 
@@ -31,10 +31,11 @@ module.exports = function updateClientInfo(client) {
                 roomSize: io.getIO().sockets.adapter.rooms.get(myRoom)?.size,
                 relatedUserId: client.data?.relatedUserId,
               })
-              /* free data keys */
-              delete client.onStream
-              delete client.streamId
             }
+            client.leave(myRoom)
+            /* free data keys */
+            delete client.onStream
+            delete client.streamId
           })
 
           /* remove all chat listeners from user */
@@ -53,19 +54,23 @@ module.exports = function updateClientInfo(client) {
           chatEventListeners.unAuthedViewerListeners(client)
 
           /* clear the data set on the client object */
-          const dataCopy = cloneDeep(client.data)
-          try {
-            delete dataCopy.userId
-            delete dataCopy.relatedUserId
-          } catch (err) {
-            /**
-             * expired token in lc, socket picks up and makes request
-             * as token is expired no userId etc on client is added
-             * and token is expired readFromLocalStorage call logout but
-             * the user was never logged in on the socket in the first place
-             */
-          }
-          client.data = { ...dataCopy }
+          // const dataCopy = cloneDeep(client.data)
+          // try {
+          //   delete dataCopy.userId
+          //   delete dataCopy.relatedUserId
+          // } catch (err) {
+          //   /**
+          //    * expired token in lc, socket picks up and makes request
+          //    * as token is expired no userId etc on client is added
+          //    * and token is expired readFromLocalStorage call logout but
+          //    * the user was never logged in on the socket in the first place
+          //    */
+          // }
+          // client.data = { ...dataCopy }
+
+          delete client.data?.userId
+          delete client.data?.relatedUserId
+
           client.authed = false
           client.userType = "UnAuthedViewer"
           callback({
@@ -83,7 +88,7 @@ module.exports = function updateClientInfo(client) {
                 if (!error) {
                   if (decodedToken) {
                     client.data = {
-                      ...client.data,
+                      ...client?.data,
                       userId: decodedToken.userId,
                       relatedUserId: decodedToken.relatedUserId,
                     }
