@@ -31,13 +31,14 @@ module.exports = function updateClientInfo(client) {
                 roomSize: io.getIO().sockets.adapter.rooms.get(myRoom)?.size,
                 relatedUserId: client.data?.relatedUserId,
               })
+            } else {
+              client.leave(myRoom)
             }
-            client.leave(myRoom)
-            /* free data keys */
-            delete client.onStream
-            delete client.streamId
           })
 
+          /* free data keys */
+          delete client.onStream
+          delete client.streamId
           /* remove all chat listeners from user */
 
           switch (client.userType) {
@@ -152,11 +153,6 @@ module.exports = function updateClientInfo(client) {
           client.streamId = data.streamId
           const streamRoom = `${data.streamId}-public`
           client.join(streamRoom)
-          // io.getIO()
-          //   .in(streamRoom)
-          //   .emit(viewerJoined, {
-          //     roomSize: io.getIO().sockets.adapter.rooms.get(streamRoom)?.size,
-          //   })
         }
         break
       case "join-the-stream-authed-viewer":
