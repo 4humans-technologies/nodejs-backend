@@ -39,7 +39,7 @@ module.exports = {
         return next(error)
       }
     } else {
-      client.data = null
+      client.data = {}
       client.authed = false
       client.userType = "UnAuthedViewer"
       return next()
