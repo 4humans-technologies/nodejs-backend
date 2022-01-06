@@ -12,25 +12,29 @@ module.exports = {
       /* can get this message payload as string and streamId as other parameter😀 */
       socket.on(chatEvents.viewer_message_public_emitted, (data) => {
         const toRoom = data.room.split("-")[0]
-        realtimeDb
-          .ref("publicChats")
-          .child(toRoom)
-          .child("chats")
-          .push({
-            type: "normal-public-message",
-            ...data,
-          })
-          .then(() => {
-            io.getIO()
-              .in(data.room)
-              .emit(chatEvents.viewer_message_public_received, data)
-          })
-          .catch(() => {
-            /* even if error emmit the message */
-            io.getIO()
-              .in(data.room)
-              .emit(chatEvents.viewer_message_public_received, data)
-          })
+        if (toRoom) {
+          realtimeDb
+            .ref("publicChats")
+            .child(toRoom)
+            .child("chats")
+            .push({
+              type: "normal-public-message",
+              ...data,
+            })
+            .then(() => {
+              io.getIO()
+                .in(data.room)
+                .emit(chatEvents.viewer_message_public_received, data)
+            })
+            .catch(() => {
+              /* even if error emmit the message */
+              io.getIO()
+                .in(data.room)
+                .emit(chatEvents.viewer_message_public_received, data)
+            })
+        } else {
+          console.error("No destination room while authed user chat message!")
+        }
       })
     } catch (err) {
       console.error("Error while sending public chat reason: " + err.message)
@@ -72,25 +76,32 @@ module.exports = {
     socket.on(chatEvents.model_message_public_emitted, (data) => {
       try {
         const toRoom = data.room.split("-")[0]
-        realtimeDb
-          .ref("publicChats")
-          .child(toRoom)
-          .child("chats")
-          .push({
-            type: "model-public-message",
-            ...data,
-          })
-          .then(() => {
-            io.getIO()
-              .in(data.room)
-              .emit(chatEvents.model_message_public_received, data)
-          })
-          .catch(() => {
-            /* even if error emmit the message */
-            io.getIO()
-              .in(data.room)
-              .emit(chatEvents.viewer_message_public_received, data)
-          })
+        /**
+         * if room then only proceed
+         */
+        if (toRoom) {
+          realtimeDb
+            .ref("publicChats")
+            .child(toRoom)
+            .child("chats")
+            .push({
+              type: "model-public-message",
+              ...data,
+            })
+            .then(() => {
+              io.getIO()
+                .in(data.room)
+                .emit(chatEvents.model_message_public_received, data)
+            })
+            .catch(() => {
+              /* even if error emmit the message */
+              io.getIO()
+                .in(data.room)
+                .emit(chatEvents.viewer_message_public_received, data)
+            })
+        } else {
+          console.error("No destination room while model chat message!")
+        }
       } catch (err) {
         console.error("Model's public message was not sent reason: ", err)
       }
@@ -137,27 +148,35 @@ module.exports = {
     socket.on(chatEvents.viewer_message_public_emitted, (data) => {
       try {
         const toRoom = data.room.split("-")[0]
-        realtimeDb
-          .ref("publicChats")
-          .child(toRoom)
-          .child("chats")
-          .push({
-            type: "normal-public-message",
-            ...data,
-          })
-          .then(() => {
-            io.getIO()
-              .in(data.room)
-              .emit(chatEvents.viewer_message_public_received, data)
-          })
-          .catch(() => {
-            /* even if error emmit the message */
-            io.getIO()
-              .in(data.room)
-              .emit(chatEvents.viewer_message_public_received, data)
-          })
+        /**
+         * if room then only proceed
+         */
+        if (toRoom) {
+          realtimeDb
+            .ref("publicChats")
+            .child(toRoom)
+            .child("chats")
+            .push({
+              type: "normal-public-message",
+              ...data,
+            })
+            .then(() => {
+              io.getIO()
+                .in(data.room)
+                .emit(chatEvents.viewer_message_public_received, data)
+            })
+            .catch(() => {
+              /* even if error emmit the message */
+              io.getIO()
+                .in(data.room)
+                .emit(chatEvents.viewer_message_public_received, data)
+            })
+        } else {
+          console.error(
+            "No destination room while un-authed user chat message!"
+          )
+        }
       } catch (err) {
-        /*  */
         console.error("Error while chat message", err)
       }
     })

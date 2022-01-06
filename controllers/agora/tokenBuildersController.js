@@ -828,10 +828,11 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
               return Promise.all([false, wallet.save(), modelWallet.save(), {}])
             } else {
               /**
+               * viewer cannot afford next minute call
                * calculate in secs amount of time the user can call, deduct all the money
                * and generate token for all the amount
-               *
                */
+              canRenew = false
               generatedFor =
                 Math.floor((wallet.currentAmount * 60) / callDoc.chargePerMin) +
                 RENEW_BUFFER_TIME
@@ -839,7 +840,6 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
                 wallet.currentAmount * (callDoc.sharePercent / 100)
               )
               wallet.currentAmount = 0
-
               const a = rtcTokenGenerator(
                 "model",
                 req.user.relatedUser._id,
@@ -847,6 +847,7 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
                 generatedFor,
                 "sec"
               )
+
               privilegeExpiredTs = a.privilegeExpiredTs
               rtcToken = a.rtcToken
               return Promise.all([false, wallet.save(), modelWallet.save()])

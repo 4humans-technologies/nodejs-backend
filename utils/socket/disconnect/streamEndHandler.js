@@ -77,8 +77,8 @@ module.exports = function onDisconnectStreamEndHandler(client) {
                   /**
                    * first delete on stream parameters
                    */
-                  delete client.data.onStream
-                  delete client.data.streamId
+                  client.data.onStream = undefined
+                  client.data.streamId = undefined
 
                   /**
                    * after clearing stream details leave the room
@@ -125,8 +125,9 @@ module.exports = function onDisconnectStreamEndHandler(client) {
               /**
                * first delete on stream parameters
                */
-              delete client.data.onStream
-              delete client.data.streamId
+
+              client.data.onStream = undefined
+              client.data.streamId = undefined
 
               /**
                * after clearing stream details leave the room

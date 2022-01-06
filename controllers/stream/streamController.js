@@ -89,8 +89,8 @@ exports.handleEndStream = (req, res, next) => {
       }
 
       /* remove previous streams attributes from socket client */
-      clientSocket.isStreaming = false
-      clientSocket.data.streamId = null
+      clientSocket.isStreaming = undefined
+      clientSocket.data.streamId = undefined
 
       /* destroy the stream chat rooms, heave to leave rooms on server as on client side it will overwhelm the client */
       const streamRoom = `${streamId}-public`
@@ -102,8 +102,8 @@ exports.handleEndStream = (req, res, next) => {
             /**
              * first delete on stream parameters
              */
-            delete client.data.onStream
-            delete client.data.streamId
+            client.data.onStream = undefined
+            client.data.streamId = undefined
 
             /**
              * after clearing stream details leave the room
@@ -1334,6 +1334,7 @@ exports.processTokenGift = (req, res, next) => {
   let sharePercent
   let viewerNewWalletAmount
   let streamId
+  let theModel
   Wallet.findOne({ rootUser: req.user._id })
     .then((wallet) => {
       if (tokenAmount <= wallet.currentAmount) {
@@ -1350,10 +1351,12 @@ exports.processTokenGift = (req, res, next) => {
       }
     })
     .then(() => {
-      /* transfer the amount to model*/
-      return Model.findById(modelId).select("sharePercent currentStream").lean()
+      return Model.findById(modelId)
+        .select("sharePercent currentStream isStreaming onCall")
+        .lean()
     })
     .then((model) => {
+      theModel = model
       sharePercent = model?.sharePercent
       try {
         streamId = model.currentStream._id.toString()
@@ -1380,14 +1383,7 @@ exports.processTokenGift = (req, res, next) => {
       req.user.username = viewer.rootUser.username
       req.user.relatedUser.name = viewer.name
       req.user.relatedUser.profileImage = viewer.profileImage
-      io.getIO()
-        .in(`${modelId}-private`)
-        .emit("model-wallet-updated", {
-          modelId: modelId,
-          operation: "add",
-          amount: tokenAmount * (sharePercent / 100),
-        })
-      if (streamId) {
+      if (!theModel.isStreaming) {
         /* save a notification */
         Notifier.newModelNotification("viewer-coins-gift", modelId, {
           viewer: viewer,
@@ -1405,16 +1401,21 @@ exports.processTokenGift = (req, res, next) => {
     })
     .then(() => {
       /* save data in firebase */
-      if (streamId) {
+      if (theModel.isStreaming) {
         const path = `publicChats/${streamId}`
         return getDatabase().ref(path).child("chats").push(socketData)
-      } else {
-        return Promise.resolve("Model not streaming")
       }
     })
     .then((value) => {
+      io.getIO()
+        .in(`${modelId}-private`)
+        .emit("model-wallet-updated", {
+          modelId: modelId,
+          operation: "add",
+          amount: tokenAmount * (sharePercent / 100),
+        })
       // const clientSocket = io.getIO().sockets.sockets.get(socketId)
-      if (value !== "Model not streaming") {
+      if (theModel.isStreaming) {
         redisClient.get(`${streamId}-transactions`, (err, transactions) => {
           /**
            * transactions = [
@@ -1536,6 +1537,18 @@ exports.processTokenGift = (req, res, next) => {
             return next(err)
           }
         })
+      } else if (theModel.onCall) {
+        /**
+         * if on call no need to add in transactions list
+         * emit super chat in public room
+         */
+        io.getIO()
+          .in(socketData.room)
+          .emit(chatEvents.viewer_super_message_public_received, socketData)
+        return res.status(200).json({
+          actionStatus: "success",
+          viewerNewWalletAmount: viewerNewWalletAmount,
+        })
       } else {
         return res.status(200).json({
           actionStatus: "success",
@@ -1553,10 +1566,11 @@ exports.processTipMenuRequest = (req, res, next) => {
   let sharePercent
   let viewerNewWalletAmount
   let streamId
+  var theModel
   Promise.all([
     Wallet.findOne({ rootUser: req.user._id }),
     Model.findById(modelId)
-      .select("sharePercent currentStream tipMenuActions")
+      .select("sharePercent currentStream tipMenuActions isStreaming onCall")
       .lean(),
     Viewer.findById(req.user.relatedUser._id)
       .select("name profileImage")
@@ -1564,6 +1578,8 @@ exports.processTipMenuRequest = (req, res, next) => {
       .lean(),
   ])
     .then(([wallet, model, viewer]) => {
+      theModel = model
+      room = `${model.currentStream._id}-public`
       req.user.username = viewer.rootUser.username
       req.user.relatedUser.name = viewer.name
       req.user.relatedUser.profileImage = viewer.profileImage
@@ -1615,7 +1631,7 @@ exports.processTipMenuRequest = (req, res, next) => {
       }
     })
     .then(() => {
-      if (streamId) {
+      if (theModel.isStreaming) {
         redisClient.get(`${streamId}-transactions`, (err, transactions) => {
           /**
            * transactions = [
@@ -1748,7 +1764,31 @@ exports.processTipMenuRequest = (req, res, next) => {
             return next(err)
           }
         })
+      } else if (theModel.onCall) {
+        /**
+         * if model is now on call then emit in public
+         * and no redis room as it's been deleted
+         */
+        io.getIO()
+          .in(`${modelId}-private`)
+          .emit("model-wallet-updated", {
+            modelId: modelId,
+            operation: "add",
+            amount: activity.price * (sharePercent / 100),
+          })
+
+        io.getIO()
+          .in(room)
+          .emit(chatEvents.viewer_super_message_public_received, socketData)
+
+        return res.status(200).json({
+          actionStatus: "success",
+          viewerNewWalletAmount: viewerNewWalletAmount,
+        })
       } else {
+        /**
+         * if not live not on call
+         */
         return res.status(200).json({
           actionStatus: "success",
           viewerNewWalletAmount: viewerNewWalletAmount,
@@ -2050,7 +2090,8 @@ exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
                       .sockets.sockets.get(socketId)
                     clientSocket.join(`${model.currentStream._id}-public`)
                     clientSocket.data.onStream = true
-                    clientSocket.data.streamId = model.currentStream._id.toString()
+                    clientSocket.data.streamId =
+                      model.currentStream._id.toString()
                     socketUpdated = true
                   } catch (err) {
                     socketUpdated = false
