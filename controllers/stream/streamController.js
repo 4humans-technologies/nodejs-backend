@@ -506,15 +506,33 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
 
             /* EMIT TO THE CALLER VIEWER */
             callingViewerSocketData.username = viewer.rootUser.username
-            io.getIO()
-              .in(`${viewerId}-private`)
-              .emit(chatEvents.model_call_request_response_received, {
-                ...callingViewerSocketData,
-                sharePercent: req.user.relatedUser.sharePercent,
-                privilegeExpiredTs: privilegeExpiredTs,
-                rtcToken: rtcToken,
-                canAffordNextMinute,
-              })
+
+            try {
+              /**
+               * only emit to one sockets in viewers private room,
+               * so if multiple viewer were connected via same id
+               * then call is received by only one
+               */
+              io.getIO()
+                .sockets.sockets.get(
+                  Array.from(
+                    io.getIO().sockets.adapter.rooms.get(`${viewerId}-private`)
+                  )[0]
+                )
+                .emit(chatEvents.model_call_request_response_received, {
+                  ...callingViewerSocketData,
+                  sharePercent: req.user.relatedUser.sharePercent,
+                  privilegeExpiredTs: privilegeExpiredTs,
+                  rtcToken: rtcToken,
+                  canAffordNextMinute,
+                })
+            } catch (err) {
+              /* ============ */
+              console.error(
+                "Viewers private room was empty, while accepting call! callId: ",
+                callDoc._id.toString()
+              )
+            }
 
             /**
              * for the model

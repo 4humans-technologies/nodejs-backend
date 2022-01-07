@@ -28,26 +28,35 @@ exports.createStreamAndToken = (req, res, next) => {
     })
   }
 
-  var modelRoom = io
-    .getIO()
-    .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-  var modelRoomSockets = io.getIO().sockets.sockets.get(Array.from(modelRoom))
+  var modelRoomSIDS = Array.from(
+    io.getIO().sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+  )
+
+  var modelRoomSockets = []
+  modelRoomSIDS.forEach((sid) => {
+    modelRoomSockets.push(io.getIO().sockets.sockets.get(sid))
+  })
+
   if (!clientSocket) {
-    if (modelRoom.size === 1) {
+    if (modelRoomSIDS.length === 1) {
       clientSocket = modelRoomSockets?.[0]
     }
   }
 
   if (req.user.relatedUser.isStreaming || req.user.relatedUser.onCall) {
     var isModelLiveAlready = false
-    if (modelRoom.size > 1) {
+    if (modelRoomSIDS.length > 1) {
       /**
        * if is isStreaming === true and two sockets in private room
        * then model is streaming
        */
-
       modelRoomSockets.forEach((client) => {
-        if (client?.isStreaming || client?.onCall || client?.callId) {
+        if (
+          client?.isStreaming ||
+          client.data?.onStream ||
+          client?.onCall ||
+          client?.callId
+        ) {
           isModelLiveAlready = true
         }
       })
@@ -288,7 +297,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
                         .sockets.adapter.rooms.get(
                           `${req.user.relatedUser._id}-private`
                         )
-                    )[0]
+                    )?.[0]
                   )
               }
 
