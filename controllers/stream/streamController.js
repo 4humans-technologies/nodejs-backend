@@ -287,264 +287,295 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
   let canAffordNextMinute
   let modelTokenValidity
 
-  /* create the call entry in DB */
-  Promise.all([
-    theCall.create({
-      model: req.user.relatedUser._id,
-      viewer: viewerId,
-      stream: streamId,
-      status: "model-accepted-will-end-stream",
-      chargePerMin:
-        callType === "audioCall"
-          ? req.user.relatedUser.charges.audioCall
-          : req.user.relatedUser.charges.videoCall,
-      minCallDuration: req.user.relatedUser.minCallDuration,
-      sharePercent: req.user.relatedUser.sharePercent,
-      startTimeStamp: callStartTimeStamp /* plus five seconds */,
-    }),
-    Wallet.findOne({
-      relatedUser: req.user.relatedUser._id,
-    }),
-    Wallet.findOne({ relatedUser: viewerId }),
-    Stream.findById(streamId).lean().select("createdAt"),
-  ])
-    .then(([call, modelWallet, viewerWallet, stream]) => {
-      /* deduct min charges from viewer and add to model wallet */
-      callDoc = call
-      callingViewerSocketData.callId = callDoc._id.toString()
-      const minCharges = callDoc.chargePerMin * callDoc.minCallDuration
+  redisClient.get(`${streamId}-public`, (err, viewers) => {
+    if (!err && viewers) {
+      const viewersList = JSON.parse(viewers)
 
-      if (viewerWallet.currentAmount - minCharges - callDoc.chargePerMin > 0) {
+      const caller = viewersList.find((entry) => entry._id === viewerId)
+      if (caller) {
         /**
-         * have money to afford next complete minute
+         * caller is live,
+         * create the call entry in DB
          */
-        canAffordNextMinute = true
+        Promise.all([
+          theCall.create({
+            model: req.user.relatedUser._id,
+            viewer: viewerId,
+            stream: streamId,
+            status: "model-accepted-will-end-stream",
+            chargePerMin:
+              callType === "audioCall"
+                ? req.user.relatedUser.charges.audioCall
+                : req.user.relatedUser.charges.videoCall,
+            minCallDuration: req.user.relatedUser.minCallDuration,
+            sharePercent: req.user.relatedUser.sharePercent,
+            startTimeStamp: callStartTimeStamp /* plus five seconds */,
+          }),
+          Wallet.findOne({
+            relatedUser: req.user.relatedUser._id,
+          }),
+          Wallet.findOne({ relatedUser: viewerId }),
+          Stream.findById(streamId).lean().select("createdAt"),
+        ])
+          .then(([call, modelWallet, viewerWallet, stream]) => {
+            /* deduct min charges from viewer and add to model wallet */
+            callDoc = call
+            callingViewerSocketData.callId = callDoc._id.toString()
+            const minCharges = callDoc.chargePerMin * callDoc.minCallDuration
+
+            if (
+              viewerWallet.currentAmount - minCharges - callDoc.chargePerMin >
+              0
+            ) {
+              /**
+               * have money to afford next complete minute
+               */
+              canAffordNextMinute = true
+            } else {
+              /**
+               * does not have money to afford next minute
+               */
+              canAffordNextMinute = false
+              call.advanceCut = minCharges
+              modelTokenValidity = Math.floor(
+                (viewerWallet.currentAmount * 60) / callDoc.chargePerMin
+              )
+            }
+
+            try {
+              if (canAffordNextMinute) {
+                viewerWallet.deductAmount(minCharges)
+              } else {
+                /**
+                 * generate token for all the amount in wallet
+                 * and cut all the money from viewer wallet as advance
+                 */
+                call.advanceCut = viewerWallet.currentAmount
+                viewerWallet.setAmount(0)
+              }
+            } catch (error) {
+              theCall
+                .deleteOne({
+                  _id: callDoc._id,
+                })
+                .catch(() => {
+                  console.error(
+                    "Viewer does not have sufficient amount of money for the call, and the call was also not deleted!"
+                  )
+                })
+                .finally(() => {
+                  return next(error)
+                })
+              return Promise.reject(
+                "Viewer does not have sufficient amount of money for the call"
+              )
+            }
+            modelWallet.addAmount(
+              minCharges * (req.user.relatedUser.sharePercent / 100)
+            )
+            // rest add to the admin wallet
+            // TODO: transfer coins to admin also 🔺🔻
+            return Promise.all([
+              modelWallet.save(),
+              viewerWallet.save(),
+              call.save(),
+              Stream.updateOne(
+                {
+                  _id: streamId,
+                },
+                {
+                  status: "ended",
+                  endReason: callType,
+                  duration: Math.round(
+                    (Date.now() - new Date(stream.createdAt).getTime()) / 1000
+                  ),
+                  endCall: {
+                    callId: call._id,
+                    callType: callType,
+                  },
+                }
+              ),
+            ])
+          })
+          .then(([modelWallet, viewerWallet, call]) => {
+            theCall = call
+
+            /* update the local wallet of model */
+            /* io.getIO()
+              .in(`${req.user.relatedUser._id}-private`)
+              .emit("model-wallet-updated", {
+                modelId: req.user.relatedUser._id,
+                operation: "set",
+                amount: modelWallet.currentAmount,
+              }) */
+
+            /* add the call as pending call for both model and viewer */
+            return Promise.all([
+              Viewer.findOneAndUpdate(
+                { _id: callDoc.viewer },
+                {
+                  $push:
+                    callType === "AudioCall"
+                      ? { "pendingCalls.audioCalls": callDoc._id }
+                      : { "pendingCalls.videoCalls": callDoc._id },
+                }
+              )
+                .select("profileImage name")
+                .populate({
+                  path: "rootUser",
+                  select: "username",
+                })
+                .populate({
+                  path: "wallet",
+                })
+                .lean(),
+              Model.updateOne(
+                { _id: req.user.relatedUser._id },
+                {
+                  $push:
+                    callType === "AudioCall"
+                      ? { "pendingCalls.audioCalls": callDoc._id }
+                      : { "pendingCalls.videoCalls": callDoc._id },
+                  isStreaming: false,
+                  onCall: true,
+                }
+              ),
+            ])
+          })
+          .then((result) => {
+            const viewer = result[0]
+            if (result[1].n !== 1) {
+              console.error(
+                "Model status not updated in DB while accepting call."
+              )
+            }
+            let socketDataUpdated = false
+            try {
+              let clientSocket = io.getIO().sockets.sockets.get(socketId)
+              delete clientSocket.isStreaming
+              delete clientSocket.data.streamId
+              delete clientSocket.createdAt
+
+              /* all the necessary details to do the billing in case of a disconnect */
+              clientSocket.onCall = true
+              clientSocket.callId = callDoc._id.toString()
+              clientSocket.callType = callType
+              clientSocket.sharePercent = +req.user.relatedUser.sharePercent
+
+              socketDataUpdated = true
+            } catch (err) {
+              socketDataUpdated = false
+            }
+
+            /* inform all sockets about model response */
+            io.getIO()
+              .in(`${streamId}-public`)
+              .except(`${viewerId}-private`)
+              .except(`${req.user.relatedUser._id}-private`)
+              .emit(chatEvents.model_call_request_response_received, {
+                ...socketData,
+                username: viewer.rootUser.username,
+                profileImage: viewer.profileImage,
+              })
+
+            /* MAKE ALL OTHER CLIENTS EXCEPT THE MOdEL AND THE VIEWER LEAVE PUBLIC CHANNEL & destroy private channel 
+              but leaving will be done from client side, later can kick user out from server 🔺🔺
+            */
+
+            /* make all viewers leave the public room */
+            /* not destroying public channel for token gift to work on call */
+            io.getIO()
+              .in(`${streamId}-public`)
+              .except(`${viewerId}-private`)
+              .except(`${req.user.relatedUser._id}-private`)
+              .socketsLeave(`${streamId}-public`)
+
+            /**
+             * for viewer
+             */
+            const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
+              "model",
+              viewerId.toString(),
+              req.user.relatedUser._id.toString(),
+              canAffordNextMinute
+                ? callDoc.minCallDuration * 60 + RENEW_BUFFER_TIME
+                : modelTokenValidity +
+                    60 /* anyway viewer token expiry is just for preventing extra "agora connection time", adding 60 so that model and viewers token expirey dont fire at the same time */,
+              "sec"
+            )
+
+            /* EMIT TO THE CALLER VIEWER */
+            callingViewerSocketData.username = viewer.rootUser.username
+            io.getIO()
+              .in(`${viewerId}-private`)
+              .emit(chatEvents.model_call_request_response_received, {
+                ...callingViewerSocketData,
+                sharePercent: req.user.relatedUser.sharePercent,
+                privilegeExpiredTs: privilegeExpiredTs,
+                rtcToken: rtcToken,
+                canAffordNextMinute,
+              })
+
+            /**
+             * for the model
+             */
+            const modelToken = rtcTokenGenerator(
+              "model",
+              req.user.relatedUser._id.toString(),
+              req.user.relatedUser._id.toString(),
+              canAffordNextMinute
+                ? callDoc.minCallDuration * 60 + RENEW_BUFFER_TIME
+                : modelTokenValidity + RENEW_BUFFER_TIME,
+              "sec"
+            )
+
+            redisClient.del(`${streamId}-public`, (err, response) => {
+              if (err) {
+                console.error("Redis delete err", err)
+              }
+              redisClient.del(`${streamId}-transactions`, (err, response) => {
+                if (err) {
+                  console.error("Redis delete err", err)
+                }
+                console.log("Stream delete redis response:", response)
+                return res.status(200).json({
+                  actionStatus: "success",
+                  viewerDoc: viewer,
+                  callDoc: callDoc,
+                  callStartTs:
+                    callStartTimeStamp /* not ISO, its in milliseconds */,
+                  socketDataUpdated: socketDataUpdated,
+                  sharePercent: +req.user.relatedUser.sharePercent,
+                  rtcToken: modelToken.rtcToken,
+                  privilegeExpiredTs: modelToken.privilegeExpiredTs,
+                  canAffordNextMinute,
+                  modelTokenValidity,
+                })
+              })
+            })
+          })
+          .catch((err) => {
+            if (typeof err !== "string") {
+              return next(err)
+            }
+          })
       } else {
         /**
-         * does not have money to afford next minute
+         * call is not live,
+         * can charge fine from viewer
          */
-        canAffordNextMinute = false
-        call.advanceCut = minCharges
-        modelTokenValidity = Math.floor(
-          (viewerWallet.currentAmount * 60) / callDoc.chargePerMin
-        )
-      }
 
-      try {
-        if (canAffordNextMinute) {
-          viewerWallet.deductAmount(minCharges)
-        } else {
-          /**
-           * generate token for all the amount in wallet
-           * and cut all the money from viewer wallet as advance
-           */
-          call.advanceCut = viewerWallet.currentAmount
-          viewerWallet.setAmount(0)
-        }
-      } catch (error) {
-        theCall
-          .deleteOne({
-            _id: callDoc._id,
-          })
-          .catch(() => {
-            console.error(
-              "Viewer does not have sufficient amount of money for the call, and the call was also not deleted!"
-            )
-          })
-          .finally(() => {
-            return next(error)
-          })
-        return Promise.reject(
-          "Viewer does not have sufficient amount of money for the call"
-        )
-      }
-      modelWallet.addAmount(
-        minCharges * (req.user.relatedUser.sharePercent / 100)
-      )
-      // rest add to the admin wallet
-      // TODO: transfer coins to admin also 🔺🔻
-      return Promise.all([
-        modelWallet.save(),
-        viewerWallet.save(),
-        call.save(),
-        Stream.updateOne(
-          {
-            _id: streamId,
-          },
-          {
-            status: "ended",
-            endReason: callType,
-            duration: Math.round(
-              (Date.now() - new Date(stream.createdAt).getTime()) / 1000
-            ),
-            endCall: {
-              callId: call._id,
-              callType: callType,
-            },
-          }
-        ),
-      ])
-    })
-    .then(([modelWallet, viewerWallet, call]) => {
-      theCall = call
-
-      /* update the local wallet of model */
-      /* io.getIO()
-        .in(`${req.user.relatedUser._id}-private`)
-        .emit("model-wallet-updated", {
-          modelId: req.user.relatedUser._id,
-          operation: "set",
-          amount: modelWallet.currentAmount,
-        }) */
-
-      /* add the call as pending call for both model and viewer */
-      return Promise.all([
-        Viewer.findOneAndUpdate(
-          { _id: callDoc.viewer },
-          {
-            $push:
-              callType === "AudioCall"
-                ? { "pendingCalls.audioCalls": callDoc._id }
-                : { "pendingCalls.videoCalls": callDoc._id },
-          }
-        )
-          .select("profileImage name")
-          .populate({
-            path: "rootUser",
-            select: "username",
-          })
-          .populate({
-            path: "wallet",
-          })
-          .lean(),
-        Model.updateOne(
-          { _id: req.user.relatedUser._id },
-          {
-            $push:
-              callType === "AudioCall"
-                ? { "pendingCalls.audioCalls": callDoc._id }
-                : { "pendingCalls.videoCalls": callDoc._id },
-            isStreaming: false,
-            currentStream: null,
-            onCall: true,
-          }
-        ),
-      ])
-    })
-    .then((result) => {
-      const viewer = result[0]
-      if (result[1].n !== 1) {
-        console.error("Model status not updated in DB while accepting call.")
-      }
-      let socketDataUpdated = false
-      try {
-        let clientSocket = io.getIO().sockets.sockets.get(socketId)
-        delete clientSocket.isStreaming
-        delete clientSocket.data.streamId
-        delete clientSocket.createdAt
-
-        /* all the necessary details to do the billing in case of a disconnect */
-        clientSocket.onCall = true
-        clientSocket.callId = callDoc._id.toString()
-        clientSocket.callType = callType
-        clientSocket.sharePercent = +req.user.relatedUser.sharePercent
-
-        socketDataUpdated = true
-      } catch (err) {
-        socketDataUpdated = false
-      }
-
-      /* inform all sockets about model response */
-      io.getIO()
-        .in(`${streamId}-public`)
-        .except(`${viewerId}-private`)
-        .except(`${req.user.relatedUser._id}-private`)
-        .emit(chatEvents.model_call_request_response_received, {
-          ...socketData,
-          username: viewer.rootUser.username,
-          profileImage: viewer.profileImage,
+        return res.status(500).json({
+          actionStatus: "success",
+          message:
+            "Viewer was not live, hence call was not established! Please see the viewer list to confirm, else report admin.",
+          code: "viewer-not-live",
         })
-
-      /* MAKE ALL OTHER CLIENTS EXCEPT THE MOdEL AND THE VIEWER LEAVE PUBLIC CHANNEL & destroy private channel 
-        but leaving will be done from client side, later can kick user out from server 🔺🔺
-      */
-
-      /* make all viewers leave the public room */
-      /* not destroying public channel for token gift to work on call */
-      io.getIO()
-        .in(`${streamId}-public`)
-        .except(`${viewerId}-private`)
-        .except(`${req.user.relatedUser._id}-private`)
-        .socketsLeave(`${streamId}-public`)
-
-      /**
-       * for viewer
-       */
-      const { privilegeExpiredTs, rtcToken } = rtcTokenGenerator(
-        "model",
-        viewerId.toString(),
-        req.user.relatedUser._id.toString(),
-        canAffordNextMinute
-          ? callDoc.minCallDuration * 60 + RENEW_BUFFER_TIME
-          : modelTokenValidity +
-              60 /* anyway viewer token expiry is just for preventing extra "agora connection time", adding 60 so that model and viewers token expirey dont fire at the same time */,
-        "sec"
-      )
-
-      /* EMIT TO THE CALLER VIEWER */
-      callingViewerSocketData.username = viewer.rootUser.username
-      io.getIO()
-        .in(`${viewerId}-private`)
-        .emit(chatEvents.model_call_request_response_received, {
-          ...callingViewerSocketData,
-          sharePercent: req.user.relatedUser.sharePercent,
-          privilegeExpiredTs: privilegeExpiredTs,
-          rtcToken: rtcToken,
-          canAffordNextMinute,
-        })
-
-      /**
-       * for the model
-       */
-      const modelToken = rtcTokenGenerator(
-        "model",
-        req.user.relatedUser._id.toString(),
-        req.user.relatedUser._id.toString(),
-        canAffordNextMinute
-          ? callDoc.minCallDuration * 60 + RENEW_BUFFER_TIME
-          : modelTokenValidity + RENEW_BUFFER_TIME,
-        "sec"
-      )
-
-      redisClient.del(`${streamId}-public`, (err, response) => {
-        if (err) {
-          console.error("Redis delete err", err)
-        }
-        redisClient.del(`${streamId}-transactions`, (err, response) => {
-          if (err) {
-            console.error("Redis delete err", err)
-          }
-          console.log("Stream delete redis response:", response)
-          return res.status(200).json({
-            actionStatus: "success",
-            viewerDoc: viewer,
-            callDoc: callDoc,
-            callStartTs: callStartTimeStamp /* not ISO, its in milliseconds */,
-            socketDataUpdated: socketDataUpdated,
-            sharePercent: +req.user.relatedUser.sharePercent,
-            rtcToken: modelToken.rtcToken,
-            privilegeExpiredTs: modelToken.privilegeExpiredTs,
-            canAffordNextMinute,
-            modelTokenValidity,
-          })
-        })
-      })
-    })
-    .catch((err) => {
-      if (typeof err !== "string") {
-        return next(err)
       }
-    })
+    } else {
+      console.error("Cannot get redis viewers list")
+    }
+  })
 }
 
 exports.handleEndCallFromViewer = (req, res, next) => {
@@ -1579,7 +1610,7 @@ exports.processTipMenuRequest = (req, res, next) => {
   ])
     .then(([wallet, model, viewer]) => {
       theModel = model
-      room = `${model.currentStream._id}-public`
+      room = `${model.currentStream?._id}-public`
       req.user.username = viewer.rootUser.username
       req.user.relatedUser.name = viewer.name
       req.user.relatedUser.profileImage = viewer.profileImage

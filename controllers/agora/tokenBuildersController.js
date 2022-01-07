@@ -19,6 +19,7 @@ exports.createStreamAndToken = (req, res, next) => {
   const { socketId } = req.query
 
   let clientSocket = io.getIO().sockets.sockets.get(socketId)
+
   if (req.user.needApproval) {
     return res.status(422).json({
       actionStatus: "failed",
@@ -27,43 +28,37 @@ exports.createStreamAndToken = (req, res, next) => {
     })
   }
 
-  try {
-    if (!clientSocket) {
-      clientSocket = io
-        .getIO()
-        .sockets.sockets.get(
-          Array.from(
-            io
-              .getIO()
-              .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-          )?.[0]
-        )
+  var modelRoom = io
+    .getIO()
+    .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+  var modelRoomSockets = io.getIO().sockets.sockets.get(Array.from(modelRoom))
+  if (!clientSocket) {
+    if (modelRoom.size === 1) {
+      clientSocket = modelRoomSockets?.[0]
     }
-  } catch (err) {
-    /* error */
   }
 
-  // check if the model is approved or not,
-  // by making a new model approval checker
-
-  if (req.user.relatedUser.isStreaming) {
-    /**
-     * currently have skipped the on call check as the call ending mechanism is not reliably working
-     */
-    if (clientSocket?.isStreaming && clientSocket.data?.streamId) {
+  if (req.user.relatedUser.isStreaming || req.user.relatedUser.onCall) {
+    var isModelLiveAlready = false
+    if (modelRoom.size > 1) {
       /**
-       * if model.isStreaming true and a client in private room
-       * then the model is currently active and live streaming
+       * if is isStreaming === true and two sockets in private room
+       * then model is streaming
        */
+
+      modelRoomSockets.forEach((client) => {
+        if (client?.isStreaming || client?.onCall || client?.callId) {
+          isModelLiveAlready = true
+        }
+      })
+    }
+
+    if (isModelLiveAlready) {
       return res.status(400).json({
         actionStatus: "failed",
         message:
           "You are streaming or on call, already from another device, streaming from two devices is not currently supported! 💻",
       })
-    } else {
-      /* the disconnection was not done properly the database entry of "model.isStreaming" was not updated
-         but no problem go ahead and start streaming
-      */
     }
   }
 
@@ -187,7 +182,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
 
   let theModel
   let selectString =
-    "currentStream welcomeMessage numberOfFollowers minCallDuration backGroundImage callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges ethnicity eyeColor bodyType hairColor skinColor country"
+    "currentStream welcomeMessage numberOfFollowers topic minCallDuration backGroundImage callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges ethnicity eyeColor bodyType hairColor skinColor country"
   Model.findOne({
     _id: modelId,
   })
@@ -195,10 +190,6 @@ exports.genRtcTokenViewer = (req, res, next) => {
     .populate({
       path: "rootUser",
       select: "username",
-    })
-    .populate({
-      path: "tags",
-      select: "name",
     })
     .populate({
       path: "privateImages",
@@ -469,12 +460,8 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
   let socketUpdated = false
   Model.findById(modelId)
     .select(
-      "currentStream welcomeMessage numberOfFollowers minCallDuration backGroundImage callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges ethnicity eyeColor bodyType hairColor skinColor country"
+      "currentStream welcomeMessage numberOfFollowers topic minCallDuration backGroundImage callActivity isStreaming onCall tags rating profileImage publicImages publicVideos privateImages privateVideos hobbies bio languages dob name gender ethnicity dynamicFields offlineStatus tipMenuActions charges ethnicity eyeColor bodyType hairColor skinColor country"
     )
-    .populate({
-      path: "tags",
-      select: "name",
-    })
     .populate({
       path: "rootUser",
       select: "username",
@@ -756,11 +743,13 @@ exports.renewRtcTokenGlobal = (req, res, next) => {
 
   const { channel, unAuthedUserId, onCall } = req.query
 
+  // const onCall = Boolean(req.query.onCall)
+
   /**
    * should ABSOLUTELY check is this channel exists
    */
 
-  if (onCall) {
+  if (onCall === "true") {
     const RENEW_BUFFER_TIME = 8
     let generatedFor = 60 + RENEW_BUFFER_TIME
     if (req.user.userType === "Model") {
