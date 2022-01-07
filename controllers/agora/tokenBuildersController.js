@@ -28,22 +28,25 @@ exports.createStreamAndToken = (req, res, next) => {
     })
   }
 
-  var modelRoomSIDS = Array.from(
-    io.getIO().sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
-  )
+  try {
+    var modelRoomSIDS = Array.from(
+      io
+        .getIO()
+        .sockets.adapter.rooms.get(`${req.user.relatedUser._id}-private`)
+    )
 
-  var modelRoomSockets = []
-  modelRoomSIDS.forEach((sid) => {
-    modelRoomSockets.push(io.getIO().sockets.sockets.get(sid))
-  })
+    var modelRoomSockets = []
+    modelRoomSIDS.forEach((sid) => {
+      modelRoomSockets.push(io.getIO().sockets.sockets.get(sid))
+    })
 
-  if (!clientSocket) {
-    if (modelRoomSIDS.length === 1) {
-      clientSocket = modelRoomSockets?.[0]
+    if (!clientSocket) {
+      if (modelRoomSIDS.length === 1) {
+        clientSocket = modelRoomSockets?.[0]
+      }
     }
-  }
 
-  if (req.user.relatedUser.isStreaming || req.user.relatedUser.onCall) {
+    // if (req.user.relatedUser.isStreaming || req.user.relatedUser.onCall) {}
     var isModelLiveAlready = false
     if (modelRoomSIDS.length > 1) {
       /**
@@ -62,12 +65,32 @@ exports.createStreamAndToken = (req, res, next) => {
       })
     }
 
-    if (isModelLiveAlready) {
-      return res.status(400).json({
-        actionStatus: "failed",
-        message:
-          "You are streaming or on call, already from another device, streaming from two devices is not currently supported! 💻",
-      })
+    if (req.user.relatedUser.isStreaming || req.user.relatedUser.onCall) {
+      /**
+       * 100% sure, it fraudulent attempt of streaming
+       */
+      if (isModelLiveAlready) {
+        return res.status(400).json({
+          actionStatus: "failed",
+          message:
+            "You are streaming or on call, already from another device, streaming from two devices is not currently supported! 💻",
+        })
+      }
+    } else {
+      /**
+       * can do some extra checks
+       */
+      if (isModelLiveAlready) {
+        return res.status(400).json({
+          actionStatus: "failed",
+          message:
+            "You are streaming or on call, already from another device, streaming from two devices is not currently supported! 💻",
+        })
+      }
+    }
+  } catch (err) {
+    if (clientSocket) {
+      clientSocket.join(`${req.user.relatedUser._id}-private`)
     }
   }
 
