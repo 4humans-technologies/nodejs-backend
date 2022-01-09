@@ -162,7 +162,6 @@ const modelSchema = new mongoose.Schema({
   },
   sharePercent: {
     type: Number,
-    /* 🔻🔻 remove in production 🔻🔻 */
     default: 50 /* amount model will give to admin */,
     validate: {
       validator: Number.isInteger,
@@ -177,8 +176,8 @@ const modelSchema = new mongoose.Schema({
   charges: {
     audioCall: {
       type: Number,
-      /* 🔻🔻 remove in production 🔻🔻 */
-      default: 50,
+      default: 5,
+      min: [5, "audio call charges cannot be less than 5 coins/min"],
       validate: {
         validator: Number.isInteger,
         message: "{VALUE} is not an integer value",
@@ -186,8 +185,8 @@ const modelSchema = new mongoose.Schema({
     },
     videoCall: {
       type: Number,
-      /* 🔻🔻 remove in production 🔻🔻 */
-      default: 80,
+      default: 8,
+      min: [8, "video call charges cannot be less than 8 coins/min"],
       validate: {
         validator: Number.isInteger,
         message: "{VALUE} is not an integer value",
@@ -198,16 +197,15 @@ const modelSchema = new mongoose.Schema({
     // in minutes
     type: Number,
     /* 🔻🔻 remove in production 🔻🔻 */
-    default: 2,
+    default: 5,
+    min: [5, "Min call duration for call is 5 min"],
     validate: {
       validator: Number.isInteger,
       message: "{VALUE} is not an integer value",
     },
   },
   timeForAcceptingCall: {
-    // in seconds
     type: Number,
-    /* 🔻🔻 remove in production 🔻🔻 */
     default: 30,
   },
   rating: {

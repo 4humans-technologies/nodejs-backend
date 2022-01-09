@@ -435,24 +435,6 @@ exports.handlePublicVideosUpload = (req, res, next) => {
 }
 
 exports.updateInfoFields = (req, res, next) => {
-  // const arr = []
-  // const updatedData.keys.forEach(key => {
-  //   arr.push({
-  //     field:key,
-  //     value:updatedData[key]
-  //   })
-  // })
-
-  /* *
-   * req.body = [{
-   *  field:"name",
-   *  value:"my new name" <=== the new name
-   * },
-   * {
-   *  field:"username",
-   *  value:"my new username" <=== the new username
-   * }] */
-
   let fieldsToUpdate = {}
 
   req.body.forEach((field) => {
@@ -472,7 +454,18 @@ exports.updateInfoFields = (req, res, next) => {
         updatedFields: Object.keys(fieldsToUpdate),
       })
     })
-    .catch((err) => next(err))
+    .catch((err) => {
+      if (err.name === "ValidationError") {
+        const errStrings = []
+        Object.keys(err.toJSON().errors).forEach((errKey) => {
+          errStrings.push(err.errors[errKey].message)
+        })
+        const error = new Error(errStrings.join(" and "))
+        error.statusCode = 422
+        return next(error)
+      }
+      return next(err)
+    })
 }
 
 exports.getAskedFields = (req, res, next) => {

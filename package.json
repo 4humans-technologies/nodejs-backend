@@ -8,7 +8,7 @@
     "start": "nodemon app.js --trace-warnings",
     "https": "nodemon httpsApp.js",
     "dbTest": "nodemon directToDb.js",
-    "prodstart": "node app.js"
+    "prodstart": "node app.js --trace-warnings"
   },
   "repository": {
     "type": "git",
