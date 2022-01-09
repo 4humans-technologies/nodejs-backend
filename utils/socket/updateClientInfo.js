@@ -8,11 +8,31 @@ const { viewerJoined } = require("../socket/socketEvents")
 const { viewer_left_received } = require("./chat/chatEvents")
 
 module.exports = function updateClientInfo(client) {
-  client.on("update-client-info", (data, callback) => {
+  client.on("update-client-info", async (data, callback) => {
     /* action specific procedure */
+    const socket = io.getIO().sockets.sockets.get(client.id)
     switch (data.action) {
       case "logout":
         {
+          switch (client.userType) {
+            case "Model":
+              await socket.removeAllListeners(chatEventListeners.modelEventList)
+              await socket.removeAllListeners(chatEventListeners.modelEventList)
+              break
+            case "Viewer":
+              await socket.removeAllListeners(
+                chatEventListeners.authedUserEventList
+              )
+              await socket.removeAllListeners(
+                chatEventListeners.authedUserEventList
+              )
+              break
+            default:
+              break
+          }
+
+          await chatEventListeners.unAuthedViewerListeners(socket)
+
           /* end streaming also */
           if (client.authed && client?.isStreaming) {
             onDisconnectStreamEndHandler(client)
@@ -39,20 +59,6 @@ module.exports = function updateClientInfo(client) {
           /* free data keys */
           delete client.data.onStream
           delete client.data.streamId
-          /* remove all chat listeners from user */
-
-          switch (client.userType) {
-            case "Model":
-              client.removeAllListeners(chatEventListeners.modelEventList)
-              break
-            case "Viewer":
-              client.removeAllListeners(chatEventListeners.authedUserEventList)
-              break
-            default:
-              break
-          }
-          /* add new listeners */
-          chatEventListeners.unAuthedViewerListeners(client)
 
           /* clear the data set on the client object */
           // const dataCopy = cloneDeep(client.data)
@@ -81,6 +87,7 @@ module.exports = function updateClientInfo(client) {
         break
       case "login":
         if (data.token) {
+          const socket = io.getIO().sockets.sockets.get(client.id)
           try {
             jwt.verify(
               data.token,
@@ -95,15 +102,15 @@ module.exports = function updateClientInfo(client) {
                     }
                     client.authed = true
                     client.userType = decodedToken.userType
-                    client.removeAllListeners(
+                    socket.removeAllListeners(
                       chatEventListeners.unAuthedViewerEventList
                     )
                     switch (client.userType) {
                       case "Model":
-                        chatEventListeners.modelListeners(client)
+                        chatEventListeners.modelListeners(socket)
                         break
                       case "Viewer":
-                        chatEventListeners.authedViewerListeners(client)
+                        chatEventListeners.authedViewerListeners(socket)
                         break
                       default:
                         break

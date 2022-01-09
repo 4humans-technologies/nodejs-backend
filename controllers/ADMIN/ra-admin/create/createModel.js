@@ -34,6 +34,10 @@ module.exports = (data, req) => {
   const approvalId = new ObjectId()
   const documentId = new ObjectId()
 
+  if (true) {
+    return
+  }
+
   return Promise.all([
     Wallet({
       _id: walletId,

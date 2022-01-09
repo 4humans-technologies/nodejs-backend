@@ -5,41 +5,43 @@ const { getDatabase } = require("firebase-admin/database")
 
 const realtimeDb = getDatabase()
 
+const viewerPublicMessageHandler = (data) => {
+  try {
+    const toRoom = data.room.split("-")[0]
+    if (toRoom) {
+      realtimeDb
+        .ref("publicChats")
+        .child(toRoom)
+        .child("chats")
+        .push({
+          type: "normal-public-message",
+          ...data,
+        })
+        .then(() => {
+          io.getIO()
+            .in(data.room)
+            .emit(chatEvents.viewer_message_public_received, data)
+        })
+        .catch(() => {
+          /* even if error emit the message, without saving to the db */
+          io.getIO()
+            .in(data.room)
+            .emit(chatEvents.viewer_message_public_received, data)
+        })
+    } else {
+      console.error("No destination room while authed user chat message!")
+    }
+  } catch (err) {
+    console.error("")
+  }
+}
+
 module.exports = {
   authedViewerListeners: (socket) => {
-    /* public message emitter */
-    try {
-      /* can get this message payload as string and streamId as other parameter😀 */
-      socket.on(chatEvents.viewer_message_public_emitted, (data) => {
-        const toRoom = data.room.split("-")[0]
-        if (toRoom) {
-          realtimeDb
-            .ref("publicChats")
-            .child(toRoom)
-            .child("chats")
-            .push({
-              type: "normal-public-message",
-              ...data,
-            })
-            .then(() => {
-              io.getIO()
-                .in(data.room)
-                .emit(chatEvents.viewer_message_public_received, data)
-            })
-            .catch(() => {
-              /* even if error emmit the message */
-              io.getIO()
-                .in(data.room)
-                .emit(chatEvents.viewer_message_public_received, data)
-            })
-        } else {
-          console.error("No destination room while authed user chat message!")
-        }
-      })
-    } catch (err) {
-      console.error("Error while sending public chat reason: " + err.message)
-    }
-
+    socket.on(
+      chatEvents.viewer_message_public_emitted,
+      viewerPublicMessageHandler
+    )
     /* only viewers who have private chat plan will use this, for others it is just wastage of resources 
       hence should look for optimization later 👇👇 (below 2)
     */
@@ -144,42 +146,10 @@ module.exports = {
     })
   },
   unAuthedViewerListeners: (socket) => {
-    /* un-authed public chat emitter */
-    socket.on(chatEvents.viewer_message_public_emitted, (data) => {
-      try {
-        const toRoom = data.room.split("-")[0]
-        /**
-         * if room then only proceed
-         */
-        if (toRoom) {
-          realtimeDb
-            .ref("publicChats")
-            .child(toRoom)
-            .child("chats")
-            .push({
-              type: "normal-public-message",
-              ...data,
-            })
-            .then(() => {
-              io.getIO()
-                .in(data.room)
-                .emit(chatEvents.viewer_message_public_received, data)
-            })
-            .catch(() => {
-              /* even if error emmit the message */
-              io.getIO()
-                .in(data.room)
-                .emit(chatEvents.viewer_message_public_received, data)
-            })
-        } else {
-          console.error(
-            "No destination room while un-authed user chat message!"
-          )
-        }
-      } catch (err) {
-        console.error("Error while chat message", err)
-      }
-    })
+    socket.on(
+      chatEvents.viewer_message_public_emitted,
+      viewerPublicMessageHandler
+    )
   },
 
   authedUserEventList: [

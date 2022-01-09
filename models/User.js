@@ -26,7 +26,7 @@ const userSchema = new mongoose.Schema(
     userType: {
       type: String,
       required: true,
-      enum: ["Viewer", "Model", "SuperAdmin", "Staff"],
+      enum: ["Viewer", "Model", "Staff"],
     },
     relatedUser: {
       type: mongoose.Schema.Types.ObjectId,

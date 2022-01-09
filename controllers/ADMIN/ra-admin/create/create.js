@@ -1,7 +1,6 @@
 const Model = require("../../../../models/userTypes/Model")
 const Viewer = require("../../../../models/userTypes/Viewer")
 const Staff = require("../../../../models/userTypes/Staff")
-const SuperAdmin = require("../../../../models/userTypes/SuperAdmin")
 const Approval = require("../../../../models/management/approval")
 const Tag = require("../../../../models/management/tag")
 const Role = require("../../../../models/Role")
@@ -58,7 +57,7 @@ module.exports = (req, res, next) => {
       break
     case "Coupon":
       /**
-       * can put check on the max "coin value" generation
+       * can put check on the max "coin value" generation by that viewer
        */
       Coupon({
         generatedBy: req.user.relatedUser._id,

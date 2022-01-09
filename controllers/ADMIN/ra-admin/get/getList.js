@@ -29,6 +29,7 @@ const Log = require("../../../../models/log/log")
 
 // function imports
 const paginator = require("../../../../utils/paginator")
+const listProcessors = require("./getListProcessers")
 
 module.exports = (req, res, next) => {
   /**
@@ -54,39 +55,36 @@ module.exports = (req, res, next) => {
   var sort = JSON.parse(req.query.sort || "[]")
   var filter = JSON.parse(req.query.filter || "{}")
 
-  const sortArray = []
-  sort.forEach((entry, index) => {
-    if ((index + 1) % 2 === 1) {
-      return
-    }
-    sortArray.push(entry === "ASC" ? sort[index - 1] : `-${sort[index - 1]}`)
-  })
-  sort = sortArray.join(" ")
+  // const sortArray = []
+  // sort.forEach((entry, index) => {
+  //   if ((index + 1) % 2 === 1) {
+  //     return
+  //   }
+  //   sortArray.push(entry === "ASC" ? sort[index - 1] : `-${sort[index - 1]}`)
+  // })
+  // sort = sortArray.join(" ")
 
   /**
    * if sort on multiple can use below one down 👇
    */
 
-  // const sortObj = {}
-  // sort.forEach((entry, index) => {
-  //   if ((index + 1) % 2 === 1) {
-  //     return
-  //   }
-  //   sortObj[sort[index - 1]] = entry === "ASC" ? 1 : -1
-  // })
+  const sortObj = {}
+  sort.forEach((entry, index) => {
+    if ((index + 1) % 2 === 1) {
+      return
+    }
+    sortObj[sort[index - 1]] = entry === "ASC" ? 1 : -1
+  })
 
-  // let sortObj = { [`${sort[0]}`]: sort[1] === "ASC" ? 1 : -1 }
-
-  /**
-   * generate sort string
-   */
+  sort = sortObj
 
   const limit = range[1] - range[0]
   const skip = range[0]
 
-  var select, populate, model
+  var select, populate, model, processWith, processorFunc, processorOptions
   switch (resource) {
     case "Model":
+      processWith = "withNormal"
       model = Model
       select =
         "rootUser numberOfFollowers approval name gender email dob languages tags ethnicity hairColor eyeColor bodyType skinColor callActivity dynamicFields tipMenuActions sharePercent charges minCallDuration rating isStreaming profileImage wallet"
@@ -110,6 +108,7 @@ module.exports = (req, res, next) => {
       ]
       break
     case "Viewer":
+      processWith = "withNormal"
       model = Viewer
       select = "name profileImage isChatPlanActive"
       populate = [
@@ -152,44 +151,41 @@ module.exports = (req, res, next) => {
       ]
       break
     case "Coupon":
-      model = Coupon
-      select = "generatedBy code forCoins redeemed redeemedBy redeemDate"
-      populate = [
-        {
-          path: "generatedBy",
-          select: "name",
-          populate: {
-            path: "rootUser",
-            select: "username",
-          },
-        },
-        {
-          path: "redeemedBy",
-          select: "name",
-          populate: {
-            path: "rootUser",
-            select: "username",
-          },
-        },
-      ]
+      processWith = "custom"
+      processorFunc = listProcessors.getCouponList
+      processorOptions = {}
+      break
+    default:
+      console.error("Default case for 'getList' reached!")
       break
   }
 
-  return paginator
-    .withConditionAndSendTheResponse(
-      model,
-      {
-        skip: skip,
-        sort: sort.includes(".") ? undefined : sort,
-        limit: limit,
-        range: range,
-        populate: populate,
-        select: select,
-        filter: filter,
-      },
-      req,
-      res,
-      Model
-    )
-    .catch((err) => next(err))
+  if (processWith === "custom") {
+    return processorFunc(req, res, next, {
+      sort: sort,
+      match: filter,
+      skip: skip,
+      limit: limit,
+      range: range,
+      ...processorOptions,
+    })
+  } else if (processWith === "withNormal") {
+    return paginator
+      .withConditionAndSendTheResponse(
+        model,
+        {
+          skip: skip,
+          sort: sort,
+          limit: limit,
+          range: range,
+          populate: populate,
+          select: select,
+          filter: filter,
+        },
+        req,
+        res,
+        Model
+      )
+      .catch((err) => next(err))
+  }
 }

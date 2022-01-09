@@ -2,7 +2,12 @@ require("dotenv").config()
 const mongoose = require("mongoose")
 const User = require("./models/User")
 const Model = require("./models/userTypes/Model")
+const Staff = require("./models/userTypes/Staff")
+const ObjectId = require("mongodb").ObjectId
 const Wallet = require("./models/globals/wallet")
+const Permission = require("./models/Permission")
+const generateJwt = require("./utils/generateJwt")
+const bcrypt = require("bcrypt")
 
 if (process.env.LOCAL_DB === "false") {
   var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@dreamgirl-mongodb-3node-blr-1-c5185824.mongo.ondigitalocean.com/${process.env.DO_MONGO_DIRECT_TEST_DB_NAME}?authSource=${process.env.DO_MONGO_AUTH_SOURCE}&replicaSet=${process.env.DO_MONGO_REPLICA_SET}&ssl=true`
@@ -40,7 +45,6 @@ function findAllUsers() {
 }
 
 // findAllUsers()
-
 function modelOps() {
   Model.aggregate([
     {
@@ -123,8 +127,6 @@ function paginationByFacet() {
   })
 }
 
-paginationByFacet()
-
 function constructModel(query) {
   Model.aggregate([
     {
@@ -155,188 +157,88 @@ function constructModel(query) {
   ])
 }
 
-const createModels = (req, res, next) => {
-  errorCollector(req, "Invalid form details, please try again")
-  const { username, password, name, email, phone, gender, age, profileImage } =
-    req.body
+function createStaff() {
+  const entryData = {}
+  const { username, password, name, email, phone } = entryData
 
-  const { socketId } = req.query
-
-  let theWallet, theModel, theUserId
   const advRootUserId = new ObjectId()
   const advRelatedUserId = new ObjectId()
-  const approvalId = new ObjectId()
-  let wasSocketUpdated = false
 
-  Wallet({
-    userType: "Model",
-    currentAmount: 0,
-    rootUser: advRootUserId,
-    relatedUser: advRelatedUserId,
-  })
-    .save()
-    .then((wallet) => {
-      theWallet = wallet
-      return Model({
-        _id: advRelatedUserId,
-        rootUser: advRootUserId,
-        approval: approvalId,
-        name: name,
-        gender: capitalizeFirstLetter(gender),
-        email: email,
-        phone: phone,
-        dob: new Date().getFullYear() - age,
-        wallet: wallet._id,
-        // profileImage: "/" + req.file.path.replace(/\\/g, "/"),
-        profileImage: profileImage,
-        languages: ["Hindi"],
-      }).save()
+  bcrypt
+    .genSalt(5)
+    .then((salt) => {
+      return Promise.all([
+        bcrypt.hash(password, salt),
+        Permission.find().lean().select("value"),
+      ])
     })
-    .then((model) => {
-      theModel = model
-      const salt = bcrypt.genSaltSync(5)
-      const hashedPassword = bcrypt.hashSync(password, salt)
-      return User({
-        _id: advRootUserId,
-        username: username,
-        password: hashedPassword,
-        permissions: [],
-        userType: "Model",
-        relatedUser: advRelatedUserId,
-        needApproval: false, //🔴🔴 set to false only for testing
-        meta: {
-          lastLogin: new Date(),
-        },
-        inProcessDetails: {
-          emailVerified: false,
-        },
-      }).save()
+    .then(([hashedPassword, permissions]) => {
+      return Promise.all([
+        Staff({
+          _id: advRelatedUserId,
+          rootUser: advRootUserId,
+          name: name,
+          email: email,
+          phone: String(phone),
+          remark:
+            "This staff was created from 'directToDb', not meant for production use!",
+            profileImage:
+        }).save(),
+        User({
+          _id: advRootUserId,
+          username: username,
+          password: hashedPassword,
+          permissions: permissions.map((permission) => permission.value),
+          userType: "SuperAdmin",
+          needApproval: true,
+          relatedUser: advRelatedUserId,
+          meta: {
+            lastLogin: new Date(),
+          },
+        }).save(),
+      ])
     })
-    .then((userDoc) => {
-      theUserId = userDoc._id
-      const hours = 1
+    .then(([wallet, superadminbro, rootUser]) => {
+      const hours = 12
+
+      const user = {
+        ...rootUser._doc,
+        relatedUser: {
+          ...superadminbro._doc,
+          wallet: wallet._doc,
+        },
+      }
+
       const token = generateJwt({
         hours: hours,
-        userId: theUserId,
-        relatedUserId: userDoc.relatedUser._id,
-        userType: userDoc.userType,
-        role: userDoc?.role?.roleName || "no-role",
+        userId: advRootUserId,
+        relatedUserId: advRelatedUserId,
+        userType: rootUser.userType,
+        role: "superAdmin",
       })
-
-      /* hello moto  */
-      let wasEmailSent = false
-      const emailToken = generateEmailConformationJWT({
-        userId: theUserId,
-        relatedUserId: userDoc.relatedUser._id,
-        userType: userDoc.userType,
-      })
-
-      /**
-       * my view is may be for some reason socketId may not be sent but,
-       * because of that right user should not be devoid of registration or login
-       * anyway i'am sending "wasSocketUpdated" so that if on server socket
-       * was not updated we can handover this task to the client
-       * their we can emit to update user info very easily
-       */
-      try {
-        const clientSocket = io.getIO().sockets.sockets.get(socketId)
-        /* remove all previous listeners */
-        clientSocket.removeAllListeners(
-          chatEventListeners.unAuthedViewerEventList
-        )
-
-        /* add to the private room */
-        clientSocket.join(`${userDoc.relatedUser._id}-private`)
-
-        /* add socket listeners for the specific userType */
-        chatEventListeners.modelListeners(clientSocket)
-
-        /* update client info */
-        clientSocket.data = {
-          ...clientSocket.data,
-          userId: userDoc._id.toString(),
-          relatedUserId: userDoc.relatedUser._id.toString(),
-        }
-        clientSocket.authed = true
-        clientSocket.userType = userDoc.userType
-        wasSocketUpdated = true
-      } catch (error) {
-        wasSocketUpdated = false
-      }
-
-      /* send conformation email */
-      try {
-        sendModelEmailConformation({
-          to: email,
-          dynamic_template_data: {
-            confirm_url: `${
-              process.env.FRONTEND_URL.includes("localhost") ? "http" : "https"
-            }://${
-              process.env.FRONTEND_URL
-            }/link-verification/email?token=${emailToken}`,
-            first_name: name.split(" ")[0],
-            confirm_before:
-              +process.env.EMAIL_CONFORMATION_EXPIRY_HOURS_MODEL / 24,
-          },
-        })
-        wasEmailSent = true
-      } catch (error) {
-        wasEmailSent = false
-      }
 
       return res.status(201).json({
-        message: "model registered successfully",
+        message: "superadmin registered successfully",
         actionStatus: "success",
-        user: userDoc,
-        model: theModel,
-        // TODO: remove wallet in production, no need of wallet 🔺🔻🔻🔺
-        wallet: theWallet,
+        user: user,
         token: token,
-        expiresIn: hours,
-        wasSocketUpdated: wasSocketUpdated,
-        wasEmailSent: wasEmailSent,
+        tokenExpireIn: hours,
       })
     })
     .catch((err) => {
-      Promise.allSettled([
-        Wallet.deleteOne({
-          _id: theWallet._id,
-        }),
-        Model.deleteOne({
-          _id: advRelatedUserId,
-        }),
-        User.deleteOne({
-          _id: advRootUserId,
-        }),
+      return Promise.allSettled([
+        Wallet.deleteOne({ _id: walletId }),
+        SuperAdmin.deleteOne({ _id: advRelatedUserId }),
+        User.deleteOne({ _id: advRootUserId }),
       ])
-        .then((results) => {
-          if (err?.name === "MongoError") {
-            switch (err.code) {
-              case 11000: {
-                const field = Object.keys(err.keyValue)[0]
-                const fieldValue = err.keyValue[field]
-                const errMessage = `${field} "${fieldValue}", is already used.`
-                const error = new Error(errMessage)
-                error.statusCode = 400
-                throw error
-              }
-              default: {
-                const error_default = new Error(
-                  err.message || "viewer not registered"
-                )
-                error_default.statusCode = err.statusCode || 500
-                throw error_default
-              }
-            }
-          } else {
-            const error = new Error(err.message || "Model was not registered")
-            error.statusCode = err.statusCode || 400
-            error.data = {
-              code: err.code,
-            }
-            throw error
-          }
+        .then((deleteResult) => {
+          const error = new Error(err.message + " superadmin not registered")
+          error.statusCode = err.statusCode || 500
+          return next(error)
         })
         .catch((finalError) => next(finalError))
     })
+    .catch((finalError) => next(finalError))
 }
+
+paginationByFacet()

@@ -79,7 +79,7 @@ exports.loginHandler = (req, res, next) => {
         throw error
       }
 
-      if (user.userType === "SuperAdmin" || user.userType === "Staff") {
+      if (user.userType === "Staff") {
         const error = new Error(
           "This login form is NOT for superadmin and staff!"
         )

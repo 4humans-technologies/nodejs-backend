@@ -39,14 +39,14 @@ module.exports = function onDisconnectStreamEndHandler(client) {
        * below code is just for analytics purpose
        */
       if (stream) {
-        if (stream?.status === "ended") {
+        if (stream.status === "ended") {
           console.error(
             "Stream was ended already still, on disconnect handler ran"
           )
         }
       }
       if (model) {
-        if (model?.isStreaming === false) {
+        if (model.isStreaming === false) {
           console.error(
             "Model was not streaming still, on disconnect handler ran"
           )

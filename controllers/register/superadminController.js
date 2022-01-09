@@ -4,7 +4,6 @@ const bcrypt = require("bcrypt")
 const Role = require("../../models/Role")
 const Permission = require("../../models/Permission")
 const ObjectId = require("mongodb").ObjectId
-const SuperAdmin = require("../../models/userTypes/SuperAdmin")
 const Wallet = require("../../models/globals/wallet")
 const generateJwt = require("../../utils/generateJwt")
 

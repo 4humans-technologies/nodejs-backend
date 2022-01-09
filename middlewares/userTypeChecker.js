@@ -36,18 +36,6 @@ exports.checkForModel = (req, res, next) => {
   next()
 }
 
-exports.checkForSuperAdmin = (req, res, next) => {
-  if (process.env.NODE_ENV === "DEVELOPMENT") {
-    return next()
-  }
-  if (req.user.userType !== "SuperAdmin") {
-    const error = new Error("You are not allowed to access this route")
-    error.statusCode = 403
-    return next(error)
-  }
-  next()
-}
-
 exports.checkForStaff = (req, res, next) => {
   if (process.env.NODE_ENV === "DEVELOPMENT") {
     return next()

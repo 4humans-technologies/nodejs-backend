@@ -163,7 +163,7 @@ const modelSchema = new mongoose.Schema({
   sharePercent: {
     type: Number,
     /* 🔻🔻 remove in production 🔻🔻 */
-    default: 60 /* amount model will give to admin */,
+    default: 50 /* amount model will give to admin */,
     validate: {
       validator: Number.isInteger,
       message: "{VALUE} is not an integer value",

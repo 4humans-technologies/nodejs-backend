@@ -11,21 +11,25 @@ const staffSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-    remark: {
+    email: {
       type: String,
       required: true,
     },
-    email: {
+    phone: {
+      type: String,
+      required: true,
+    },
+    remark: {
       type: String,
       required: true,
     },
     profileImage: {
       type: String,
       required: true,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
     },
   },
   { timestamps: true }
