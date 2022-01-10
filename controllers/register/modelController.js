@@ -1,6 +1,5 @@
 const Model = require("../../models/userTypes/Model")
 const User = require("../../models/User")
-const Role = require("../../models/Role")
 const Wallet = require("../../models/globals/wallet")
 const errorCollector = require("../../utils/controllerErrorCollector")
 const bcrypt = require("bcrypt")

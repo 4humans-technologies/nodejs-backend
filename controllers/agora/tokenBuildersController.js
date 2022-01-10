@@ -107,8 +107,10 @@ exports.createStreamAndToken = (req, res, next) => {
         req.user.relatedUser._id.toString(),
         req.user.relatedUser._id.toString()
       )
+
       privilegeExpiredTs = genResult.privilegeExpiredTs
       rtcToken = genResult.rtcToken
+
       const publicChats = getDatabase()
         .ref("publicChats")
         .child(theStream._id.toString())
@@ -136,55 +138,58 @@ exports.createStreamAndToken = (req, res, next) => {
         clientSocket.data.streamId = theStream._id.toString()
         clientSocket.createdAt = Date.now()
         clientSocket.join(streamRoomPublic)
-        /* redundency just to make sure */
+        /* redundancy just to make sure */
         clientSocket.join(`${req.user.relatedUser._id.toString()}-private`)
       } catch (err) {
         /* try catch just for safety */
       }
-
       /**
        * create new viewer list
        */
-      redisClient.set(`${theStream._id.toString()}-public`, "[]", (err) => {
-        if (!err) {
-          /**
-           * create new transaction history list
-           */
-          const transactions = []
-          redisClient.set(
-            `${theStream._id.toString()}-transactions`,
-            JSON.stringify(transactions),
-            (err) => {
-              if (!err) {
-                /**
-                 * notify user about new stream
-                 */
-                io.getIO().emit(socketEvents.streamCreated, {
-                  modelId: req.user.relatedUser._id,
-                  profileImage: model.profileImage,
-                  streamId: theStream._id,
-                  bannedStates: model.bannedStates,
-                  liveNow: io.increaseLiveCount({
-                    _id: req.user.relatedUser._id.toString(),
-                    username: req.user.username,
-                  }),
-                })
+      return redisClient.set(
+        `${theStream._id.toString()}-public`,
+        "[]",
+        (err) => {
+          if (!err) {
+            /**
+             * create new transaction history list
+             */
+            const transactions = []
+            redisClient.set(
+              `${theStream._id.toString()}-transactions`,
+              JSON.stringify(transactions),
+              (err) => {
+                if (!err) {
+                  /**
+                   * notify user about new stream
+                   */
+                  io.getIO().emit(socketEvents.streamCreated, {
+                    modelId: req.user.relatedUser._id,
+                    profileImage: model.profileImage,
+                    streamId: theStream._id,
+                    bannedStates: model.bannedStates,
+                    liveNow: io.increaseLiveCount({
+                      _id: req.user.relatedUser._id.toString(),
+                      username: req.user.username,
+                    }),
+                  })
 
-                return res.status(200).json({
-                  actionStatus: "success",
-                  rtcToken: rtcToken,
-                  privilegeExpiredTs: privilegeExpiredTs,
-                  streamId: theStream._id,
-                })
-              } else {
-                return next(err)
+                  return res.status(200).json({
+                    actionStatus: "success",
+                    rtcToken: rtcToken,
+                    privilegeExpiredTs: privilegeExpiredTs,
+                    streamId: theStream._id,
+                  })
+                } else {
+                  return next(err)
+                }
               }
-            }
-          )
-        } else {
-          return next(err)
+            )
+          } else {
+            return next(err)
+          }
         }
-      })
+      )
     })
     .catch((err) => {
       Stream.deleteOne({ _id: theStream._id })

@@ -162,7 +162,7 @@ exports.createViewer = (req, res, next) => {
         Viewer.deleteOne({ _id: advRelatedUserId }),
         User.deleteOne({ _id: advRootUserId }),
       ])
-        .then((_deleteResult) => {
+        .then(() => {
           /* error generating salt password */
           if (err?.name === "MongoError") {
             switch (err.code) {

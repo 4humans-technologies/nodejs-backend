@@ -1,4 +1,3 @@
-const Document = require("../../models/globals/modelDocuments")
 const Approval = require("../../../../models/management/approval")
 const Model = require("../../../../models/userTypes/Model")
 const Wallet = require("../../../../models/globals/wallet")

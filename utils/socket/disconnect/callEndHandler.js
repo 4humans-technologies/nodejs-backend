@@ -261,7 +261,6 @@ module.exports = function (client) {
               "Model or Viewer ware not updated correctly after the call end from viewer!"
             )
           }
-
           /**
            * emit to the viewer about call transaction compeletion, with error
            */
@@ -294,8 +293,9 @@ module.exports = function (client) {
           }
 
           /**
-           * emit to the viewer about call transaction compeletion
+           * emit to the viewer about call transaction completion
            */
+
           io.getIO()
             .in(`${theCall.viewer.toString()}-private`)
             .emit(chatEvents.model_call_end_request_finished, {

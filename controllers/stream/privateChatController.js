@@ -249,7 +249,7 @@ exports.buyChatPlanForViewer = (req, res, next) => {
             "You don't have sufficient coins in wallet to purchase this plan"
           )
           error.statusCode = 400
-          error.reasonCode = "low balance" /* for use in frontend */
+          /* for use in frontend */
           throw error
         }
       } else {

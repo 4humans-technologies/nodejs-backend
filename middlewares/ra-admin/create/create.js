@@ -1,4 +1,5 @@
 /* create one document at a time */
+const { sanitizeBody } = require("express-validator")
 
 module.exports = (req, res, next) => {
   /**
@@ -20,7 +21,7 @@ module.exports = (req, res, next) => {
       /**
        * create new model
        */
-      
+
       break
     case "Viewer":
       /**

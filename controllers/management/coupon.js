@@ -1,5 +1,5 @@
 const Coupon = require("../../models/management/coupon")
-const Viewer = require("../../models/userTypes/Viewer")
+// const Viewer = require("../../models/userTypes/Viewer")
 const Wallet = require("../../models/globals/wallet")
 
 exports.redeemCouponCode = (req, res, next) => {
@@ -18,7 +18,6 @@ exports.redeemCouponCode = (req, res, next) => {
   Coupon.findOne({
     code: code,
     redeemed: false,
-    acknowledged: true,
   })
     .lean()
     .then((coupon) => {
@@ -34,7 +33,7 @@ exports.redeemCouponCode = (req, res, next) => {
             },
             {
               redeemed: true,
-              redeemedBy: req.user.relatedUser._id,
+              redeemedBy: req.user._id,
               redeemDate: new Date(),
             }
           ),

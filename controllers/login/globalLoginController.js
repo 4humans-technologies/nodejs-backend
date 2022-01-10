@@ -9,6 +9,7 @@ const jwtGenerator = require("../../utils/generateJwt")
 const generateJwt = require("../../utils/generateJwt")
 const io = require("../../socket")
 const chatEventListeners = require("../../utils/socket/chat/chatEventListeners")
+const { cloneDeep } = require("lodash")
 
 exports.loginHandler = (req, res, next) => {
   /**
@@ -107,9 +108,15 @@ exports.loginHandler = (req, res, next) => {
        */
       try {
         const clientSocket = io.getIO().sockets.sockets.get(socketId)
-        clientSocket.removeAllListeners(
-          chatEventListeners.unAuthedViewerEventList
-        )
+
+        // console.log("before removing: ", cloneDeep(clientSocket))
+
+        // remove un-authed listeners
+        chatEventListeners.unAuthedViewerEventList.forEach((eventName) => {
+          clientSocket.removeAllListeners(eventName)
+        })
+
+        // console.log("after removing: ", cloneDeep(clientSocket))
         /* add socket listeners for the specific userType */
         switch (theUser.userType) {
           case "Model":
@@ -121,6 +128,8 @@ exports.loginHandler = (req, res, next) => {
           default:
             break
         }
+        // console.log("after adding: ", cloneDeep(clientSocket))
+
         /* put any logged in user in his/her private room */
         clientSocket.join(`${theUser.relatedUser._id}-private`)
         clientSocket.data = {

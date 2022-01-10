@@ -6,7 +6,7 @@ const couponSchema = new mongoose.Schema(
     generatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
-      ref: "Staff",
+      ref: "User",
     },
     code: {
       type: String,
@@ -29,7 +29,7 @@ const couponSchema = new mongoose.Schema(
     },
     redeemedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Viewer",
+      ref: "User",
     },
     redeemDate: {
       type: Date,

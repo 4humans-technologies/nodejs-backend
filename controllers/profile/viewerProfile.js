@@ -4,7 +4,6 @@ const Wallet = require("../../models/globals/wallet")
 const CoinsSpendHistory = require("../../models/globals/coinsSpendHistory")
 const paginator = require("../../utils/paginator")
 
-
 exports.getFollowedModelDetails = (req, res, next) => {
   Viewer.findById(req.user.relatedUser._id)
     .select("following")
@@ -22,7 +21,7 @@ exports.getFollowedModelDetails = (req, res, next) => {
     .then((viewer) => {
       return res.status(200).json({
         actionStatus: "success",
-        models: viewer.following.map((model) => ({
+        models: viewer?.following.map((model) => ({
           ...model,
           username: model.rootUser.username,
           rootUser: undefined,

@@ -50,33 +50,27 @@ function modelOps() {
     {
       $lookup: {
         from: "users",
-        let: { userId: "$_id" },
-        pipeline: [
-          {
-            $match: {},
-          },
-        ],
         foreignField: "_id",
         localField: "rootUser",
-        as: "theUser",
+        as: "rootUser",
       },
-    },
-    {
-      $match: {
-        "theUser.username": "model1",
-      },
-    },
-    {
-      $unwind: "$theUser",
     },
     // {
-    //   $project: {
-    //     custom_field: "$rootUser.username",
+    //   $match: {
+    //     "theUser.username": "model1",
     //   },
     // },
+    {
+      $unwind: "$rootUser",
+    },
+    {
+      $project: {
+        custom_field: "$rootUser.username",
+      },
+    },
   ]).then((results) => {
     results.forEach((model) => {
-      console.log(model.theUser)
+      console.log(model)
     })
   })
 }
@@ -158,7 +152,13 @@ function constructModel(query) {
 }
 
 function createStaff() {
-  const entryData = {}
+  const entryData = {
+    username: "staff_one",
+    password: "testing123",
+    name: "staff_one",
+    email: "staff1@gmail.com",
+    phone: "9123568945",
+  }
   const { username, password, name, email, phone } = entryData
 
   const advRootUserId = new ObjectId()
@@ -182,14 +182,15 @@ function createStaff() {
           phone: String(phone),
           remark:
             "This staff was created from 'directToDb', not meant for production use!",
-            profileImage:
+          profileImage:
+            "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/admin-iamge.png",
         }).save(),
         User({
           _id: advRootUserId,
           username: username,
           password: hashedPassword,
           permissions: permissions.map((permission) => permission.value),
-          userType: "SuperAdmin",
+          userType: "Staff",
           needApproval: true,
           relatedUser: advRelatedUserId,
           meta: {
@@ -198,47 +199,31 @@ function createStaff() {
         }).save(),
       ])
     })
-    .then(([wallet, superadminbro, rootUser]) => {
-      const hours = 12
-
+    .then(([staff, rootUser]) => {
       const user = {
         ...rootUser._doc,
         relatedUser: {
-          ...superadminbro._doc,
-          wallet: wallet._doc,
+          ...staff._doc,
         },
       }
 
-      const token = generateJwt({
-        hours: hours,
-        userId: advRootUserId,
-        relatedUserId: advRelatedUserId,
-        userType: rootUser.userType,
-        role: "superAdmin",
-      })
-
-      return res.status(201).json({
-        message: "superadmin registered successfully",
-        actionStatus: "success",
-        user: user,
-        token: token,
-        tokenExpireIn: hours,
-      })
+      console.log(user)
     })
     .catch((err) => {
       return Promise.allSettled([
-        Wallet.deleteOne({ _id: walletId }),
-        SuperAdmin.deleteOne({ _id: advRelatedUserId }),
+        Staff.deleteOne({ _id: advRelatedUserId }),
         User.deleteOne({ _id: advRootUserId }),
       ])
-        .then((deleteResult) => {
-          const error = new Error(err.message + " superadmin not registered")
+        .then(() => {
+          const error = new Error(err.message + " staff not registered")
           error.statusCode = err.statusCode || 500
-          return next(error)
+          throw error
         })
-        .catch((finalError) => next(finalError))
+        .catch((finalError) => console.error(finalError))
     })
-    .catch((finalError) => next(finalError))
+    .catch((finalError) => console.error(finalError))
 }
 
-paginationByFacet()
+// paginationByFacet()
+// createStaff()
+modelOps()

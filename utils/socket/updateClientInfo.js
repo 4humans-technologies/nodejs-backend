@@ -8,31 +8,10 @@ const { viewerJoined } = require("../socket/socketEvents")
 const { viewer_left_received } = require("./chat/chatEvents")
 
 module.exports = function updateClientInfo(client) {
-  client.on("update-client-info", async (data, callback) => {
-    /* action specific procedure */
-    const socket = io.getIO().sockets.sockets.get(client.id)
+  client.on("update-client-info", (data, callback) => {
     switch (data.action) {
       case "logout":
         {
-          switch (client.userType) {
-            case "Model":
-              await socket.removeAllListeners(chatEventListeners.modelEventList)
-              await socket.removeAllListeners(chatEventListeners.modelEventList)
-              break
-            case "Viewer":
-              await socket.removeAllListeners(
-                chatEventListeners.authedUserEventList
-              )
-              await socket.removeAllListeners(
-                chatEventListeners.authedUserEventList
-              )
-              break
-            default:
-              break
-          }
-
-          await chatEventListeners.unAuthedViewerListeners(socket)
-
           /* end streaming also */
           if (client.authed && client?.isStreaming) {
             onDisconnectStreamEndHandler(client)
@@ -41,6 +20,28 @@ module.exports = function updateClientInfo(client) {
           if (client.authed && client?.onCall) {
             onDisconnectCallEndHandler(client)
           }
+
+          // console.log("before removing", cloneDeep(client))
+          // remove old listeners
+          switch (client.userType) {
+            case "Model":
+              chatEventListeners.modelEventList.forEach((eventName) => {
+                client.removeAllListeners(eventName)
+              })
+              break
+            case "Viewer":
+              chatEventListeners.authedUserEventList.forEach((eventName) => {
+                client.removeAllListeners(eventName)
+              })
+              break
+            default:
+              break
+          }
+
+          // add new listeners
+          // console.log("after removing", cloneDeep(client))
+          chatEventListeners.unAuthedViewerListeners(client)
+          // console.log("after adding", cloneDeep(client))
 
           /* NEEDED of all this, because anyway this client NOT be deleted */
           /* leave all the rooms you were connected to as authed user */
@@ -59,6 +60,8 @@ module.exports = function updateClientInfo(client) {
           /* free data keys */
           delete client.data.onStream
           delete client.data.streamId
+          delete client.data?.userId
+          delete client.data?.relatedUserId
 
           /* clear the data set on the client object */
           // const dataCopy = cloneDeep(client.data)
@@ -74,9 +77,6 @@ module.exports = function updateClientInfo(client) {
           //    */
           // }
           // client.data = { ...dataCopy }
-
-          delete client.data?.userId
-          delete client.data?.relatedUserId
 
           client.authed = false
           client.userType = "UnAuthedViewer"

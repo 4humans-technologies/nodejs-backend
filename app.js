@@ -68,6 +68,7 @@ const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
 // ra-admin routes
 const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
 const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
+const create = require("./routes/ADMIN/ra-admin/create/create")
 
 // CONNECT-URL--->
 if (process.env.LOCAL_DB === "false") {
@@ -82,7 +83,14 @@ app.use((req, res, next) => {
   if (process.env.RUN_ENV === "windows") {
     res.setHeader("Access-Control-Allow-Origin", "*")
   } else {
-    res.setHeader("Access-Control-Allow-Origin", "https://dreamgirllive.com")
+    const allowedOrigins = [
+      "https://dreamgirllive.com",
+      "https://www.dreamgirllive.com",
+    ]
+    const origin = req.headers.origin
+    if (allowedOrigins.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin)
+    }
   }
   res.setHeader(
     "Access-Control-Allow-Methods",
@@ -92,9 +100,8 @@ app.use((req, res, next) => {
     "Access-Control-Allow-Headers",
     "Content-Type,Authorization,range"
   )
-  // res.setHeader("Access-Control-Allow-Headers", "*")
   res.setHeader("Access-Control-Expose-Headers", "Content-Range")
-  next()
+  return next()
 })
 
 // ALL HTTP ROUTES--->
@@ -130,15 +137,15 @@ app.get("/api/website/get-geo-location", (req, res, next) => {
 app.get("/api/website/aws/get-s3-upload-url", (req, res, next) => {
   const { type } = req.query
   if (!type) {
-    res.status(400).json({
+    return res.status(400).json({
       actionStatus: "failed",
       message: "Type not provide in the query parameter, it's required",
     })
   }
   const extension = "." + type?.split("/")[1]
-  generatePublicUploadUrl(extension, type)
+  return generatePublicUploadUrl(extension, type)
     .then((s3UrlData) => {
-      res.status(200).json({
+      return res.status(200).json({
         uploadUrl: s3UrlData.uploadUrl,
         key: s3UrlData.key,
       })
@@ -172,27 +179,31 @@ app.get(
   }
 )
 
-app.get(
-  "/this-url-is-for-running-my-custom-script-for-database-updates/random-str-1/random-str-2",
-  (req, res, next) => {
-    Model.find()
-      .then((models) => {
-        const modelPrs = []
-        models.forEach((model) => {
-          model.welcomeMessage = "Hello __name__ welcome to my stream 💕💕"
-          modelPrs.push(model.save())
-        })
-        return Promise.all(modelPrs)
-      })
-      .then((models) => {
-        console.log("All models updated successfully")
-        return res.status(200).json(models)
-      })
-      .catch((err) => {
-        next(err)
-      })
-  }
-)
+/**
+ * Modify models in the database
+ */
+
+// app.get(
+//   "/this-url-is-for-running-my-custom-script-for-database-updates/random-str-1/random-str-2",
+//   (req, res, next) => {
+//     Model.find()
+//       .then((models) => {
+//         const modelPrs = []
+//         models.forEach((model) => {
+//           model.welcomeMessage = "Hello __name__ welcome to my stream 💕💕"
+//           modelPrs.push(model.save())
+//         })
+//         return Promise.all(modelPrs)
+//       })
+//       .then((models) => {
+//         console.log("All models updated successfully")
+//         return res.status(200).json(models)
+//       })
+//       .catch((err) => {
+//         return next(err)
+//       })
+//   }
+// )
 
 // ADMIN PATHS
 /* 🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻 */
@@ -209,6 +220,7 @@ app.use("/api/admin/role", roleRouter)
 // ra-admin
 app.use("/api/admin/dashboard", getLists)
 app.use("/api/admin/dashboard", getOne)
+app.use("/api/admin/dashboard", create)
 
 app.use("/test", testRouter)
 
@@ -233,8 +245,6 @@ app.use((err, req, res, next) => {
   next()
 })
 
-// MONGODB CONNECTION SETUP--->
-// mongoose.set("debug", true)
 mongoose
   .connect(CONNECT_URL, {
     useNewUrlParser: true,
@@ -258,7 +268,11 @@ mongoose
     )
     const socketOptions = {
       cors: {
-        origin: ["https://dreamgirllive.com", "http://localhost:3000"],
+        origin: [
+          "https://dreamgirllive.com",
+          "https://www.dreamgirllive.com",
+          "http://localhost:3000",
+        ],
         methods: ["GET", "POST"],
       },
     }

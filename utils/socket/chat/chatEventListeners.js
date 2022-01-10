@@ -5,7 +5,7 @@ const { getDatabase } = require("firebase-admin/database")
 
 const realtimeDb = getDatabase()
 
-const viewerPublicMessageHandler = (data) => {
+function viewerPublicMessageHandler(data) {
   try {
     const toRoom = data.room.split("-")[0]
     if (toRoom) {
@@ -73,6 +73,7 @@ module.exports = {
         .emit(chatEvents.viewer_call_end_request_init_received, data)
     })
   },
+
   modelListeners: (socket) => {
     /* model public chat emitter */
     socket.on(chatEvents.model_message_public_emitted, (data) => {
@@ -145,6 +146,7 @@ module.exports = {
         .emit(chatEvents.model_call_request_response_received, data)
     })
   },
+
   unAuthedViewerListeners: (socket) => {
     socket.on(
       chatEvents.viewer_message_public_emitted,
@@ -154,14 +156,14 @@ module.exports = {
 
   authedUserEventList: [
     chatEvents.viewer_message_public_emitted,
-    chatEvents.viewer_super_message_public_emitted,
     chatEvents.viewer_private_message_emitted,
     chatEvents.viewer_call_end_request_init_emitted,
   ],
   unAuthedViewerEventList: [chatEvents.viewer_message_public_emitted],
   modelEventList: [
-    chatEvents.viewer_message_public_emitted,
+    chatEvents.model_message_public_emitted,
     chatEvents.model_private_message_emitted,
     chatEvents.model_call_end_request_init_emitted,
+    chatEvents.model_call_request_response_emitted,
   ],
 }

@@ -21,7 +21,7 @@ module.exports = (req, res, next) => {
    */
 
   const { resource } = req.params
-  const data = JSON.parse(req.body.data)
+  const data = req.body
 
   var createQuery
   switch (resource) {
@@ -57,18 +57,62 @@ module.exports = (req, res, next) => {
       break
     case "Coupon":
       /**
-       * can put check on the max "coin value" generation by that viewer
+       * can put check on the max "coin value" generation by that staff
        */
-      Coupon({
-        generatedBy: req.user.relatedUser._id,
+      createQuery = Coupon({
+        generatedBy: "61da8ea900622555940aacb7",
         forCoins: data.forCoins,
-      }).then((coupon) => {
-        return {
-          createdResources: coupon,
-          logField: "coin value",
-          logFieldValue: data.forCoins,
-        }
       })
+        .save()
+        .then((coupon) => {
+          return coupon
+          //   return Coupon.aggregate([
+          //     {
+          //       $match: { _id: coupon._id },
+          //     },
+          //     {
+          //       $lookup: {
+          //         from: "users",
+          //         foreignField: "_id",
+          //         localField: "generatedBy",
+          //         as: "generatedBy",
+          //       },
+          //     },
+          //     {
+          //       $unwind: "$generatedBy",
+          //     },
+          //     {
+          //       $lookup: {
+          //         from: "users",
+          //         foreignField: "_id",
+          //         localField: "redeemedBy",
+          //         as: "redeemedBy",
+          //       },
+          //     },
+          //     {
+          //       $unwind: "$rootUser",
+          //     },
+          //     {
+          //       $project: {
+          //         _id: 0,
+          //         id: "$_id",
+          //         generatedBy: 1,
+          //         code: 1,
+          //         forCoins: 1,
+          //         redeemed: 1,
+          //         redeemedBy: 1,
+          //         redeemDate: 1,
+          //       },
+          //     },
+          //   ])
+        })
+        .then((coupon) => {
+          return {
+            createdResources: coupon._doc,
+            logField: "coin value",
+            logFieldValue: data.forCoins,
+          }
+        })
       break
     default:
       break
@@ -82,17 +126,19 @@ module.exports = (req, res, next) => {
        */
       return Promise.all([
         createdResources,
-        Log({
-          action: `create new ${resource}, with ${logField}: ${logFieldValue}`,
-          by: req.user._id,
-        }).save(),
+        // Log({
+        //   action: `create new ${resource}, with ${logField}: ${logFieldValue}`,
+        //   by: req.user._id,
+        // }).save(),
       ])
     })
     .then(([createdResources, _log]) => {
       /**
        * add a log entry also after  successful creation of a record
        */
-      return res.status(201).json(createdResources)
+      return res
+        .status(201)
+        .json({ id: createdResources._id, ...createdResources })
     })
     .catch((err) => next(err))
 }
