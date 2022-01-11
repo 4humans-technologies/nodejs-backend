@@ -155,6 +155,8 @@ module.exports = (req, res, next) => {
       processorFunc = listProcessors.getCouponList
       processorOptions = {}
       break
+    case "CoinSpendHistory":
+      break
     default:
       console.error("Default case for 'getList' reached!")
       break

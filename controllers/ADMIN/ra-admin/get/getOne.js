@@ -34,9 +34,10 @@ module.exports = (req, res, next) => {
    */
   const { resource, id } = req.params
 
-  var model, select, populate
+  var model, select, populate, getWith
   switch (resource) {
     case "Model":
+      getWith = "normal"
       model = Model
       populate = [
         {
@@ -66,6 +67,7 @@ module.exports = (req, res, next) => {
       ]
       break
     case "Viewer":
+      getWith = "normal"
       populate = [
         {
           path: "wallet",
@@ -91,15 +93,19 @@ module.exports = (req, res, next) => {
       model = Viewer
       break
     case "Stream":
+      getWith = "normal"
       model = Stream
       break
     case "AudioCall":
+      getWith = "normal"
       model = AudioCall
       break
     case "VideoCall":
+      getWith = "normal"
       model = VideoCall
       break
     case "CoinSpendHistory":
+      getWith = "normal"
       model = CoinSpendHistory
       break
     case "ModelDocuments":
@@ -128,30 +134,15 @@ module.exports = (req, res, next) => {
       break
     case "Coupon":
       model = Coupon
-      model = Coupon
-      select = "generatedBy code forCoins redeemed redeemedBy redeemDate"
+      select = ""
       populate = [
         {
           path: "generatedBy",
-          select: "name profileImage",
-          populate: {
-            path: "rootUser",
-            select: "username role",
-          },
+          select: "username -_id",
         },
         {
           path: "redeemedBy",
-          select: "name profileImage isChatPlanActive",
-          populate: [
-            {
-              path: "rootUser",
-              select: "username",
-            },
-            {
-              path: "wallet",
-              select: "currentAmount",
-            },
-          ],
+          select: "username -_id",
         },
       ]
       break

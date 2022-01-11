@@ -21,9 +21,58 @@ router.post(
           }
         })
       })
-      .custom((value, _req) => {
-        if (value.includes(" ")) {
-          const error = new Error("spaces are not allowed")
+      .custom((value) => {
+        const chars = [
+          "~",
+          "`",
+          "!",
+          "@",
+          "#",
+          "$",
+          "%",
+          "^",
+          "&",
+          "*",
+          "(",
+          ")",
+          "+",
+          "=",
+          "-",
+          "{",
+          "}",
+          "[",
+          "]",
+          "|",
+          '"',
+          ":",
+          ";",
+          "'",
+          "<",
+          ">",
+          "?",
+          "|",
+          "/",
+          ".",
+          ",",
+        ]
+        const validity = {
+          isValid: true,
+          problemChars: [],
+        }
+
+        chars.forEach((char) => {
+          if (value.includes(char)) {
+            validity.isValid = validity.isValid && false
+            validity.problemChars.push(char)
+          } else {
+            validity.isValid = validity.isValid && true
+          }
+        })
+
+        if (!validity.isValid) {
+          const error = new Error(
+            validity.problemChars.join(" & ") + " are not allowed"
+          )
           error.statusCode = 400
           throw error
         }
@@ -35,7 +84,7 @@ router.post(
     body("email").notEmpty().isEmail().normalizeEmail(),
     body("gender").notEmpty().isString(),
     body("profileImage").isURL(),
-    // body("phone").notEmpty(),
+    body("phone").notEmpty(),
   ],
   viewerController.createViewer
 )

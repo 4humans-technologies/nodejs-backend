@@ -168,6 +168,8 @@ exports.createStreamAndToken = (req, res, next) => {
                     profileImage: model.profileImage,
                     streamId: theStream._id,
                     bannedStates: model.bannedStates,
+                    isStreaming: true,
+                    onCall: false,
                     liveNow: io.increaseLiveCount({
                       _id: req.user.relatedUser._id.toString(),
                       username: req.user.username,
@@ -475,7 +477,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
               actionStatus: "success",
               message: "model not streaming",
               theModel: theModel,
-              isChatPlanActive: viewer.isChatPlanActive,
+              isChatPlanActive: viewer?.isChatPlanActive,
             })
           })
           .catch((err) => {
@@ -776,7 +778,7 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
 
 exports.renewRtcTokenGlobal = (req, res, next) => {
   // renew token for anybody be model or viewer or unAuthed viewer
-  // controllerErrorCollector(req)
+  controllerErrorCollector(req)
 
   const { channel, unAuthedUserId, onCall } = req.query
 

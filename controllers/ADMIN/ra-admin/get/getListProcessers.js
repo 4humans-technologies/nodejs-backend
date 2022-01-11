@@ -1,4 +1,5 @@
 const Coupon = require("../../../../models/management/coupon")
+const CoinsSpendHistory = require("../../../../models/globals/coinsSpendHistory")
 exports.getCouponList = (req, res, next, options) => {
   const pipeline = []
   const fixedStages = [
@@ -11,38 +12,41 @@ exports.getCouponList = (req, res, next, options) => {
     {
       $limit: options.limit,
     },
-    // {
-    //   $lookup: {
-    //     from: "users",
-    //     foreignField: "_id",
-    //     localField: "generatedBy",
-    //     as: "generatedBy",
-    //   },
-    // },
-    // {
-    //   $unwind: "$generatedBy",
-    // },
-    // {
-    //   $lookup: {
-    //     from: "users",
-    //     foreignField: "_id",
-    //     localField: "redeemedBy",
-    //     as: "redeemedBy",
-    //   },
-    // },
-    // {
-    //   $unwind: "$rootUser",
-    // },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "generatedBy",
+        as: "generatedBy",
+      },
+    },
+    {
+      $unwind: "$generatedBy",
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "redeemedBy",
+        as: "redeemedBy",
+      },
+    },
+    {
+      $unwind: {
+        path: "$redeemedBy",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
     {
       $project: {
         _id: 0,
         id: "$_id",
-        generatedBy: 1,
         code: 1,
         forCoins: 1,
         redeemed: 1,
-        redeemedBy: 1,
         redeemDate: 1,
+        "generatedBy.username": 1,
+        "redeemedBy.username": 1,
       },
     },
   ]
@@ -77,76 +81,54 @@ exports.getCouponList = (req, res, next, options) => {
     .catch((err) => next(err))
 }
 
-// const fixedStages = [
-//   {
-//     $sort: options.sort,
-//   },
-//   {
-//     $skip: options.skip,
-//   },
-//   {
-//     $limit: options.limit,
-//   },
-//   {
-//     $lookup: {
-//       from: "Staff",
-//       foreignField: "_id",
-//       localField: "generatedBy",
-//       as: "generatedBy",
-//       // let: { rootUserId: "$generatedBy.rootUser" },
-//       // pipeline: [
-//       //   {
-//       //     $lookup: {
-//       //       from: "User",
-//       //       foreignField: "_id",
-//       //       localField: "$$rootUserId",
-//       //       as: "rootUser",
-//       //     },
-//       //   },
-//       // ],
-//     },
-//   },
-//   {
-//     $unwind: "$generatedBy",
-//   },
-//   {
-//     $lookup: {
-//       from: "Staff",
-//       foreignField: "_id",
-//       localField: "redeemedBy",
-//       as: "redeemedBy",
-//       // let: { rootUserId: "$redeemedBy.rootUser" },
-//       // pipeline: [
-//       //   {
-//       //     $lookup: {
-//       //       from: "User",
-//       //       foreignField: "_id",
-//       //       localField: "$$rootUserId",
-//       //       as: "rootUser",
-//       //     },
-//       //   },
-//       // ],
-//     },
-//   },
-//   {
-//     $unwind: "$rootUser",
-//   },
-//   {
-//     $project: {
-//       _id: 0,
-//       id: "$_id",
-//       generatedBy: 1,
-//       code: 1,
-//       forCoins: 1,
-//       redeemed: 1,
-//       redeemedBy: 1,
-//       redeemDate: 1,
-//     },
-//   },
-//   // {
-//   //   $facet: {
-//   //     records: [],
-//   //     totalCount: [{ $match: {} }, { $count: "totalCount" }],
-//   //   },
-//   // },
-// ]
+exports.getCoinSpendHistories = (req, res, next, options) => {
+  CoinsSpendHistory.aggregate([
+    {
+      $match: options.match,
+    },
+    {
+      $sort: options.sort,
+    },
+    {
+      $skip: options.skip,
+    },
+    {
+      $limit: options.limit,
+    },
+    {
+      $lookup: {
+        from: "models",
+        let: { id: "$forModel" },
+        pipeline: [{ $match: { $expr: { $eq: ["$_id", "$$id"] } } }],
+        // foreignField: "_id",
+        // localField: "forModel",
+        as: "forModel",
+      },
+    },
+    {
+      $unwind: "$forModel",
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "forModel.rootUser",
+        as: "forModel.rootUser",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "redeemedBy",
+        as: "redeemedBy",
+      },
+    },
+    {
+      $unwind: {
+        path: "$redeemedBy",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+  ])
+}

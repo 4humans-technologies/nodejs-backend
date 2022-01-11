@@ -34,7 +34,7 @@ exports.withAggregation = (Model, qry, req) => {
 
 exports.withNormal = (Model, qry, select, req, res, populate = null) => {
   const page = +req.query?.page || 1
-  const limit = +req.query?.limit || 10
+  const limit = +req.query?.limit || 25
   const sort = req.query?.sort || null
 
   let theResults

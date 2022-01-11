@@ -3,6 +3,8 @@ const mongoose = require("mongoose")
 const User = require("./models/User")
 const Model = require("./models/userTypes/Model")
 const Staff = require("./models/userTypes/Staff")
+const Coupon = require("./models/management/coupon")
+const CoinsSpendHistory = require("./models/globals/coinsSpendHistory")
 const ObjectId = require("mongodb").ObjectId
 const Wallet = require("./models/globals/wallet")
 const Permission = require("./models/Permission")
@@ -224,6 +226,101 @@ function createStaff() {
     .catch((finalError) => console.error(finalError))
 }
 
+function couponOps() {
+  return Coupon.aggregate([
+    {
+      $match: {},
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "generatedBy",
+        as: "generatedBy",
+      },
+    },
+    {
+      $unwind: "$generatedBy",
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "redeemedBy",
+        as: "redeemedBy",
+      },
+    },
+    {
+      $unwind: {
+        path: "$redeemedBy",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        id: "$_id",
+        code: 1,
+        forCoins: 1,
+        redeemed: 1,
+        redeemDate: 1,
+        "generatedBy.username": 1,
+        "redeemedBy.username": 1,
+      },
+    },
+  ])
+    .then((coupon) => {
+      console.log(coupon)
+    })
+    .catch((err) => console.error(err))
+}
+
+function coinOps() {
+  CoinsSpendHistory.aggregate([
+    {
+      $lookup: {
+        from: "models",
+        let: { id: "$forModel" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$_id", "$$id"] } } },
+          {
+            $lookup: {
+              from: "users",
+              let: { rootUserId: "$forModel.rootUser" },
+              pipeline: [
+                {
+                  $match: { $expr: { $eq: ["$_id", "$$rootUserId"] } },
+                },
+                { $project: { username: 1, _id: 0 } },
+              ],
+              as: "forModel.rootUser",
+            },
+          },
+          {
+            $project: { profileImage: 1, name: 1, _id: 0, rootUser: 1 },
+          },
+          {
+            $unwind: {
+              path: "$forModel.rootUser",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+        ],
+        as: "forModel",
+      },
+    },
+    {
+      $unwind: "$forModel",
+    },
+  ])
+    .then((record) => {
+      console.log(record)
+    })
+    .catch((err) => console.log(err))
+}
+
 // paginationByFacet()
 // createStaff()
-modelOps()
+// modelOps()
+// couponOps()
+coinOps()

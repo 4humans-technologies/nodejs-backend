@@ -57,6 +57,8 @@ module.exports = function onDisconnectStreamEndHandler(client) {
         if (!err) {
           console.log("Stream delete redis response:", response)
           io.getIO().emit(socketEvents.deleteStreamRoom, {
+            isStreaming: false,
+            onCall: false,
             modelId: client.data.relatedUserId,
             liveNow: io.decreaseLiveCount(client.data.relatedUserId),
           })
@@ -110,6 +112,8 @@ module.exports = function onDisconnectStreamEndHandler(client) {
        */
 
       io.getIO().emit(socketEvents.deleteStreamRoom, {
+        isStreaming: false,
+        onCall: false,
         modelId: client.data.relatedUserId,
         liveNow: io.decreaseLiveCount(client.data.relatedUserId),
       })

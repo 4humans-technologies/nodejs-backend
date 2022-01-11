@@ -45,12 +45,6 @@ exports.loginHandler = (req, res, next) => {
           select: "currentAmount",
         },
         {
-          path: "approval",
-        },
-        {
-          path: "adminPriceRange",
-        },
-        {
           path: "pendingCalls.audioCalls",
         },
         {
@@ -67,6 +61,7 @@ exports.loginHandler = (req, res, next) => {
         },
       ],
     })
+    .lean()
     .then((user) => {
       if (!user) {
         const error = new Error("Invalid credentials, User does not exists")
@@ -89,7 +84,10 @@ exports.loginHandler = (req, res, next) => {
       }
 
       theUser = user
-      return bcrypt.compare(password, user.password)
+      return Promise.all([
+        bcrypt.compare(password, user.password),
+        User.updateOne({ _id: theUser._id }, { lastLogin: new Date() }),
+      ])
     })
     .then((didMatched) => {
       if (!didMatched) {
@@ -97,8 +95,8 @@ exports.loginHandler = (req, res, next) => {
         error.statusCode = 422
         throw error
       }
-      User.updateOne({ _id: theUser._id }, { lastLogin: new Date() })
       const hours = 24
+
       /**
        * my view is may be for some reason socketId may not be sent but,
        * because of that right user should not be devoid of registration or login
@@ -108,15 +106,10 @@ exports.loginHandler = (req, res, next) => {
        */
       try {
         const clientSocket = io.getIO().sockets.sockets.get(socketId)
-
-        // console.log("before removing: ", cloneDeep(clientSocket))
-
-        // remove un-authed listeners
         chatEventListeners.unAuthedViewerEventList.forEach((eventName) => {
           clientSocket.removeAllListeners(eventName)
         })
 
-        // console.log("after removing: ", cloneDeep(clientSocket))
         /* add socket listeners for the specific userType */
         switch (theUser.userType) {
           case "Model":
@@ -161,7 +154,5 @@ exports.loginHandler = (req, res, next) => {
         }),
       })
     })
-    .catch((err) => {
-      next(err)
-    })
+    .catch((err) => next(err))
 }

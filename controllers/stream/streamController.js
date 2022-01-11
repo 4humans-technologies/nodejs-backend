@@ -18,6 +18,7 @@ const rtcTokenGenerator = require("../../utils/rtcTokenGenerator")
 
 exports.handleEndStream = (req, res, next) => {
   // this will be called by the model only
+  controllerErrorCollector(req)
 
   let { streamId } = req.body
   const { socketId } = req.query
@@ -140,6 +141,8 @@ exports.handleEndStream = (req, res, next) => {
     .finally(() => {
       /* to execute absolute necessary code */
       io.getIO().emit(socketEvents.deleteStreamRoom, {
+        isStreaming: false,
+        onCall: false,
         modelId: req.user.relatedUser._id,
         liveNow: io.decreaseLiveCount(req.user.relatedUser._id.toString()),
       })
@@ -149,7 +152,7 @@ exports.handleEndStream = (req, res, next) => {
 exports.handleViewerCallRequest = (req, res, next) => {
   // viewer must be authenticated
   // must have money >= min required
-
+  controllerErrorCollector(req)
   const { modelId, streamId, callType } = req.body
 
   let theViewer
@@ -242,6 +245,7 @@ exports.handleViewerCallRequest = (req, res, next) => {
 exports.handleModelAcceptedCallRequest = (req, res, next) => {
   // this end point wil be called when model accepts the call request
   // this is just for updating call doc and emitting event
+  controllerErrorCollector(req)
 
   if (!req.user.relatedUser.isStreaming) {
     return res.status(200).json({
@@ -597,6 +601,7 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
 }
 
 exports.handleEndCallFromViewer = (req, res, next) => {
+  controllerErrorCollector(req)
   const { callId, callType, endTimeStamp } = req.body
 
   let theCall
@@ -797,6 +802,8 @@ exports.handleEndCallFromViewer = (req, res, next) => {
 }
 
 exports.handleEndCallFromModel = (req, res, next) => {
+  controllerErrorCollector(req)
+
   const { callId, callType, endTimeStamp } = req.body
 
   let theCall
@@ -1136,6 +1143,7 @@ exports.setCallOngoing = (req, res, next) => {
   /**
    * set the status of the call as ongoing
    */
+  controllerErrorCollector(req)
 
   const { callId, callType } = req.body
   const { socketId } = req.query
@@ -1230,41 +1238,10 @@ exports.setCallOngoing = (req, res, next) => {
     .catch((err) => next(err))
 }
 
-exports.setOngoing = (req, res, next) => {
-  // endpoint to handle request of stream status update
-  //   const { streamId, modelId } = req.body
-
-  Model.findById(req.user.relatedUser._id)
-    .select("currentStream isStreaming")
-    .then(
-      (model) => {
-        Stream.findOneAndUpdate(
-          {
-            _id: model.currentStream._id,
-          },
-          {
-            status: "ongoing",
-          }
-        )
-      },
-      { new: true }
-    )
-    .select("status")
-    .lean()
-    .then((stream) => {
-      if (stream.status === "ongoing") {
-        res.status(200).json({
-          message: "stream status set to ongoing, you are live to everyone now",
-          actionStatus: "success",
-        })
-      }
-    })
-    .catch((err) => next(err))
-}
-
 exports.viewerFollowModel = (req, res, next) => {
   /* will trigger when viewer clicks on the heart button on the stream of the model */
   /* check if the model is approved and the user is logged in*/
+  controllerErrorCollector(req)
 
   const { modelId } = req.body
 
@@ -1365,6 +1342,7 @@ exports.viewerFollowModel = (req, res, next) => {
 }
 
 exports.unFollowModel = (req, res, next) => {
+  controllerErrorCollector(req)
   if (req.user.userType !== "Viewer") {
     return res.status(200).json({
       actionStatus: "failed",
@@ -1375,7 +1353,7 @@ exports.unFollowModel = (req, res, next) => {
 
 exports.processTokenGift = (req, res, next) => {
   /* handle the gifting of token by the user to model */
-
+  controllerErrorCollector(req)
   var { modelId, tokenAmount, socketData } = req.body
 
   tokenAmount = +tokenAmount
@@ -1648,7 +1626,7 @@ exports.processTipMenuRequest = (req, res, next) => {
 
         const promiseArray = [
           Wallet.updateOne(
-            { relatedUser: modelId },
+            { relatedUser: theModel._id },
             {
               $inc: { currentAmount: activity.price * (sharePercent / 100) },
             }
@@ -1670,7 +1648,7 @@ exports.processTipMenuRequest = (req, res, next) => {
             getDatabase().ref(path).child("chats").push(socketData)
           )
         }
-        return promiseArray
+        return Promise.all(promiseArray)
       } else {
         const error = new Error(
           `You dont have sufficient amount of coins to gift the model, ${activity.price} coins are required you have only ${wallet.currentAmount} coins`
@@ -1679,7 +1657,7 @@ exports.processTipMenuRequest = (req, res, next) => {
         throw error
       }
     })
-    .then(() => {
+    .then((result) => {
       if (theModel.isStreaming) {
         redisClient.get(`${streamId}-transactions`, (err, transactions) => {
           /**
@@ -1848,6 +1826,7 @@ exports.processTipMenuRequest = (req, res, next) => {
 }
 
 exports.buyChatPlan = (req, res, next) => {
+  controllerErrorCollector(req)
   /* verify is viewer and loggedIn */
   /* check is already active he cannot buy again */
 
@@ -1929,6 +1908,7 @@ exports.getChatPlans = (req, res, next) => {
 }
 
 exports.getTipMenuActions = (req, res, next) => {
+  controllerErrorCollector(req)
   /* for viewers */
   const { modelId } = req.body
   Model.findById(modelId)
@@ -1960,6 +1940,7 @@ exports.getForCallDetails = (req, res, next) => {
 exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
   /* join models current stream even when he quits and restarts */
   /* NOTE: at this sage the viewer already has the rtcToken */
+  controllerErrorCollector(req)
 
   const { modelId, getNewToken } = req.body
   let { socketId } = req.query
@@ -2100,6 +2081,8 @@ exports.reJoinModelsCurrentStreamAuthed = async (req, res, next) => {
 }
 
 exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
+  controllerErrorCollector(req)
+
   const { modelId, unAuthedUserId, getNewToken } = req.body
   const { socketId } = req.query
 
@@ -2191,6 +2174,7 @@ exports.reJoinModelsCurrentStreamUnAuthed = (req, res, next) => {
 }
 
 exports.getLiveRoomCount = (req, res, next) => {
+  controllerErrorCollector(req)
   /**
    * return the live viewer count in a socket room
    */

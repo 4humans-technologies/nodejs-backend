@@ -5,8 +5,8 @@ const couponSchema = new mongoose.Schema(
   {
     generatedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
       ref: "User",
+      required: true,
     },
     code: {
       type: String,

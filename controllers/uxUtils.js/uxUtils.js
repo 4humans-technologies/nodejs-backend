@@ -27,28 +27,43 @@ exports.getLiveStreams = (req, res, next) => {
 
 exports.getRankingOnlineModels = (req, res, next) => {
   /**
-   * get the streaming or onCall models
+   * get all models live or offline
    */
 
   /* onCall or streaming */
   const query = Model.find({
-    $or: [{ onCall: true }, { isStreaming: true }],
+    isStreaming: true,
   })
-
-    /* only streaming */
-    // const query = Model.find(
-    //   {
-    //     $or: [{ "isStreaming": true }]
-    //   }
-    // )
     .sort("rating")
     .lean()
-  // .populate("rootUser", "username userType currentStream")
-  // .populate({
-  //   path: 'rootUser',
-  //   model: 'User',
-  //   select: { 'field_name': 1, 'field_name': 1 },
-  // })
+
+  paginator
+    .withNormal(
+      null,
+      query,
+      "rating onCall isStreaming profileImage bannedStates",
+      req,
+      res
+    )
+    .catch((err) => next(err))
+}
+
+exports.getAllModels = (req, res, next) => {
+  const query = Model.find({
+    _id: {
+      $nin: [
+        "61da89e6cdd8ebdb2a04d00e",
+        "61dac4ddb25f7f53005abfe3",
+        "61dc75fb34f02d0b242e41e4",
+        "61dcde0934f02d0b242e481a",
+        "61dce21534f02d0b242e4842",
+        "61dc62f634f02d0b242e27f6",
+      ],
+    },
+  })
+    .sort({ onCall: 1, isStreaming: 1 })
+    .lean()
+
   paginator
     .withNormal(
       null,
