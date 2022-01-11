@@ -61,7 +61,7 @@ exports.getAllModels = (req, res, next) => {
       ],
     },
   })
-    .sort({ onCall: 1, isStreaming: 1 })
+    .sort({ isStreaming: -1 })
     .lean()
 
   paginator
