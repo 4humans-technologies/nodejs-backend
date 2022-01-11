@@ -14,9 +14,6 @@ router.post(
       .custom((value, { req }) => {
         return User.findOne({ username: req.body.username }).then((user) => {
           if (user) {
-            // const error = new Error("User name already exists")
-            // error.statusCode = 422
-            // throw error
             return Promise.reject("User name already exists")
           }
         })
@@ -77,14 +74,12 @@ router.post(
           throw error
         }
         return true
-      })
-      .toLowerCase(),
+      }),
     body("password").notEmpty().isString(),
     body("name").notEmpty().isString().trim().escape().toLowerCase(),
     body("email").notEmpty().isEmail().normalizeEmail(),
     body("gender").notEmpty().isString(),
     body("profileImage").isURL(),
-    body("phone").notEmpty(),
   ],
   viewerController.createViewer
 )
