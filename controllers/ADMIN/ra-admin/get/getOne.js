@@ -32,6 +32,11 @@ module.exports = (req, res, next) => {
    * get the single document from db
    * based on :id,
    */
+
+  /**
+   * FOR ALL GET ONE METHOD POPULATE IS PREFFERABLE, 💰💰
+   */
+
   const { resource, id } = req.params
 
   var model, select, populate, getWith
@@ -46,7 +51,7 @@ module.exports = (req, res, next) => {
         },
         {
           path: "rootUser",
-          select: "username lasLogin",
+          select: "username lasLogin needApproval",
         },
         {
           path: "approval",
@@ -57,9 +62,6 @@ module.exports = (req, res, next) => {
               select: "username role",
             },
           ],
-        },
-        {
-          path: "adminPriceRange",
         },
         {
           path: "documents",
@@ -116,6 +118,8 @@ module.exports = (req, res, next) => {
       break
     case "Tag":
       model = Tag
+      select = "name createdAt updatedAt"
+      populate = []
       break
     case "Approval":
       model = Approval
@@ -157,6 +161,13 @@ module.exports = (req, res, next) => {
       break
     case "PrivateChatPlan":
       model = PrivateChatPlan
+      select = "name description validityDays price status createdBy createdAt"
+      populate = [
+        {
+          path: "createdBy",
+          select: "username",
+        },
+      ]
       break
     default:
       /**

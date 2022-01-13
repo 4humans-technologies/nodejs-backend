@@ -1,12 +1,34 @@
+// root
+const Role = require("../../../../models/Role")
+const Permission = require("../../../../models/Permission")
+
+// userTypes
 const Model = require("../../../../models/userTypes/Model")
 const Viewer = require("../../../../models/userTypes/Viewer")
 const Staff = require("../../../../models/userTypes/Staff")
+
+// management
 const Approval = require("../../../../models/management/approval")
 const Tag = require("../../../../models/management/tag")
-const Role = require("../../../../models/Role")
-const Permission = require("../../../../models/Permission")
-const Log = require("../../../../models/log/log")
+const PriceRange = require("../../../../models/management/priceRanges")
 const Coupon = require("../../../../models/management/coupon")
+const PrivateChatPlan = require("../../../../models/management/privateChatPlan")
+
+// globals
+const AudioCall = require("../../../../models/globals/audioCall")
+const VideoCall = require("../../../../models/globals/videoCall")
+const CoinSpendHistory = require("../../../../models/globals/coinsSpendHistory")
+const CoinPurchase = require("../../../../models/globals/coinPurchase")
+const ImageAlbum = require("../../../../models/globals/ImageAlbum")
+const VideoAlbum = require("../../../../models/globals/VideosAlbum")
+const Stream = require("../../../../models/globals/Stream")
+const ModelDocuments = require("../../../../models/globals/modelDocuments")
+
+// log
+const Log = require("../../../../models/log/log")
+
+// function imports
+const paginator = require("../../../../utils/paginator")
 
 const createModel = require("./createModel")
 const createViewer = require("./createViewer")
@@ -40,15 +62,22 @@ module.exports = (req, res, next) => {
     case "Tag":
       createQuery = Tag({
         name: data.name,
-      }).save()
+      })
+        .save()
+        .then((tag) => {
+          return {
+            createdResources: tag._doc,
+            logMsg: `Tag '${tag.name}' was created!`,
+          }
+        })
       break
     case "Approval":
-      Approval({
+      createQuery = Approval({
         forModel: data.forModel,
         roleDuringApproval: req.user.role,
         by: req.user._id,
         remarks: data.remarks,
-      })
+      }).save()
       break
     case "Role":
       /**
@@ -65,52 +94,26 @@ module.exports = (req, res, next) => {
       })
         .save()
         .then((coupon) => {
-          return coupon
-          //   return Coupon.aggregate([
-          //     {
-          //       $match: { _id: coupon._id },
-          //     },
-          //     {
-          //       $lookup: {
-          //         from: "users",
-          //         foreignField: "_id",
-          //         localField: "generatedBy",
-          //         as: "generatedBy",
-          //       },
-          //     },
-          //     {
-          //       $unwind: "$generatedBy",
-          //     },
-          //     {
-          //       $lookup: {
-          //         from: "users",
-          //         foreignField: "_id",
-          //         localField: "redeemedBy",
-          //         as: "redeemedBy",
-          //       },
-          //     },
-          //     {
-          //       $unwind: "$rootUser",
-          //     },
-          //     {
-          //       $project: {
-          //         _id: 0,
-          //         id: "$_id",
-          //         generatedBy: 1,
-          //         code: 1,
-          //         forCoins: 1,
-          //         redeemed: 1,
-          //         redeemedBy: 1,
-          //         redeemDate: 1,
-          //       },
-          //     },
-          //   ])
-        })
-        .then((coupon) => {
           return {
             createdResources: coupon._doc,
-            logField: "coin value",
-            logFieldValue: data.forCoins,
+            logMsg: `A coupon for : ${data.forCoins} was created`,
+          }
+        })
+      break
+    case "PrivateChatPlan":
+      createQuery = PrivateChatPlan({
+        name: data.name,
+        description: data.description,
+        validityDays: data.validityDays,
+        price: data.price,
+        status: data.status,
+        createdBy: "61da8ea900622555940aacb7",
+      })
+        .save()
+        .then((chatPlan) => {
+          return {
+            createdResources: chatPlan._doc,
+            logMsg: `Chat plan ${chatPlan.name} was created, `,
           }
         })
       break
@@ -119,20 +122,16 @@ module.exports = (req, res, next) => {
   }
 
   createQuery
-    .then(({ createdResources, logField, logFieldValue }) => {
-      /**
-       * expecting "logField" & "logFieldValue" in the result
-       * to construct proper log string
-       */
+    .then(({ createdResources, logMsg }) => {
       return Promise.all([
         createdResources,
-        // Log({
-        //   action: `create new ${resource}, with ${logField}: ${logFieldValue}`,
-        //   by: req.user._id,
-        // }).save(),
+        Log({
+          msg: logMsg,
+          by: "61da8ea900622555940aacb7",
+        }).save(),
       ])
     })
-    .then(([createdResources, _log]) => {
+    .then(([createdResources]) => {
       /**
        * add a log entry also after  successful creation of a record
        */

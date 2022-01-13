@@ -276,41 +276,83 @@ function couponOps() {
 }
 
 function coinOps() {
+  // CoinsSpendHistory.aggregate([
+  //   {
+  //     $lookup: {
+  //       from: "models",
+  //       let: { id: "$forModel" },
+  //       pipeline: [
+  //         { $match: { $expr: { $eq: ["$_id", "$$id"] } } },
+  //         {
+  //           $lookup: {
+  //             from: "users",
+  //             let: { rootUserId: "$rootUser" },
+  //             pipeline: [
+  //               {
+  //                 $match: { $expr: { $eq: ["$_id", "$$rootUserId"] } },
+  //               },
+  //               { $project: { username: 1, _id: 0 } },
+  //             ],
+  //             as: "forModel.rootUser",
+  //           },
+  //         },
+  //         {
+  //           $project: { profileImage: 1, name: 1, _id: 0, rootUser: 1 },
+  //         },
+  //         {
+  //           $unwind: {
+  //             path: "$forModel.rootUser",
+  //             preserveNullAndEmptyArrays: true,
+  //           },
+  //         },
+  //       ],
+  //       as: "forModel",
+  //     },
+  //   },
+  //   {
+  //     $unwind: "$forModel",
+  //   },
+  // ])
   CoinsSpendHistory.aggregate([
     {
       $lookup: {
         from: "models",
-        let: { id: "$forModel" },
-        pipeline: [
-          { $match: { $expr: { $eq: ["$_id", "$$id"] } } },
-          {
-            $lookup: {
-              from: "users",
-              let: { rootUserId: "$forModel.rootUser" },
-              pipeline: [
-                {
-                  $match: { $expr: { $eq: ["$_id", "$$rootUserId"] } },
-                },
-                { $project: { username: 1, _id: 0 } },
-              ],
-              as: "forModel.rootUser",
-            },
-          },
-          {
-            $project: { profileImage: 1, name: 1, _id: 0, rootUser: 1 },
-          },
-          {
-            $unwind: {
-              path: "$forModel.rootUser",
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-        ],
+        localField: "forModel",
+        foreignField: "_id",
         as: "forModel",
       },
     },
     {
       $unwind: "$forModel",
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "forModel.rootUser",
+        foreignField: "_id",
+        as: "forModel.rootUser",
+      },
+    },
+    {
+      $unwind: "$forModel.rootUser",
+    },
+    {
+      $project: {
+        _id: 0,
+        id: "$_id",
+        forModel: {
+          profileImage: 1,
+          name: 1,
+          rootUser: {
+            username: 1,
+          },
+        },
+        time: 1,
+        sharePercent: 1,
+        tokenAmount: 1,
+        by: 1,
+        givenFor: 1,
+      },
     },
   ])
     .then((record) => {
@@ -319,8 +361,89 @@ function coinOps() {
     .catch((err) => console.log(err))
 }
 
+function testOps() {
+  Model.aggregate([
+    {
+      $project: {
+        callActivity: 0,
+        tipMenuActions: 0,
+        charges: 0,
+        pendingCalls: 0,
+        bankDetails: 0,
+        followers: 0,
+        languages: 0,
+        bio: 0,
+        tags: 0,
+        publicImages: 0,
+        publicVideos: 0,
+        privateImages: 0,
+        privateVideos: 0,
+        streams: 0,
+        videoCallHistory: 0,
+        audioCallHistory: 0,
+        approval: 0,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "rootUser",
+        foreignField: "_id",
+        as: "rootUser",
+      },
+    },
+    {
+      $unwind: "$rootUser",
+    },
+    {
+      $lookup: {
+        from: "wallets",
+        localField: "wallet",
+        foreignField: "_id",
+        as: "wallet",
+      },
+    },
+    {
+      $unwind: "$wallet",
+    },
+    {
+      $project: {
+        profileImage: 1,
+        rootUser: {
+          username: 1,
+          "meta.lastLogin": 1,
+        },
+        wallet: {
+          currentAmount: 1,
+        },
+        name: 1,
+        numberOfFollowers: 1,
+        sharePercent: 1,
+        rating: 1,
+        isStreaming: 1,
+        onCall: 1,
+        adminRemark: 1,
+      },
+    },
+    {
+      $sort: { "wallet.currentAmount": -1 },
+    },
+    {
+      $skip: 0,
+    },
+    {
+      $limit: 6,
+    },
+  ])
+    .then((records) => {
+      console.log(records)
+    })
+    .catch((err) => console.error(err))
+}
+
 // paginationByFacet()
 // createStaff()
 // modelOps()
 // couponOps()
-coinOps()
+// coinOps()
+testOps()

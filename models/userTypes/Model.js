@@ -82,7 +82,7 @@ const modelSchema = new mongoose.Schema({
   },
   tags: [
     {
-      type: mongoose.Schema.Types.ObjectId,
+      type: String,
       ref: "Tag",
     },
   ],

@@ -3,6 +3,7 @@ const Role = require("../../../../models/Role")
 const Permission = require("../../../../models/Permission")
 
 // userTypes
+const User = require("../../../../models/User")
 const Model = require("../../../../models/userTypes/Model")
 const Viewer = require("../../../../models/userTypes/Viewer")
 const Staff = require("../../../../models/userTypes/Staff")
@@ -10,9 +11,8 @@ const Staff = require("../../../../models/userTypes/Staff")
 // management
 const Approval = require("../../../../models/management/approval")
 const Tag = require("../../../../models/management/tag")
-const PriceRange = require("../../../../management/priceRanges")
-const Coupon = require("../../../../management/coupon")
-const PrivateChatPlan = require("../../../../management/privateChatPlan")
+const Coupon = require("../../../../models/management/coupon")
+const PrivateChatPlan = require("../../../../models/management/privateChatPlan")
 
 // globals
 const AudioCall = require("../../../../models/globals/audioCall")
@@ -23,9 +23,12 @@ const ImageAlbum = require("../../../../models/globals/ImageAlbum")
 const VideoAlbum = require("../../../../models/globals/VideosAlbum")
 const Stream = require("../../../../models/globals/Stream")
 const ModelDocuments = require("../../../../models/globals/modelDocuments")
+const Wallet = require("../../../../models/globals/wallet")
 
 // log
 const Log = require("../../../../models/log/log")
+
+const updateProcessors = require("./updateProcessors")
 
 module.exports = (req, res, next) => {
   /**
@@ -38,15 +41,20 @@ module.exports = (req, res, next) => {
    */
   const { resource, id } = req.params
 
-  const body = req.body
-
-  var model, select, populate
+  var processorFunc, model, processorOptions
   switch (resource) {
     case "Model":
       /**
        * do a special check if the sharePercent is being changed
        * if it's being changed then it should be in the "priceRange"
        */
+      processorFunc = updateProcessors.updateModel
+      processorOptions = {
+        requiredModels: {
+          User: User,
+          Wallet: Wallet,
+        },
+      }
       model = Model
       break
     case "Viewer":
@@ -93,6 +101,12 @@ module.exports = (req, res, next) => {
       model = CoinPurchase
       break
     case "Tag":
+      processorFunc = updateProcessors.updateTag
+      processorOptions = {
+        requiredModels: {
+          Model: Model,
+        },
+      }
       model = Tag
       break
     case "Approval":
@@ -134,26 +148,22 @@ module.exports = (req, res, next) => {
       break
     case "PrivateChatPlan":
       model = PrivateChatPlan
+      processorFunc = () => {}
+      processorOptions = {
+        requiredModels: {
+          Viewer: Viewer,
+        },
+      }
       break
     default:
       break
   }
-
-  model
-    .select(select)
-    .populate(populate)
-    .lean()
-    .findById(id)
-    .then((record) => {
-      if (record) {
-        return res.status(200).json(record)
-      } else {
-        const error = new Error(
-          `The requested ${resource} was not found, Invalid Id`
-        )
-        error.statusCode = 422
-        throw error
-      }
+  if (!processorFunc) {
+    return res.status(400).json({
+      message: "for now the server not set-up for this action",
     })
-    .catch((err) => next(err))
+  }
+  return processorFunc(model, req, res, { _id: id, ...processorOptions }).catch(
+    (err) => next(err)
+  )
 }

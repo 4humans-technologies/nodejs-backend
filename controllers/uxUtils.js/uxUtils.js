@@ -33,6 +33,17 @@ exports.getRankingOnlineModels = (req, res, next) => {
   /* onCall or streaming */
   const query = Model.find({
     isStreaming: true,
+    _id: {
+      $nin: [
+        "61da89e6cdd8ebdb2a04d00e",
+        "61dac4ddb25f7f53005abfe3",
+        "61dc75fb34f02d0b242e41e4",
+        "61dcde0934f02d0b242e481a",
+        "61dce21534f02d0b242e4842",
+        "61dc62f634f02d0b242e27f6",
+        "61daac52cdd8ebdb2a04d30d",
+      ],
+    },
   })
     .sort("rating")
     .lean()
@@ -58,6 +69,7 @@ exports.getAllModels = (req, res, next) => {
         "61dcde0934f02d0b242e481a",
         "61dce21534f02d0b242e4842",
         "61dc62f634f02d0b242e27f6",
+        "61daac52cdd8ebdb2a04d30d",
       ],
     },
   })

@@ -72,3 +72,25 @@ exports.generatePrivateContentTwinUploadUrl = (
       }
     })
 }
+
+exports.deleteImage = (url) => {
+  return s3
+    .deleteObject({
+      Bucket: bucketName,
+      key: url.substr(60),
+    })
+    .then((result) => {
+      console.info("Delete object: ", url.substr(60))
+      return result
+    })
+}
+
+exports.deleteImages = (urls = []) => {
+  /**
+   * provide the complete url without deleting the initial part
+   */
+  return s3.deleteObjects({
+    Bucket: bucketName,
+    Delete: { Objects: urls.map((key) => ({ Key: key.substr(60) })) },
+  })
+}

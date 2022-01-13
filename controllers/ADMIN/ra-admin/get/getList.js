@@ -84,37 +84,19 @@ module.exports = (req, res, next) => {
   var select, populate, model, processWith, processorFunc, processorOptions
   switch (resource) {
     case "Model":
-      processWith = "withNormal"
-      model = Model
-      select =
-        "rootUser numberOfFollowers approval name gender email dob languages tags ethnicity hairColor eyeColor bodyType skinColor callActivity dynamicFields tipMenuActions sharePercent charges minCallDuration rating isStreaming profileImage wallet"
-      populate = [
-        {
-          path: "rootUser",
-          select: "username userType needApproval meta inProcessDetails",
-        },
-        {
-          path: "wallet",
-          select: "currentAmount",
-        },
-        {
-          path: "tag",
-          select: "name",
-        },
-        {
-          path: "approval",
-          select: "name",
-        },
-      ]
+      processWith = "custom"
+      processorFunc = listProcessors.getModel
+      processorOptions = {}
       break
     case "Viewer":
-      processWith = "withNormal"
+      processWith = "normal"
       model = Viewer
       select = "name profileImage isChatPlanActive"
       populate = [
         {
           path: "rootUser",
-          select: "username userType needApproval meta inProcessDetails",
+          select:
+            "username userType needApproval meta inProcessDetails createdAt",
         },
         {
           path: "wallet",
@@ -123,8 +105,9 @@ module.exports = (req, res, next) => {
       ]
       break
     case "Tag":
+      processWith = "normal"
       model = Tag
-      select = "name"
+      select = "name createdAt updatedAt"
       populate = []
       break
     case "Approval":
@@ -156,6 +139,20 @@ module.exports = (req, res, next) => {
       processorOptions = {}
       break
     case "CoinSpendHistory":
+      processWith = "custom"
+      processorFunc = listProcessors.getCoinSpendHistories
+      processorOptions = {}
+      break
+    case "PrivateChatPlan":
+      processWith = "normal"
+      select = "name description validityDays price status createdBy createdAt"
+      populate = [
+        {
+          path: "createdBy",
+          select: "username",
+        },
+      ]
+      model = PrivateChatPlan
       break
     default:
       console.error("Default case for 'getList' reached!")
@@ -171,7 +168,7 @@ module.exports = (req, res, next) => {
       range: range,
       ...processorOptions,
     })
-  } else if (processWith === "withNormal") {
+  } else if (processWith === "normal") {
     return paginator
       .withConditionAndSendTheResponse(
         model,

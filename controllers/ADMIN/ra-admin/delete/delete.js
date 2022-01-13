@@ -1,4 +1,5 @@
 // root
+const { deleteImages } = require("../../../../utils/aws/s3")
 const Role = require("../../../../models/Role")
 const Permission = require("../../../../models/Permission")
 const User = require("../../../../models/User")
@@ -20,6 +21,7 @@ const PrivateChatPlan = require("../../../../models/management/privateChatPlan")
 const AudioCall = require("../../../../models/globals/wallet")
 const AudioCall = require("../../../../models/globals/audioCall")
 const VideoCall = require("../../../../models/globals/videoCall")
+const Wallet = require("../../../../models/globals/wallet")
 const CoinSpendHistory = require("../../../../models/globals/coinsSpendHistory")
 const CoinPurchase = require("../../../../models/globals/coinPurchase")
 const ImageAlbum = require("../../../../models/globals/ImageAlbum")
@@ -39,35 +41,55 @@ module.exports = (req, res, next) => {
    */
   const { resource, id } = req.params
 
-  var model
+  var deleteQuery
   switch (resource) {
     case "Model":
       /**
        * cascade delete: rootUser,wallet,approval,document,public Albums,?privateChats, ?privateAlbums
        * delete for other entries:remove from viewers followingList,
        */
-      Model.findById(id)
-        .select("rootUser wallet approval documents privateChats")
-        .lean()
-        .then((model) => {
+      var objectsToDelete = []
+      deleteQuery = Promise.all([
+        Model.findById(id)
+          .select(
+            "rootUser wallet approval documents privateChats profileImage publicImages publicVideos coverImage backGroundImage"
+          )
+          .lean(),
+        ModelDocuments.deleteOne({
+          _id: model.document._id,
+        }).lean(),
+      ])
+        .then(([model, documents]) => {
+          objectsToDelete.push(model.profileImage)
+          objectsToDelete.push(model.coverImage)
+          objectsToDelete.push(model.backGroundImage)
+          model.publicImages.forEach((image) => {
+            objectsToDelete.push(image)
+          })
+          model.publicVideos.forEach((image) => {
+            objectsToDelete.push(image)
+          })
+          documents.images.forEach((image) => {
+            objectsToDelete.push(image)
+          })
+
           /**
            * Complete delete of model will happen by custom script or from
            * database
            */
 
           /**
-           * model is not being deleted because i have to figure out how to
+           * how to
            * handle it's remaining reference in tokenhistories,chats,albums,calls,streams etc
            */
-          Promise.all([
-            User.updateOne(
-              {
-                _id: model.rootUser._id,
-              },
-              {
-                needApproval: true,
-              }
-            ),
+
+          return Promise.all([
+            User.findOneAndDelete({
+              _id: model.rootUser._id,
+            }).lean(),
+            Model.findOneAndDelete({
+              _id: id,
+            }).lean(),
             Wallet.deleteOne({
               _id: model.wallet._id,
             }),
@@ -77,39 +99,34 @@ module.exports = (req, res, next) => {
             ModelDocuments.deleteOne({
               _id: model.document._id,
             }),
-            Model.findOneAndUpdate(
+          ])
+        })
+        .then(([user, model]) => {
+          const theModel = {
+            ...model,
+            rootUser: {
+              ...user,
+            },
+          }
+          return Promise.all([
+            theModel,
+            Viewer.updateMany(
               {
-                _id: id,
+                following: model._id,
               },
               {
-                $unset: {
-                  approval: 1,
-                  documents: 1,
-                  followers: 1,
-                  numberOfFollowers: 1,
-                  tipMenuActions: 1,
-                  sharePercent: 1,
-                  charges: 1,
-                  minCallDuration: 1,
-                  publicImages: 1,
-                  publicVideos: 1,
-                  privateImages: 1,
-                  privateVideos: 1,
-                  videoCallHistory: 1,
-                  audioCallHistory: 1,
-                  wallet: 1,
-                  privateChats: 1,
-                },
+                $pull: { following: model._id },
               }
-            ).populate("rootuser"),
+            ),
+            deleteObjects(objectsToDelete),
           ])
-            .then(() => {
-              /* ====== */
-            })
-            .catch((err) => next(err))
         })
-        .catch((err) => next(err))
-      model = Model
+        .then(([model, viewerUpdate]) => {
+          return {
+            deletedResource: model,
+            logMsg: `Model @${theModel.rootUser.username} was deleted successfully, and ${viewerUpdate.nModified} viewers were updated successfully`,
+          }
+        })
       break
     case "Viewer":
       /**
@@ -141,72 +158,61 @@ module.exports = (req, res, next) => {
             }),
           ])
         })
-      model = Viewer
       break
     case "Stream":
       /**
        * cannot delete for now
        */
-      model = Stream
       break
     case "AudioCall":
       /**
        * cascade delete:
        * delete from other entries:
        */
-      model = AudioCall
       break
     case "VideoCall":
       /**
        * cascade delete:
        * delete from other entries:
        */
-      model = VideoCall
       break
     case "CoinSpendHistory":
       /**
        * should not be deleteable initially
        */
-      model = CoinSpendHistory
       break
     case "ModelDocuments":
       /**
        * should not be able to delete directly, should
        * be delete by system when model delete occurs, not sure have to think more ???
        */
-      model = ModelDocuments
       break
     case "CoinPurchase":
       /**
        * cannot be deleted
        */
-      model = CoinPurchase
       break
     case "Tag":
       /**
        * cascade delete: nothing
        * delete from other entries: remove from model
        */
-      model = Tag
       break
     case "Approval":
       /**
        * no direct delete, will be delete when model delete occurs
        */
-      model = Approval
       break
     case "Permission":
       /**
        * cannot be deleted
        */
-      model = Permission
       break
     case "Staff":
       /**
        * cascade delete: user,
        * delete from other entries:
        */
-      model = Staff
       break
     case "Role":
       /**
@@ -217,33 +223,38 @@ module.exports = (req, res, next) => {
     case "Log":
       /**cannot be deleted
        */
-      model = Log
       break
     case "Coupon":
       /**
        * cascade delete: nothing
        * delete from other entries:nothing
        */
-      model = Coupon
+      deleteQuery = Coupon.findOneAndDelete({
+        _id: id,
+      })
+        .lean()
+        .then((coupon) => {
+          return {
+            deletedResource: coupon,
+            logMsg: `Coupon ${coupon._id} for ${coupon.forCoins} coins, was deleted`,
+          }
+        })
       break
     case "PriceRange":
       /**
        * check before delete that this priceRange should not be already
        * currently alloted to any model
        */
-      model = PriceRange
       break
     case "ImageAlbum":
       /**
        * HAVE THINK ABOUT IT ????
        */
-      model = ImageAlbum
       break
     case "VideoAlbum":
       /**
        * HAVE THINK ABOUT IT ????
        */
-      model = VideoAlbum
       break
     case "PrivateChatPlan":
       /**
@@ -251,7 +262,16 @@ module.exports = (req, res, next) => {
        * flag this plan as "inactive" and wait for expiry of plans
        * after time delete it
        */
-      model = PrivateChatPlan
+      deleteQuery = PrivateChatPlan.findOneAndDelete({
+        _id: id,
+      })
+        .lean()
+        .then((chatPlan) => {
+          return {
+            deletedResource: chatPlan,
+            logMsg: `Chat plan ${chatPlan.name}, was deleted`,
+          }
+        })
       break
     default:
       /**
@@ -260,23 +280,40 @@ module.exports = (req, res, next) => {
       break
   }
 
-  model
-    .findOneAndDelete({
-      _id: id,
+  deleteQuery
+    .then(({ deletedResource, logMsg }) => {
+      return Promise.all([
+        deletedResource,
+        Log({
+          msg: logMsg,
+          by: "61da8ea900622555940aacb7",
+        }),
+      ])
     })
-    .then((record) => {
-      if (record) {
-        return res.status(200).json({
-          id: record._id,
-          ...record,
-        })
-      } else {
-        const error = new Error(
-          `The requested ${resource} was not found, Invalid Id`
-        )
-        error.statusCode = 422
-        throw error
-      }
+    .then(([deletedResource, _log]) => {
+      console.log(_log.msg)
+      return res.status(200).json(deletedResource)
     })
     .catch((err) => next(err))
 }
+
+// {
+//   $unset: {
+//     approval: 1,
+//     documents: 1,
+//     followers: 1,
+//     numberOfFollowers: 1,
+//     tipMenuActions: 1,
+//     sharePercent: 1,
+//     charges: 1,
+//     minCallDuration: 1,
+//     publicImages: 1,
+//     publicVideos: 1,
+//     privateImages: 1,
+//     privateVideos: 1,
+//     videoCallHistory: 1,
+//     audioCallHistory: 1,
+//     wallet: 1,
+//     privateChats: 1,
+//   },
+// }

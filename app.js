@@ -69,6 +69,7 @@ const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
 const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
 const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
 const create = require("./routes/ADMIN/ra-admin/create/create")
+const updateOne = require("./routes/ADMIN/ra-admin/update/updateOne")
 
 // CONNECT-URL--->
 if (process.env.LOCAL_DB === "false") {
@@ -221,6 +222,7 @@ app.use("/api/admin/role", roleRouter)
 app.use("/api/admin/dashboard", getLists)
 app.use("/api/admin/dashboard", getOne)
 app.use("/api/admin/dashboard", create)
+app.use("/api/admin/dashboard", updateOne)
 
 app.use("/test", testRouter)
 

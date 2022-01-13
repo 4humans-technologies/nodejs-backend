@@ -31,9 +31,6 @@ const privateChatPlanSchema = new mongoose.Schema(
   { timestamps: true }
 )
 
-const PrivateChatPlan = new mongoose.model(
-  "PrivateChatPlan",
-  privateChatPlanSchema
-)
+const PrivateChatPlan = mongoose.model("PrivateChatPlan", privateChatPlanSchema)
 
 module.exports = PrivateChatPlan

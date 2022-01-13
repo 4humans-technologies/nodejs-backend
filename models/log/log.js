@@ -1,11 +1,11 @@
 const mongoose = require("mongoose")
 
 const logSchema = new mongoose.Schema({
-  timestamp: {
-    type: Number,
+  ts: {
+    type: Date,
     default: Date,
   },
-  action: {
+  msg: {
     type: String,
     required: true,
   },
