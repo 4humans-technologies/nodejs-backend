@@ -33,6 +33,8 @@ const paginator = require("../../../../utils/paginator")
 const createModel = require("./createModel")
 const createViewer = require("./createViewer")
 
+const createProcessors = require("./createProcessors")
+
 module.exports = (req, res, next) => {
   /**
    * create a new resource, with post request
@@ -83,6 +85,12 @@ module.exports = (req, res, next) => {
       /**
        *
        */
+      createQuery = createProcessors(Role, req, res, next, {
+        requiredModels: {
+          Permission: Permission,
+        },
+      })
+
       break
     case "Coupon":
       /**

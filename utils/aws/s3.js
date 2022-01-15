@@ -91,6 +91,15 @@ exports.deleteImages = (urls = []) => {
    */
   return s3.deleteObjects({
     Bucket: bucketName,
-    Delete: { Objects: urls.map((key) => ({ Key: key.substr(60) })) },
+    Delete: {
+      Objects: urls
+        .filter((key) => {
+          if (!key) {
+            return false
+          }
+          return true
+        })
+        .map((key) => ({ Key: key.substr(60) })),
+    },
   })
 }

@@ -71,3 +71,29 @@ exports.createStaff = (Staff, req, res, next, options) => {
         .catch((finalError) => next(finalError))
     })
 }
+
+exports.createRole = (Role, req, res, next, options) => {
+  const Permission = options.requiredModels.Permission
+
+  const data = req.body
+
+  Permission.find({
+    value: { $in: data.permissions },
+  })
+    .lean()
+    .select("value")
+    .then((permissions) => {
+      return Role({
+        permissions: permissions.map((p) => p.value),
+        permissionIds: permissions.map((p) => p._id),
+        roleName: data.roleName,
+        createdBy: "61da8ea900622555940aacb7",
+      }).save()
+    })
+    .then((role) => {
+      return {
+        createdResources: role,
+        logMsg: `Role ${role.roleName} was created, with ${data.permissions.length} permissions`,
+      }
+    })
+}

@@ -18,7 +18,6 @@ const Coupon = require("../../../../models/management/coupon")
 const PrivateChatPlan = require("../../../../models/management/privateChatPlan")
 
 // globals
-const AudioCall = require("../../../../models/globals/wallet")
 const AudioCall = require("../../../../models/globals/audioCall")
 const VideoCall = require("../../../../models/globals/videoCall")
 const Wallet = require("../../../../models/globals/wallet")
@@ -42,21 +41,93 @@ module.exports = (req, res, next) => {
   const { resource, id } = req.params
 
   var deleteQuery
+  var objectsToDelete = []
   switch (resource) {
+    case "UnApprovedModel":
+      deleteQuery = Promise.all([
+        Model.findById(id)
+          .select(
+            "rootUser documents profileImage coverImage backGroundImage approval wallet"
+          )
+          .lean(),
+        ModelDocuments.findOne({
+          model: id,
+        }).lean(),
+      ])
+        .then(([model, documents]) => {
+          objectsToDelete.push(model.profileImage)
+          objectsToDelete.push(model.coverImage)
+          objectsToDelete.push(model.backGroundImage)
+
+          if (documents) {
+            documents.images.forEach((image) => {
+              objectsToDelete.push(image)
+            })
+          }
+
+          const promiseArray = [
+            User.findOneAndDelete({
+              _id: model.rootUser._id,
+            }).lean(),
+            Model.findOneAndDelete({
+              _id: id,
+            }).lean(),
+            Wallet.deleteOne({
+              _id: model.wallet._id,
+            }),
+          ]
+
+          if (model?.approval) {
+            promiseArray.push(
+              Approval.deleteOne({
+                _id: model.approval._id,
+              })
+            )
+          }
+
+          if (documents) {
+            promiseArray.push(
+              ModelDocuments.deleteOne({
+                _id: model.document._id,
+              })
+            )
+          }
+
+          return Promise.all(promiseArray)
+        })
+        .then(([user, model]) => {
+          return Promise.all([
+            {
+              id: model._id,
+              ...model,
+              rootUser: {
+                ...user,
+              },
+            },
+            deleteImages(objectsToDelete),
+          ])
+        })
+        .then(([model, objDelete]) => {
+          return {
+            deletedResource: model,
+            logMsg: `Un-Approved Model @${model.rootUser.username} was deleted.`,
+          }
+        })
+      break
     case "Model":
       /**
        * cascade delete: rootUser,wallet,approval,document,public Albums,?privateChats, ?privateAlbums
        * delete for other entries:remove from viewers followingList,
        */
-      var objectsToDelete = []
+
       deleteQuery = Promise.all([
         Model.findById(id)
           .select(
             "rootUser wallet approval documents privateChats profileImage publicImages publicVideos coverImage backGroundImage"
           )
           .lean(),
-        ModelDocuments.deleteOne({
-          _id: model.document._id,
+        ModelDocuments.findOne({
+          model: id,
         }).lean(),
       ])
         .then(([model, documents]) => {
@@ -69,9 +140,12 @@ module.exports = (req, res, next) => {
           model.publicVideos.forEach((image) => {
             objectsToDelete.push(image)
           })
-          documents.images.forEach((image) => {
-            objectsToDelete.push(image)
-          })
+
+          if (documents) {
+            documents.images.forEach((image) => {
+              objectsToDelete.push(image)
+            })
+          }
 
           /**
            * Complete delete of model will happen by custom script or from
@@ -82,8 +156,7 @@ module.exports = (req, res, next) => {
            * how to
            * handle it's remaining reference in tokenhistories,chats,albums,calls,streams etc
            */
-
-          return Promise.all([
+          const promiseArray = [
             User.findOneAndDelete({
               _id: model.rootUser._id,
             }).lean(),
@@ -96,10 +169,16 @@ module.exports = (req, res, next) => {
             Approval.deleteOne({
               _id: model.approval._id,
             }),
-            ModelDocuments.deleteOne({
-              _id: model.document._id,
-            }),
-          ])
+          ]
+
+          if (documents) {
+            promiseArray.push(
+              ModelDocuments.deleteOne({
+                _id: model.document._id,
+              })
+            )
+          }
+          return Promise.all(promiseArray)
         })
         .then(([user, model]) => {
           const theModel = {
@@ -118,13 +197,13 @@ module.exports = (req, res, next) => {
                 $pull: { following: model._id },
               }
             ),
-            deleteObjects(objectsToDelete),
+            deleteImages(objectsToDelete),
           ])
         })
-        .then(([model, viewerUpdate]) => {
+        .then(([model, viewerUpdate, objDelete]) => {
           return {
             deletedResource: model,
-            logMsg: `Model @${theModel.rootUser.username} was deleted successfully, and ${viewerUpdate.nModified} viewers were updated successfully`,
+            logMsg: `Model @${model.rootUser.username} was deleted successfully, and ${viewerUpdate.nModified} viewers were updated successfully`,
           }
         })
       break
@@ -133,11 +212,47 @@ module.exports = (req, res, next) => {
        * cascade delete: rooUser,wallet
        * delete from other entries: models following list and dec count
        */
-      Viewer.findById(id)
-        .select("rootUser wallet privateChats following")
+      deleteQuery = Viewer.findById(id)
+        .select(
+          "rootUser wallet privateChats following profileImage backgroundImage"
+        )
         .lean()
         .then((viewer) => {
+          objectsToDelete.push(viewer.profileImage)
+          objectsToDelete.push(viewer.backgroundImage)
+
+          /**
+           *
+           */
           return Promise.all([
+            Viewer.findOneAndDelete({
+              _id: viewer._id,
+            }),
+            User.findOneAndDelete({
+              _id: viewer.rootUser._id,
+            }),
+            Wallet.findOneAndDelete({
+              _id: viewer.wallet._id,
+            }),
+            ModelViewerPrivateChat.deleteOne({
+              _id: viewer.privateChats._id,
+            }),
+          ])
+        })
+        .then(([viewer, user, wallet]) => {
+          const deletedResource = {
+            id: viewer._id,
+            ...viewer._doc,
+            rootUser: {
+              ...user._doc,
+            },
+            wallet: {
+              ...wallet._doc,
+            },
+          }
+
+          return Promise.all([
+            deletedResource,
             Model.updateOne(
               {
                 id: { $in: viewer.following },
@@ -147,16 +262,14 @@ module.exports = (req, res, next) => {
                 $inc: { numberOfFollowers: -1 },
               }
             ),
-            User.deleteOne({
-              _id: viewer._id,
-            }),
-            Wallet.deleteOne({
-              _id: viewer.wallet._id,
-            }),
-            ModelViewerPrivateChat.deleteOne({
-              _id: viewer.privateChats._id,
-            }),
+            deleteImages(objectsToDelete),
           ])
+        })
+        .then(([deletedResource, modelUpdate, objDelete]) => {
+          return {
+            deletedResource,
+            logMsg: `Viewer @${deletedResource.rootUser.username} was deleted successfully!`,
+          }
         })
       break
     case "Stream":

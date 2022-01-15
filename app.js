@@ -70,6 +70,7 @@ const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
 const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
 const create = require("./routes/ADMIN/ra-admin/create/create")
 const updateOne = require("./routes/ADMIN/ra-admin/update/updateOne")
+const deleteHandlers = require("./routes/ADMIN/ra-admin/delete/delete")
 
 // CONNECT-URL--->
 if (process.env.LOCAL_DB === "false") {
@@ -208,8 +209,6 @@ app.get(
 
 // ADMIN PATHS
 /* 🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻🔻 */
-/* comment after one time use */
-/* should use script to use superadmin, via api is very dangerous */
 app.use("/api/admin/superadmin", superAdminRouter)
 /* 🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺🔺 */
 app.use("/api/admin/permissions", adminPermissions)
@@ -223,6 +222,7 @@ app.use("/api/admin/dashboard", getLists)
 app.use("/api/admin/dashboard", getOne)
 app.use("/api/admin/dashboard", create)
 app.use("/api/admin/dashboard", updateOne)
+app.use("/api/admin/dashboard", deleteHandlers)
 
 app.use("/test", testRouter)
 

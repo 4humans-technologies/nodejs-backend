@@ -3,7 +3,7 @@ const mongoose = require("mongoose")
 const viewerSchema = new mongoose.Schema({
   rootUser: {
     type: mongoose.Schema.Types.ObjectId,
-    // required: true,
+    required: true,
     ref: "User",
   },
   name: {
@@ -60,9 +60,7 @@ const viewerSchema = new mongoose.Schema({
       ref: "PrivateChatPlan",
     },
     willExpireOn: Number /* timestamp */,
-    purchasedOn: {
-      type: Date,
-    },
+    purchasedOn: Date,
   },
   privateImagesPlans: {
     type: [

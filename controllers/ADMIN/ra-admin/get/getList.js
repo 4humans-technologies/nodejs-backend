@@ -6,6 +6,7 @@ const Permission = require("../../../../models/Permission")
 const Model = require("../../../../models/userTypes/Model")
 const Viewer = require("../../../../models/userTypes/Viewer")
 const Staff = require("../../../../models/userTypes/Staff")
+const User = require("../../../../models/User")
 
 // management
 const Approval = require("../../../../models/management/approval")
@@ -83,26 +84,24 @@ module.exports = (req, res, next) => {
 
   var select, populate, model, processWith, processorFunc, processorOptions
   switch (resource) {
+    case "UnApprovedModel":
+      processWith = "custom"
+      processorFunc = listProcessors.getUnApprovedModels
+      processorOptions = {
+        requiredModels: {
+          User: User,
+        },
+      }
+      break
     case "Model":
       processWith = "custom"
       processorFunc = listProcessors.getModel
       processorOptions = {}
       break
     case "Viewer":
-      processWith = "normal"
-      model = Viewer
-      select = "name profileImage isChatPlanActive"
-      populate = [
-        {
-          path: "rootUser",
-          select:
-            "username userType needApproval meta inProcessDetails createdAt",
-        },
-        {
-          path: "wallet",
-          select: "currentAmount",
-        },
-      ]
+      processWith = "custom"
+      processorFunc = listProcessors.getViewerList
+      processorOptions = {}
       break
     case "Tag":
       processWith = "normal"
@@ -153,6 +152,11 @@ module.exports = (req, res, next) => {
         },
       ]
       model = PrivateChatPlan
+      break
+    case "Role":
+      processWith = "custom"
+      processorFunc = listProcessors.getModel
+      processorOptions = {}
       break
     default:
       console.error("Default case for 'getList' reached!")

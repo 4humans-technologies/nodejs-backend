@@ -204,10 +204,6 @@ const modelSchema = new mongoose.Schema({
       message: "{VALUE} is not an integer value",
     },
   },
-  timeForAcceptingCall: {
-    type: Number,
-    default: 30,
-  },
   rating: {
     type: Number,
     min: 0,

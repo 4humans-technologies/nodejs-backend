@@ -41,6 +41,19 @@ module.exports = (req, res, next) => {
 
   var model, select, populate, getWith
   switch (resource) {
+    case "UnApprovedModel":
+      getWith = "normal"
+      model = Model
+      select = "name profileImage email phone gender"
+      populate = [
+        {
+          path: "rootUser",
+        },
+        {
+          path: "documents",
+        },
+      ]
+      break
     case "Model":
       getWith = "normal"
       model = Model

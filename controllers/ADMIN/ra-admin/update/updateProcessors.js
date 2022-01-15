@@ -1,4 +1,5 @@
 const Log = require("../../../../models/log/log")
+const ObjectId = require("mongodb").ObjectId
 
 exports.updateTag = (Tag, req, res, options) => {
   /**
@@ -59,6 +60,14 @@ exports.updateViewer = (Viewer, req, res, options) => {
   const Wallet = options.requiredModels.wallet
 
   const { id, rootUser, wallet, ...relatedUser } = req.body
+  const unset = {}
+
+  if (!relatedUser.isChatPlanActive && relatedUser.currentChatPlan) {
+    /**
+     * admin removed the plan from viewer
+     */
+    unset["currentChatPlan"] = 1
+  }
 
   return Promise.all([
     Viewer.findOneAndUpdate(
@@ -67,6 +76,7 @@ exports.updateViewer = (Viewer, req, res, options) => {
       },
       {
         $set: relatedUser,
+        $unset: unset,
       },
       {
         new: true,
@@ -126,6 +136,16 @@ exports.updateModel = (Model, req, res, options) => {
 
   const { id, rootUser, wallet, ...relatedUser } = req.body
 
+  const rootId = rootUser._id
+  const walletId = wallet._id
+
+  /**
+   * delete id because dont want to re-set _id
+   */
+  delete rootUser._id
+  delete wallet._id
+  delete relatedUser._id
+
   return Promise.all([
     Model.findOneAndUpdate(
       {
@@ -137,10 +157,10 @@ exports.updateModel = (Model, req, res, options) => {
       {
         new: true,
       }
-    ),
+    ).lean(),
     User.findOneAndUpdate(
       {
-        _id: rootUser._id,
+        _id: rootId,
       },
       {
         $set: rootUser,
@@ -148,10 +168,10 @@ exports.updateModel = (Model, req, res, options) => {
       {
         new: true,
       }
-    ),
+    ).lean(),
     Wallet.findOneAndUpdate(
       {
-        _id: wallet._id,
+        _id: walletId,
       },
       {
         $set: wallet,
@@ -159,17 +179,17 @@ exports.updateModel = (Model, req, res, options) => {
       {
         new: true,
       }
-    ),
+    ).lean(),
   ])
     .then(([model, user, wallet]) => {
       const updatedResource = {
         id: model._id,
-        ...model._doc,
+        ...model,
         rootUser: {
-          ...user._doc,
+          ...user,
         },
         wallet: {
-          ...wallet._doc,
+          ...wallet,
         },
       }
 
@@ -189,6 +209,8 @@ exports.updateModel = (Model, req, res, options) => {
 exports.updateChatPlan = (PrivateChatPlan, req, res, options) => {
   const { id, _id, ...plan } = req.body
 
+  delete plan._id
+
   return PrivateChatPlan.findOneAndUpdate(
     {
       _id: id,
@@ -200,6 +222,7 @@ exports.updateChatPlan = (PrivateChatPlan, req, res, options) => {
       new: true,
     }
   )
+    .lean()
     .then((chatPlan) => {
       return Promise.all([
         chatPlan,
@@ -211,5 +234,87 @@ exports.updateChatPlan = (PrivateChatPlan, req, res, options) => {
     })
     .then(([chatPlan]) => {
       return res.status(200).json({ id: chatPlan._id, ...chatPlan })
+    })
+}
+
+exports.updateUnApprovedModel = (Model, req, res, options) => {
+  const { rootUser, ...relatedUser } = req.body
+
+  const User = options.requiredModels.User
+  const Approval = options.requiredModels.Approval
+
+  const rootId = rootUser._id
+
+  delete rootUser._id
+  delete relatedUser._id
+
+  const modelUpdateObj = {
+    $set: relatedUser,
+  }
+
+  const prArray = [
+    Model.findOneAndUpdate(
+      {
+        _id: relatedUser._id,
+      },
+      modelUpdateObj
+    ).lean(),
+    User.findOneAndUpdate(
+      {
+        _id: rootId,
+      },
+      {
+        $set: rootUser,
+      }
+    ).lean(),
+  ]
+
+  if (rootUser.needApproval) {
+    var approvalId = ObjectId()
+    modelUpdateObj["approval"] = approvalId
+
+    prArray.push(
+      Approval.create({
+        _id: approvalId,
+        forModel: relatedUser._id,
+        roleDuringApproval: "noRoleYet",
+        by: "61da8ea900622555940aacb7",
+        remark: "This model is approved when admin was not properly setup",
+      })
+    )
+  }
+
+  if (relatedUser.approval) {
+    /**
+     * delete previous approval, if any
+     */
+    prArray.push(Approval.deleteOne(relatedUser._id))
+  }
+
+  return Promise.all(prArray)
+    .then(([model, user, approval]) => {
+      const updatedResource = {
+        id: model._id,
+        approval: approval._doc,
+        ...model,
+        rootUser: {
+          ...user,
+        },
+      }
+
+      return Promise.all([
+        updatedResource,
+        Log({
+          // msg: `Model @${updatedResource.rootUser.username} was Approved by ${req.user.username}`,
+          msg: `Model @${
+            updatedResource.rootUser.username
+          } was Approved by ${"61da8ea900622555940aacb7"}`,
+          by: "61da8ea900622555940aacb7",
+        }).save(),
+      ])
+    })
+    .then(([updatedResources, log]) => {
+      console.log(log.msg)
+      return res.status(200).json(updatedResources)
     })
 }

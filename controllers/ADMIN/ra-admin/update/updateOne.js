@@ -43,6 +43,16 @@ module.exports = (req, res, next) => {
 
   var processorFunc, model, processorOptions
   switch (resource) {
+    case "UnApprovedModel":
+      model = Model
+      processorFunc = updateProcessors.updateUnApprovedModel
+      processorOptions = {
+        requiredModels: {
+          User: User,
+          Approval: Approval,
+        },
+      }
+      break
     case "Model":
       /**
        * do a special check if the sharePercent is being changed

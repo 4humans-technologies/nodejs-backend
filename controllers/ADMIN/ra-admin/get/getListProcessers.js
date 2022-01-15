@@ -1,5 +1,7 @@
+const Viewer = require("../../../../models/userTypes/Viewer")
 const Coupon = require("../../../../models/management/coupon")
 const Model = require("../../../../models/userTypes/Model")
+const Role = require("../../../../models/Role")
 const CoinsSpendHistory = require("../../../../models/globals/coinsSpendHistory")
 exports.getCouponList = (req, res, next, options) => {
   const pipeline = []
@@ -179,58 +181,65 @@ exports.getModel = (req, res, next, options) => {
       },
     },
     {
-      $lookup: {
-        from: "users",
-        localField: "rootUser",
-        foreignField: "_id",
-        as: "rootUser",
+      $facet: {
+        records: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "rootUser",
+              foreignField: "_id",
+              as: "rootUser",
+            },
+          },
+          {
+            $unwind: "$rootUser",
+          },
+          {
+            $lookup: {
+              from: "wallets",
+              localField: "wallet",
+              foreignField: "_id",
+              as: "wallet",
+            },
+          },
+          {
+            $unwind: "$wallet",
+          },
+          {
+            $project: {
+              profileImage: 1,
+              rootUser: {
+                username: 1,
+                "meta.lastLogin": 1,
+              },
+              wallet: {
+                currentAmount: 1,
+              },
+              name: 1,
+              numberOfFollowers: 1,
+              sharePercent: 1,
+              rating: 1,
+              isStreaming: 1,
+              onCall: 1,
+              adminRemark: 1,
+            },
+          },
+          {
+            $sort: options.sort,
+          },
+          {
+            $skip: options.skip,
+          },
+          {
+            $limit: options.limit,
+          },
+        ],
+        count: [{ $count: "totalCount" }],
       },
-    },
-    {
-      $unwind: "$rootUser",
-    },
-    {
-      $lookup: {
-        from: "wallets",
-        localField: "wallet",
-        foreignField: "_id",
-        as: "wallet",
-      },
-    },
-    {
-      $unwind: "$wallet",
-    },
-    {
-      $project: {
-        profileImage: 1,
-        rootUser: {
-          username: 1,
-          "meta.lastLogin": 1,
-        },
-        wallet: {
-          currentAmount: 1,
-        },
-        name: 1,
-        numberOfFollowers: 1,
-        sharePercent: 1,
-        rating: 1,
-        isStreaming: 1,
-        onCall: 1,
-        adminRemark: 1,
-      },
-    },
-    {
-      $sort: options.sort,
-    },
-    {
-      $skip: options.skip,
-    },
-    {
-      $limit: options.limit,
     },
   ])
-    .then((records) => {
-      const totalCount = records.length
+    .then(([{ records, count }]) => {
+      const totalCount = count[0].totalCount
       res.setHeader(
         "Content-Range",
         `${options.skip}-${
@@ -246,4 +255,231 @@ exports.getModel = (req, res, next, options) => {
       )
     })
     .catch((err) => next(err))
+}
+
+exports.getUnApprovedModels = (req, res, next, options) => {
+  const User = options.requiredModels.User
+
+  User.find({
+    needApproval: true,
+    userType: "Model",
+  })
+    .select("relatedUser")
+    .lean()
+    .then((users) => {
+      return Model.aggregate([
+        {
+          $match: {
+            _id: { $in: users.map((user) => user.relatedUser._id) },
+          },
+        },
+        {
+          $project: {
+            callActivity: 0,
+            tipMenuActions: 0,
+            pendingCalls: 0,
+            bankDetails: 0,
+            followers: 0,
+            languages: 0,
+            bio: 0,
+            publicImages: 0,
+            publicVideos: 0,
+            privateImages: 0,
+            privateVideos: 0,
+            streams: 0,
+            videoCallHistory: 0,
+            audioCallHistory: 0,
+            approval: 0,
+            bannedStates: 0,
+            hobbies: 0,
+            topic: 0,
+            dynamicFields: 0,
+            adminRemark: 0,
+            welcomeMessage: 0,
+          },
+        },
+        {
+          $facet: {
+            records: [
+              {
+                $lookup: {
+                  from: "users",
+                  localField: "rootUser",
+                  foreignField: "_id",
+                  as: "rootUser",
+                },
+              },
+              {
+                $unwind: "$rootUser",
+              },
+              {
+                $project: {
+                  profileImage: 1,
+                  email: 1,
+                  phone: 1,
+                  dob: 1,
+                  gender: 1,
+                  rootUser: {
+                    username: 1,
+                    "meta.lastLogin": 1,
+                  },
+                  name: 1,
+                  adminRemark: 1,
+                },
+              },
+              {
+                $sort: options.sort,
+              },
+              {
+                $skip: options.skip,
+              },
+              {
+                $limit: options.limit,
+              },
+            ],
+            count: [{ $count: "totalCount" }],
+          },
+        },
+      ])
+    })
+    .then(([{ records, count }]) => {
+      const totalCount = count?.[0]?.totalCount || 0
+      res.setHeader(
+        "Content-Range",
+        `${options.skip}-${
+          options.range[1] < totalCount ? options.range[1] - 1 : totalCount - 1
+        }/${totalCount}`
+      )
+
+      return res.status(200).json(
+        records.map((record) => ({
+          id: record._id,
+          ...record,
+        }))
+      )
+    })
+    .catch((err) => next(err))
+}
+
+exports.getViewerList = (req, res, next, options) => {
+  Viewer.aggregate([
+    {
+      $match: options.match,
+    },
+    {
+      $project: {
+        email: 0,
+        backgroundImage: 0,
+        hobbies: 0,
+        following: 0,
+        streams: 0,
+        currentChatPlan: 0,
+        privateImagesPlans: 0,
+        privateVideosPlans: 0,
+        videoCallHistory: 0,
+        audioCallHistory: 0,
+        pendingCalls: 0,
+        privateChats: 0,
+      },
+    },
+    {
+      $facet: {
+        records: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "rootUser",
+              foreignField: "_id",
+              as: "rootUser",
+            },
+          },
+          {
+            $unwind: "$rootUser",
+          },
+          {
+            $lookup: {
+              from: "wallets",
+              localField: "wallet",
+              foreignField: "_id",
+              as: "wallet",
+            },
+          },
+          {
+            $unwind: "$wallet",
+          },
+          {
+            $project: {
+              profileImage: 1,
+              rootUser: {
+                username: 1,
+                "meta.lastLogin": 1,
+                createdAt: 1,
+                "inProcessDetails.emailVerified": 1,
+                "inProcessDetails.phoneVerification": 1,
+              },
+              wallet: {
+                currentAmount: 1,
+              },
+              name: 1,
+              gender: 1,
+              isChatPlanActive: 1,
+            },
+          },
+          {
+            $sort: options.sort,
+          },
+          {
+            $skip: options.skip,
+          },
+          {
+            $limit: options.limit,
+          },
+        ],
+        count: [{ $count: "totalCount" }],
+      },
+    },
+  ])
+    .then(([{ records, count }]) => {
+      const totalCount = count[0].totalCount
+      res.setHeader(
+        "Content-Range",
+        `${options.skip}-${
+          options.range[1] < totalCount ? options.range[1] - 1 : totalCount - 1
+        }/${totalCount}`
+      )
+
+      return res.status(200).json(
+        records.map((record) => ({
+          id: record._id,
+          ...record,
+        }))
+      )
+    })
+    .catch((err) => next(err))
+}
+
+exports.getRoleList = (req, res, next, options) => {
+  Role.aggregate([
+    {
+      $facet: {
+        records: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "createdBy",
+              foreignField: "_id",
+              as: "createdBy",
+            },
+          },
+          {
+            $unwind: "$createdBy",
+          },
+          {
+            $match: options.match,
+          },
+        ],
+        count: [{ $count: "totalCount" }],
+      },
+    },
+  ])
 }
