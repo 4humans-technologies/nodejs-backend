@@ -79,6 +79,12 @@ module.exports = (req, res, next) => {
         {
           path: "documents",
         },
+        {
+          path: "privateImages",
+        },
+        {
+          path: "privateVideos",
+        },
       ]
       break
     case "Viewer":
@@ -145,6 +151,12 @@ module.exports = (req, res, next) => {
       break
     case "Role":
       model = Role
+      populate = [
+        {
+          path: "createdBy",
+          select: "username",
+        },
+      ]
       break
     case "Log":
       model = Log

@@ -77,8 +77,8 @@ exports.createRole = (Role, req, res, next, options) => {
 
   const data = req.body
 
-  Permission.find({
-    value: { $in: data.permissions },
+  return Permission.find({
+    _id: { $in: data.permissions },
   })
     .lean()
     .select("value")

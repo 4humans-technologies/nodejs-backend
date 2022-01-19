@@ -1,3 +1,4 @@
+const dotObject = require("dot-object")
 const Viewer = require("../../../../models/userTypes/Viewer")
 const Coupon = require("../../../../models/management/coupon")
 const Model = require("../../../../models/userTypes/Model")
@@ -74,12 +75,7 @@ exports.getCouponList = (req, res, next, options) => {
         }/${totalCount}`
       )
 
-      return res.status(200).json(
-        records.map((record) => ({
-          id: record._id,
-          ...record,
-        }))
-      )
+      return res.status(200).json(records)
     })
     .catch((err) => next(err))
 }
@@ -88,15 +84,6 @@ exports.getCoinSpendHistories = (req, res, next, options) => {
   CoinsSpendHistory.aggregate([
     {
       $match: options.match,
-    },
-    {
-      $sort: options.sort,
-    },
-    {
-      $skip: options.skip,
-    },
-    {
-      $limit: options.limit,
     },
     {
       $lookup: {
@@ -136,9 +123,25 @@ exports.getCoinSpendHistories = (req, res, next, options) => {
         givenFor: 1,
       },
     },
+    {
+      $facet: {
+        records: [
+          {
+            $sort: options.sort,
+          },
+          {
+            $skip: options.skip,
+          },
+          {
+            $limit: options.limit,
+          },
+        ],
+        count: [{ $count: "totalCount" }],
+      },
+    },
   ])
-    .then((records) => {
-      const totalCount = records.length
+    .then(([{ records, count }]) => {
+      const totalCount = count?.[0]?.totalCount || 0
       res.setHeader(
         "Content-Range",
         `${options.skip}-${
@@ -146,21 +149,13 @@ exports.getCoinSpendHistories = (req, res, next, options) => {
         }/${totalCount}`
       )
 
-      return res.status(200).json(
-        records.map((record) => ({
-          id: record._id,
-          ...record,
-        }))
-      )
+      return res.status(200).json(records)
     })
     .catch((err) => next(err))
 }
 
 exports.getModel = (req, res, next, options) => {
   Model.aggregate([
-    {
-      $match: options.match,
-    },
     {
       $project: {
         callActivity: 0,
@@ -181,49 +176,52 @@ exports.getModel = (req, res, next, options) => {
       },
     },
     {
+      $lookup: {
+        from: "users",
+        localField: "rootUser",
+        foreignField: "_id",
+        as: "rootUser",
+      },
+    },
+    {
+      $unwind: "$rootUser",
+    },
+    {
+      $lookup: {
+        from: "wallets",
+        localField: "wallet",
+        foreignField: "_id",
+        as: "wallet",
+      },
+    },
+    {
+      $unwind: "$wallet",
+    },
+    {
+      $project: {
+        profileImage: 1,
+        rootUser: {
+          username: 1,
+          "meta.lastLogin": 1,
+        },
+        wallet: {
+          currentAmount: 1,
+        },
+        name: 1,
+        numberOfFollowers: 1,
+        sharePercent: 1,
+        rating: 1,
+        isStreaming: 1,
+        onCall: 1,
+        adminRemark: 1,
+      },
+    },
+    {
+      $match: dotObject.dot(options.match),
+    },
+    {
       $facet: {
         records: [
-          {
-            $lookup: {
-              from: "users",
-              localField: "rootUser",
-              foreignField: "_id",
-              as: "rootUser",
-            },
-          },
-          {
-            $unwind: "$rootUser",
-          },
-          {
-            $lookup: {
-              from: "wallets",
-              localField: "wallet",
-              foreignField: "_id",
-              as: "wallet",
-            },
-          },
-          {
-            $unwind: "$wallet",
-          },
-          {
-            $project: {
-              profileImage: 1,
-              rootUser: {
-                username: 1,
-                "meta.lastLogin": 1,
-              },
-              wallet: {
-                currentAmount: 1,
-              },
-              name: 1,
-              numberOfFollowers: 1,
-              sharePercent: 1,
-              rating: 1,
-              isStreaming: 1,
-              onCall: 1,
-              adminRemark: 1,
-            },
-          },
           {
             $sort: options.sort,
           },
@@ -239,7 +237,7 @@ exports.getModel = (req, res, next, options) => {
     },
   ])
     .then(([{ records, count }]) => {
-      const totalCount = count[0].totalCount
+      const totalCount = count?.[0]?.totalCount || 0
       res.setHeader(
         "Content-Range",
         `${options.skip}-${
@@ -247,12 +245,7 @@ exports.getModel = (req, res, next, options) => {
         }/${totalCount}`
       )
 
-      return res.status(200).json(
-        records.map((record) => ({
-          id: record._id,
-          ...record,
-        }))
-      )
+      return res.status(200).json(records)
     })
     .catch((err) => next(err))
 }
@@ -267,10 +260,12 @@ exports.getUnApprovedModels = (req, res, next, options) => {
     .select("relatedUser")
     .lean()
     .then((users) => {
+      const myMatch = dotObject.dot(options.match)
       return Model.aggregate([
         {
           $match: {
             _id: { $in: users.map((user) => user.relatedUser._id) },
+            ...myMatch,
           },
         },
         {
@@ -351,21 +346,17 @@ exports.getUnApprovedModels = (req, res, next, options) => {
         }/${totalCount}`
       )
 
-      return res.status(200).json(
-        records.map((record) => ({
-          id: record._id,
-          ...record,
-        }))
-      )
+      return res.status(200).json(records)
     })
     .catch((err) => next(err))
 }
 
 exports.getViewerList = (req, res, next, options) => {
+  /**
+   * for viewer increase the debounce or do search on click
+   */
   Viewer.aggregate([
-    {
-      $match: options.match,
-    },
+    // should do initial viewer filter here only
     {
       $project: {
         email: 0,
@@ -383,48 +374,51 @@ exports.getViewerList = (req, res, next, options) => {
       },
     },
     {
+      $lookup: {
+        from: "users",
+        localField: "rootUser",
+        foreignField: "_id",
+        as: "rootUser",
+      },
+    },
+    {
+      $unwind: "$rootUser",
+    },
+    {
+      $lookup: {
+        from: "wallets",
+        localField: "wallet",
+        foreignField: "_id",
+        as: "wallet",
+      },
+    },
+    {
+      $unwind: "$wallet",
+    },
+    {
+      $project: {
+        profileImage: 1,
+        rootUser: {
+          username: 1,
+          "meta.lastLogin": 1,
+          createdAt: 1,
+          "inProcessDetails.emailVerified": 1,
+          "inProcessDetails.phoneVerification": 1,
+        },
+        wallet: {
+          currentAmount: 1,
+        },
+        name: 1,
+        gender: 1,
+        isChatPlanActive: 1,
+      },
+    },
+    {
+      $match: dotObject.dot(options.match),
+    },
+    {
       $facet: {
         records: [
-          {
-            $lookup: {
-              from: "users",
-              localField: "rootUser",
-              foreignField: "_id",
-              as: "rootUser",
-            },
-          },
-          {
-            $unwind: "$rootUser",
-          },
-          {
-            $lookup: {
-              from: "wallets",
-              localField: "wallet",
-              foreignField: "_id",
-              as: "wallet",
-            },
-          },
-          {
-            $unwind: "$wallet",
-          },
-          {
-            $project: {
-              profileImage: 1,
-              rootUser: {
-                username: 1,
-                "meta.lastLogin": 1,
-                createdAt: 1,
-                "inProcessDetails.emailVerified": 1,
-                "inProcessDetails.phoneVerification": 1,
-              },
-              wallet: {
-                currentAmount: 1,
-              },
-              name: 1,
-              gender: 1,
-              isChatPlanActive: 1,
-            },
-          },
           {
             $sort: options.sort,
           },
@@ -440,7 +434,7 @@ exports.getViewerList = (req, res, next, options) => {
     },
   ])
     .then(([{ records, count }]) => {
-      const totalCount = count[0].totalCount
+      const totalCount = count?.[0]?.totalCount || 0
       res.setHeader(
         "Content-Range",
         `${options.skip}-${
@@ -448,12 +442,7 @@ exports.getViewerList = (req, res, next, options) => {
         }/${totalCount}`
       )
 
-      return res.status(200).json(
-        records.map((record) => ({
-          id: record._id,
-          ...record,
-        }))
-      )
+      return res.status(200).json(records)
     })
     .catch((err) => next(err))
 }
@@ -461,25 +450,45 @@ exports.getViewerList = (req, res, next, options) => {
 exports.getRoleList = (req, res, next, options) => {
   Role.aggregate([
     {
+      $lookup: {
+        from: "users",
+        localField: "createdBy",
+        foreignField: "_id",
+        as: "createdBy",
+      },
+    },
+    {
+      $unwind: "$createdBy",
+    },
+    {
+      $match: dotObject.dot(options.match),
+    },
+    {
       $facet: {
         records: [
           {
-            $lookup: {
-              from: "users",
-              localField: "createdBy",
-              foreignField: "_id",
-              as: "createdBy",
-            },
+            $sort: options.sort,
           },
           {
-            $unwind: "$createdBy",
+            $skip: options.skip,
           },
           {
-            $match: options.match,
+            $limit: options.limit,
           },
         ],
         count: [{ $count: "totalCount" }],
       },
     },
   ])
+    .then(([{ records, count }]) => {
+      const totalCount = count?.[0]?.totalCount || 0
+      res.setHeader(
+        "Content-Range",
+        `${options.skip}-${
+          options.range[1] < totalCount ? options.range[1] - 1 : totalCount - 1
+        }/${totalCount}`
+      )
+      return res.status(200).json(records.map((r) => ({ id: r._id, ...r })))
+    })
+    .catch((err) => next(err))
 }

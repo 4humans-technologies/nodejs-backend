@@ -330,8 +330,15 @@ module.exports = (req, res, next) => {
     case "Role":
       /**
        * if deleted what about his entries, like approval,role,plans tags etc
+       * ** no active role should be deleted**
+       * have to relive all the staff from their roles and
+       * and then the role can be deleted
        */
-      model = Role
+      deleteQuery = User.find({
+        role: id,
+      })
+        .lean("username role")
+        .then(() => {})
       break
     case "Log":
       /**cannot be deleted

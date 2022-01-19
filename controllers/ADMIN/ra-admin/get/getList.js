@@ -155,8 +155,14 @@ module.exports = (req, res, next) => {
       break
     case "Role":
       processWith = "custom"
-      processorFunc = listProcessors.getModel
+      processorFunc = listProcessors.getRoleList
       processorOptions = {}
+      break
+    case "Permission":
+      processWith = "normal"
+      model = Permission
+      select = "value"
+      populate = []
       break
     default:
       console.error("Default case for 'getList' reached!")
@@ -177,9 +183,9 @@ module.exports = (req, res, next) => {
       .withConditionAndSendTheResponse(
         model,
         {
-          skip: skip,
-          sort: sort,
-          limit: limit,
+          skip: skip || 0,
+          sort: sort || "",
+          limit: limit || 24,
           range: range,
           populate: populate,
           select: select,

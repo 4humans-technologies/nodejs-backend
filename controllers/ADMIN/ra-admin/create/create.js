@@ -47,12 +47,17 @@ module.exports = (req, res, next) => {
   const { resource } = req.params
   const data = req.body
 
-  var createQuery
+  var createQuery, options
   switch (resource) {
     case "Model":
       /**
        * create new model
        */
+
+      if (data?.password !== data.conformation) {
+        createQuery = Promise.resolve("Passwords do not match!")
+        break
+      }
       createQuery = createModel(data, req)
       break
     case "Viewer":
@@ -82,15 +87,11 @@ module.exports = (req, res, next) => {
       }).save()
       break
     case "Role":
-      /**
-       *
-       */
-      createQuery = createProcessors(Role, req, res, next, {
+      createQuery = createProcessors.createRole(Role, req, res, next, {
         requiredModels: {
           Permission: Permission,
         },
       })
-
       break
     case "Coupon":
       /**
@@ -129,7 +130,7 @@ module.exports = (req, res, next) => {
       break
   }
 
-  createQuery
+  return createQuery
     .then(({ createdResources, logMsg }) => {
       return Promise.all([
         createdResources,

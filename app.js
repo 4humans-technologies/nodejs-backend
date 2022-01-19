@@ -218,10 +218,11 @@ app.use("/api/admin/coupon", couponAdminRouter)
 app.use("/api/admin/role", roleRouter)
 
 // ra-admin
-app.use("/api/admin/dashboard", getLists)
 app.use("/api/admin/dashboard", getOne)
+app.use("/api/admin/dashboard", getLists)
 app.use("/api/admin/dashboard", create)
 app.use("/api/admin/dashboard", updateOne)
+app.use("/api/admin/dashboard", deleteHandlers)
 app.use("/api/admin/dashboard", deleteHandlers)
 
 app.use("/test", testRouter)
@@ -237,14 +238,15 @@ app.use((err, req, res, next) => {
       actionStatus: err.actionStatus || "failed",
       data: err.data || "",
     })
+    return next()
   } else {
     res.status(err.statusCode).json({
       message: err.message || "error",
       actionStatus: err.actionStatus || "failed",
       data: err.data || "",
     })
+    return next()
   }
-  next()
 })
 
 mongoose

@@ -37,7 +37,7 @@ module.exports = (data, req) => {
     return
   }
 
-  return Promise.all([
+  const creationPr = [
     Wallet({
       _id: walletId,
       userType: "Model",
@@ -72,7 +72,9 @@ module.exports = (data, req) => {
       model: advRelatedUserId,
       ...data.document,
     }).save(),
-  ])
+  ]
+
+  return Promise.all(creationPr)
     .then((results) => {
       return {
         createdResource: results,

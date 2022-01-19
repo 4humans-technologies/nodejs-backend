@@ -32,7 +32,10 @@ module.exports = (req, res, next) => {
    * get the single document from db
    * based on :id,
    */
-  const { resource, ids } = req.params
+  const { resource } = req.params
+
+  const { filter } = req.query
+  const ids = filter.ids
 
   var model, select, populate
   switch (resource) {
