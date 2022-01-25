@@ -14,6 +14,7 @@ const logSchema = new mongoose.Schema({
     required: true,
     ref: "User",
   },
+  username: String,
 })
 
 const Log = mongoose.model("Log", logSchema)

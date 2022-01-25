@@ -10,7 +10,7 @@ router.post(
       .trim()
       .notEmpty()
       .isString()
-      .isLength({ min: 5, max: 24 })
+      .isLength({ min: 2, max: 32 })
       .custom((value, { req }) => {
         return User.findOne({ username: req.body.username }).then((user) => {
           if (user) {
@@ -51,6 +51,7 @@ router.post(
           "/",
           ".",
           ",",
+          " ",
         ]
         const validity = {
           isValid: true,

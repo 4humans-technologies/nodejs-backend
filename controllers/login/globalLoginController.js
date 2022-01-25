@@ -1,11 +1,6 @@
-const Viewer = require("../../models/userTypes/Viewer")
-const Model = require("../../models/userTypes/Model")
 const User = require("../../models/User")
-const Role = require("../../models/Role")
 const errorCollector = require("../../utils/controllerErrorCollector")
 const bcrypt = require("bcrypt")
-const jwt = require("jsonwebtoken")
-const jwtGenerator = require("../../utils/generateJwt")
 const generateJwt = require("../../utils/generateJwt")
 const io = require("../../socket")
 const chatEventListeners = require("../../utils/socket/chat/chatEventListeners")
@@ -67,7 +62,9 @@ exports.loginHandler = (req, res, next) => {
         const error = new Error("Invalid credentials, User does not exists")
         error.statusCode = 422
         throw error
-      } else if (user.needApproval) {
+      }
+
+      if (user.needApproval) {
         const error = new Error(
           "You are either banned or not approved to proceed!"
         )
@@ -84,12 +81,25 @@ exports.loginHandler = (req, res, next) => {
       }
 
       theUser = user
-      return Promise.all([
-        bcrypt.compare(password, user.password),
-        User.updateOne({ _id: theUser._id }, { lastLogin: new Date() }),
-      ])
+      return Promise.all([bcrypt.compare(password, user.password)])
     })
-    .then((didMatched) => {
+    .then(([didMatched, updateResult]) => {
+      if (didMatched) {
+        User.updateOne(
+          { _id: theUser._id },
+          { $set: { "meta.lastLogin": new Date() } }
+        ).catch((error) => {
+          if (updateResult.nModified !== 1) {
+            console.error(
+              "Lastlogin not updated for user: ",
+              theUser.username,
+              " due to ",
+              error
+            )
+          }
+        })
+      }
+
       if (!didMatched) {
         const error = new Error("Invalid credentials")
         error.statusCode = 422
@@ -150,7 +160,6 @@ exports.loginHandler = (req, res, next) => {
           userId: theUser._id,
           relatedUserId: theUser.relatedUser._id,
           userType: theUser.userType,
-          role: theUser?.role?.roleName || "no-role",
         }),
       })
     })

@@ -71,6 +71,7 @@ const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
 const create = require("./routes/ADMIN/ra-admin/create/create")
 const updateOne = require("./routes/ADMIN/ra-admin/update/updateOne")
 const deleteHandlers = require("./routes/ADMIN/ra-admin/delete/delete")
+const adminAuth = require("./routes/ADMIN/ra-admin/auth/auth")
 
 // CONNECT-URL--->
 if (process.env.LOCAL_DB === "false") {
@@ -223,7 +224,7 @@ app.use("/api/admin/dashboard", getLists)
 app.use("/api/admin/dashboard", create)
 app.use("/api/admin/dashboard", updateOne)
 app.use("/api/admin/dashboard", deleteHandlers)
-app.use("/api/admin/dashboard", deleteHandlers)
+app.use("/api/admin/nocrud/auth", adminAuth)
 
 app.use("/test", testRouter)
 

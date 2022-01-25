@@ -68,28 +68,13 @@ module.exports = (req, res, next) => {
       model = Model
       break
     case "Viewer":
-      populate = [
-        {
-          path: "wallet",
-          select: "currentAmount",
+      processorFunc = updateProcessors.updateViewer
+      processorOptions = {
+        requiredModels: {
+          User: User,
+          Wallet: Wallet,
         },
-        {
-          path: "rootUser",
-          select: "username lasLogin",
-        },
-        {
-          path: "currentChatPlan",
-          select: "name validityDays price",
-        },
-        {
-          path: "privateImagesPlans",
-          select: "name thumbnails price",
-        },
-        {
-          path: "privateVideosPlans",
-          select: "name thumbnails price",
-        },
-      ]
+      }
       model = Viewer
       break
     case "Stream":
@@ -126,6 +111,23 @@ module.exports = (req, res, next) => {
       model = Permission
       break
     case "Staff":
+      processorFunc = updateProcessors.updateStaff
+      processorOptions = {
+        requiredModels: {
+          User: User,
+          Role: Role,
+        },
+      }
+      delete req.body?.createdBy
+      delete req.body?.createdAt
+      delete req.body?.updatedAt
+      delete req.body?.id
+      delete req.body?.rootUser.createdAt
+      delete req.body?.rootUser.updatedAt
+      delete req.body?.rootUser.meta
+      delete req.body?.rootUser.inProcessDetails
+      delete req.body?.rootUser.password
+      req.body.rootUser.role = req.body.rootUser.role._id
       model = Staff
       break
     case "Role":
@@ -157,13 +159,13 @@ module.exports = (req, res, next) => {
       model = VideoAlbum
       break
     case "PrivateChatPlan":
-      model = PrivateChatPlan
-      processorFunc = () => {}
+      processorFunc = updateProcessors.updateChatPlan
       processorOptions = {
         requiredModels: {
           Viewer: Viewer,
         },
       }
+      model = PrivateChatPlan
       break
     default:
       break

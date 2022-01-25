@@ -2,12 +2,17 @@ require("dotenv").config()
 const mongoose = require("mongoose")
 const User = require("./models/User")
 const Model = require("./models/userTypes/Model")
+const Viewer = require("./models/userTypes/Viewer")
 const Staff = require("./models/userTypes/Staff")
 const Coupon = require("./models/management/coupon")
 const CoinsSpendHistory = require("./models/globals/coinsSpendHistory")
 const ObjectId = require("mongodb").ObjectId
 const Wallet = require("./models/globals/wallet")
+const AudioCall = require("./models/globals/audioCall")
+const VideoCall = require("./models/globals/videoCall")
+const Stream = require("./models/globals/Stream")
 const Permission = require("./models/Permission")
+const Log = require("./models/log/log")
 const generateJwt = require("./utils/generateJwt")
 const bcrypt = require("bcrypt")
 
@@ -441,9 +446,117 @@ function testOps() {
     .catch((err) => console.error(err))
 }
 
+function couponAggregation() {
+  const todayElapsed =
+    new Date().getHours() * 3600 * 1000 +
+    new Date().getMinutes() * 60 * 1000 +
+    new Date().getSeconds() * 1000
+
+  const todaysZeroHour = new Date(Date.now() - todayElapsed)
+
+  const constructCouponPipeline = (dateQueryValue) => {
+    return [
+      {
+        $match: {
+          redeemed: true,
+          //   createdAt: { $gte: new Date(Date.now() - 30 * 24 * 3600 * 1000) },
+          redeemDate: { $gte: new Date(Date.now() - 30 * 24 * 3600 * 1000) },
+        },
+      },
+      {
+        $facet: {
+          monthlyEarning: [
+            {
+              $group: {
+                _id: null,
+                sum: { $sum: "$forCoins" },
+              },
+            },
+          ],
+          monthlyCount: [
+            {
+              $count: "monthlyCount",
+            },
+          ],
+          weeklyEarning: [
+            {
+              $match: {
+                redeemDate: {
+                  $gte: new Date(Date.now() - 7 * 24 * 3600 * 1000),
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                sum: { $sum: "$forCoins" },
+              },
+            },
+          ],
+          todayEarning: [
+            {
+              $match: {
+                redeemDate: {
+                  $gte: todaysZeroHour,
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                sum: { $sum: "$forCoins" },
+              },
+            },
+          ],
+        },
+      },
+    ]
+  }
+
+  // last 20 logs
+  //   streams today
+  //   audioCalls today
+  //   videoCalls today
+  //   viewers joined today
+  //   total models
+
+  Promise.all([
+    // Log.find().sort("-_id").limit(20).lean(),
+    Stream.find({ createdAt: { $gte: todaysZeroHour } }).countDocuments(),
+    AudioCall.find({ createdAt: { $gte: todaysZeroHour } }).countDocuments(),
+    VideoCall.find({ createdAt: { $gte: todaysZeroHour } }).countDocuments(),
+    // User.find({
+    //   userType: "Viewer",
+    //   createdAt: { $gte: todaysZeroHour },
+    // })
+    //   .select("-_id username")
+    //   .sort("-_id")
+    //   .limit(10)
+    //   .lean(),
+    Model.find({
+      $or: [{ isStreaming: true }, { onCall: true }],
+    }).countDocuments(),
+    // User.find({
+    //   userType: "Model",
+    //   needApproval: true,
+    // }).lean(),
+    Model.find().countDocuments(),
+    Viewer.find().countDocuments(),
+    Coupon.aggregate(
+      constructCouponPipeline(new Date(Date.now() - 24 * 3600 * 1000))
+    ),
+  ])
+    .then((result) => {
+      console.log("sum : ", result)
+      console.log("coupon aggregation : ", result[result.length - 1][0])
+    })
+    .catch((err) => console.error(err))
+}
+
 // paginationByFacet()
 // createStaff()
 // modelOps()
 // couponOps()
 // coinOps()
-testOps()
+// testOps()
+couponAggregation()

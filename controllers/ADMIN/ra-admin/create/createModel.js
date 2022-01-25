@@ -1,6 +1,7 @@
 const Approval = require("../../../../models/management/approval")
 const Model = require("../../../../models/userTypes/Model")
 const Wallet = require("../../../../models/globals/wallet")
+const Document = require("../../../../models/globals/modelDocuments")
 const ObjectId = require("mongodb").ObjectId
 const User = require("../../../../models/User")
 
@@ -13,18 +14,6 @@ module.exports = (data, req) => {
    * key assumption on which i'am making his controller
    * 1 - document url will be sent not file object, will handle upload to s3 in the data provider itself
    * 2 - can't add followers from admin
-   * 3 - the model will be approved upfront and the creator will by the approver also
-   * 4 - "needApproval" cannot be false and email and phone be unVerified, hence have to mark email and phone as verified too
-   */
-
-  /**
-   * expected data format
-   * data = {
-   *    model:{},
-   *    user:{},
-   *    approval:{},
-   *    document:{}
-   * }
    */
 
   const walletId = new ObjectId()
@@ -33,53 +22,86 @@ module.exports = (data, req) => {
   const approvalId = new ObjectId()
   const documentId = new ObjectId()
 
-  if (true) {
-    return
-  }
+  const { wallet, rootUser, documents, approval, ...relatedUser } = data
+
+  relatedUser.dob = new Date(relatedUser.dob).getFullYear()
 
   const creationPr = [
     Wallet({
       _id: walletId,
       userType: "Model",
-      currentAmount: 0,
+      currentAmount: wallet.currentAmount,
       rootUser: advRootUserId,
       relatedUser: advRelatedUserId,
-    }).save(),
+    }),
     Model({
       _id: advRelatedUserId,
       rootUser: advRootUserId,
-      advRelatedUserId: advRelatedUserId,
-      dob: new Date().getFullYear() - data.age,
+      dob: new Date().getFullYear() - relatedUser.dob,
       wallet: walletId,
-      approval: approvalId,
-      documents: documentId,
-      ...data.model,
-    }).save(),
+      approval: !rootUser.needApproval ? approvalId : undefined,
+      documents: documents?.images ? documentId : undefined,
+      ...relatedUser,
+    }),
     User({
+      _id: advRootUserId,
       userType: "Model",
       relatedUser: advRelatedUserId,
-      ...data.user,
-    }).save(),
-    Approval({
-      _id: approvalId,
-      forModel: advRootUserId,
-      roleDuringApproval: req.user.role,
-      by: req.user._id,
-      remarks: data.approval.remarks,
-    }).save(),
-    Document({
-      _id: documentId,
-      model: advRelatedUserId,
-      ...data.document,
-    }).save(),
+      ...rootUser,
+    }),
   ]
 
-  return Promise.all(creationPr)
-    .then((results) => {
+  if (!rootUser.needApproval) {
+    creationPr.push(
+      Approval({
+        _id: approvalId,
+        forModel: advRootUserId,
+        roleDuringApproval: "manager",
+        by: req.user.userId,
+        remarks: approval.remarks,
+      })
+    )
+  }
+
+  if (documents?.images) {
+    if (documents.images.length > 0)
+      creationPr.push(
+        Document({
+          _id: documentId,
+          model: advRelatedUserId,
+          isVerified: true,
+          images: documents.images,
+        })
+      )
+  }
+
+  return Promise.all(creationPr.map((pr) => pr.save()))
+    .then(([wallet, model, user, _v1, _v2]) => {
+      const theModel = {
+        ...model._doc,
+        rootUser: {
+          ...user._doc,
+        },
+        wallet: {
+          ...wallet._doc,
+        },
+      }
+
+      if (!rootUser.needApproval) {
+        theModel.approval = _v1._doc
+      }
+
+      if (documents.images) {
+        if (!rootUser.needApproval) {
+          theModel.documents = _v2._doc
+        } else {
+          theModel.documents = _v1._doc
+        }
+      }
+
       return {
-        createdResource: results,
-        logField: "username",
-        logFieldValue: data.user.username,
+        createdResource: theModel,
+        logMsg: `Model ${theModel.rootUser.username} was created successfully`,
       }
     })
     .catch((err) => {

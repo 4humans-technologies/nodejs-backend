@@ -12,8 +12,8 @@ const couponSchema = new mongoose.Schema(
       type: String,
       required: true,
       default: () => nanoid(64),
-      index: true,
       unique: true,
+      index: true,
     },
     forCoins: {
       type: Number,
@@ -26,6 +26,7 @@ const couponSchema = new mongoose.Schema(
     redeemed: {
       type: Boolean,
       default: false,
+      index: true,
     },
     redeemedBy: {
       type: mongoose.Schema.Types.ObjectId,

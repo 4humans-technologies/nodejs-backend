@@ -79,6 +79,14 @@ module.exports = (req, res, next) => {
 
   sort = sortObj
 
+  if (Object.keys(sort).includes("id")) {
+    /**
+     * no field "id", hence change it to "_id"
+     */
+    sort["_id"] = 1
+    delete sort.id
+  }
+
   const limit = range[1] - range[0]
   const skip = range[0]
 
@@ -158,6 +166,11 @@ module.exports = (req, res, next) => {
       processorFunc = listProcessors.getRoleList
       processorOptions = {}
       break
+    case "Staff":
+      processWith = "custom"
+      processorFunc = listProcessors.getStaffList
+      processorOptions = {}
+      break
     case "Permission":
       processWith = "normal"
       model = Permission
@@ -165,7 +178,7 @@ module.exports = (req, res, next) => {
       populate = []
       break
     default:
-      console.error("Default case for 'getList' reached!")
+      console.error("Default case for 'getList' reached! for : ", resource)
       break
   }
 

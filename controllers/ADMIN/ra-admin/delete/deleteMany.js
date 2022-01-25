@@ -49,7 +49,6 @@ module.exports = (req, res, next) => {
        * cascade delete: rootUser,wallet,approval,document,public Albums,?privateChats, ?privateAlbums
        * delete for other entries:remove from viewers followingList,
        */
-
       deleteQuery = Promise.all([
         Model.findById(id)
           .select(
@@ -329,7 +328,7 @@ module.exports = (req, res, next) => {
         deletedResource,
         Log({
           msg: logMsg,
-          by: "61da8ea900622555940aacb7",
+          by: req.user.userId,
         }),
       ])
     })

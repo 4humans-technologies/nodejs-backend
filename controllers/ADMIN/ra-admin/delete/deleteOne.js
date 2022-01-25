@@ -88,7 +88,7 @@ module.exports = (req, res, next) => {
           if (documents) {
             promiseArray.push(
               ModelDocuments.deleteOne({
-                _id: model.document._id,
+                _id: documents._id,
               })
             )
           }
@@ -174,7 +174,7 @@ module.exports = (req, res, next) => {
           if (documents) {
             promiseArray.push(
               ModelDocuments.deleteOne({
-                _id: model.document._id,
+                _id: documents._id,
               })
             )
           }
@@ -322,6 +322,46 @@ module.exports = (req, res, next) => {
        */
       break
     case "Staff":
+      if (id === req.user.staffId) {
+        const error = new Error("You can not delete yourself!")
+        error.statusCode = 422
+        deleteQuery = new Promise((resolve, reject) => {
+          return reject(error)
+        })
+        break
+      }
+      deleteQuery = Promise.all([
+        Staff.findOneAndDelete({
+          _id: id,
+        }).lean(),
+        User.findOneAndDelete({
+          relatedUser: id,
+        }).lean(),
+      ])
+        .then(([staff, user]) => {
+          const deletedResource = {
+            ...staff,
+            rootUser: user,
+          }
+          return Promise.all([
+            deletedResource,
+            Log.updateMany(
+              {
+                by: user._id,
+              },
+              {
+                $set: { username: `${user.username}[Deleted]` },
+                $unset: { by: 1 },
+              }
+            ),
+          ])
+        })
+        .then(([deletedResource, logUpdateResult]) => {
+          return {
+            deletedResource: deletedResource,
+            logMsg: `Staff ${deletedResource.rootUser.username} was deleted and ${logUpdateResult.nModified} Logs were updated successfully by ${req.user.username}.`,
+          }
+        })
       /**
        * cascade delete: user,
        * delete from other entries:
@@ -337,8 +377,26 @@ module.exports = (req, res, next) => {
       deleteQuery = User.find({
         role: id,
       })
-        .lean("username role")
-        .then(() => {})
+        .lean()
+        .select("username -_id")
+        .then((users) => {
+          if (users.length !== 0) {
+            const error = new Error(
+              `${users.join(", ")} still have this role alloted to them! ⚠ ⚠`
+            )
+            error.statusCode = 422
+            throw error
+          }
+          return Role.findOneAndDelete({
+            _id: id,
+          }).lean()
+        })
+        .then((role) => {
+          return {
+            deletedResource: role,
+            logMsg: `Role ${role.roleName} was deleted`,
+          }
+        })
       break
     case "Log":
       /**cannot be deleted
@@ -406,8 +464,8 @@ module.exports = (req, res, next) => {
         deletedResource,
         Log({
           msg: logMsg,
-          by: "61da8ea900622555940aacb7",
-        }),
+          by: req.user.userId,
+        }).save(),
       ])
     })
     .then(([deletedResource, _log]) => {

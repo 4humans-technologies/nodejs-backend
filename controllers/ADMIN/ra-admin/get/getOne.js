@@ -57,6 +57,8 @@ module.exports = (req, res, next) => {
     case "Model":
       getWith = "normal"
       model = Model
+      select =
+        "-followers -currentStream -pendingCalls -privateChats -streams -audioCallHistory -videoCallHistory"
       populate = [
         {
           path: "wallet",
@@ -89,6 +91,8 @@ module.exports = (req, res, next) => {
       break
     case "Viewer":
       getWith = "normal"
+      select =
+        "-following -pendingCalls -streams -videoCallHistory -audioCallHistory -privateChats"
       populate = [
         {
           path: "wallet",
@@ -96,7 +100,7 @@ module.exports = (req, res, next) => {
         },
         {
           path: "rootUser",
-          select: "username lasLogin",
+          select: "username lasLogin createdAt inProcessDetails meta",
         },
         {
           path: "currentChatPlan",
@@ -148,6 +152,25 @@ module.exports = (req, res, next) => {
       break
     case "Staff":
       model = Staff
+      populate = [
+        {
+          path: "rootUser",
+          populate: {
+            path: "role",
+            select: "roleName",
+            options: { lean: true },
+          },
+        },
+        {
+          path: "createdBy",
+          select: "username role",
+          populate: {
+            path: "role",
+            select: "roleName",
+            options: { lean: true },
+          },
+        },
+      ]
       break
     case "Role":
       model = Role

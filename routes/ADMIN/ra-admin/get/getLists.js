@@ -2,9 +2,11 @@ const router = require("express").Router()
 const { query } = require("express-validator")
 const getList = require("../../../../controllers/ADMIN/ra-admin/get/getList")
 const getMany = require("../../../../controllers/ADMIN/ra-admin/get/getMany")
+const adminTokenVerify = require("../../../../middlewares/adminTokenVerify")
 
 router.get(
   "/:resource",
+  adminTokenVerify,
   [
     query("sort").isArray(),
     query("range").isArray(),

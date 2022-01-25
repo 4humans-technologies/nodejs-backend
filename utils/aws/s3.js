@@ -21,7 +21,7 @@ exports.generatePublicUploadUrl = (extension, type) => {
       const params = {
         Bucket: bucketName,
         Key: `${uniqueImageName}${extension}`,
-        Expires: 60,
+        Expires: 45,
         ContentType: type,
       }
       return s3.getSignedUrlPromise("putObject", params)

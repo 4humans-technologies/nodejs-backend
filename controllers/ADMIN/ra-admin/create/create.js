@@ -6,6 +6,7 @@ const Permission = require("../../../../models/Permission")
 const Model = require("../../../../models/userTypes/Model")
 const Viewer = require("../../../../models/userTypes/Viewer")
 const Staff = require("../../../../models/userTypes/Staff")
+const User = require("../../../../models/User")
 
 // management
 const Approval = require("../../../../models/management/approval")
@@ -26,6 +27,7 @@ const ModelDocuments = require("../../../../models/globals/modelDocuments")
 
 // log
 const Log = require("../../../../models/log/log")
+const bcrypt = require("bcrypt")
 
 // function imports
 const paginator = require("../../../../utils/paginator")
@@ -54,17 +56,40 @@ module.exports = (req, res, next) => {
        * create new model
        */
 
-      if (data?.password !== data.conformation) {
+      if (data.rootUser.password !== data.rootUser.conformation) {
         createQuery = Promise.resolve("Passwords do not match!")
         break
       }
-      createQuery = createModel(data, req)
+
+      createQuery = bcrypt
+        .genSalt(5)
+        .then((salt) => {
+          return bcrypt.hash(data.rootUser.password, salt)
+        })
+        .then((hashedPassword) => {
+          data.rootUser.password = hashedPassword
+          req.body.rootUser.password = hashedPassword
+          delete data.rootUser.conformation
+          return createModel(data, req)
+        })
       break
     case "Viewer":
-      /**
-       * create new viewer
-       */
-      createQuery = createViewer(data, req)
+      if (data.rootUser.password !== data.rootUser.conformation) {
+        createQuery = Promise.resolve("Passwords do not match!")
+        break
+      }
+
+      createQuery = bcrypt
+        .genSalt(5)
+        .then((salt) => {
+          return bcrypt.hash(data.rootUser.password, salt)
+        })
+        .then((hashedPassword) => {
+          data.rootUser.password = hashedPassword
+          req.body.rootUser.password = hashedPassword
+          delete data.rootUser.conformation
+          return createViewer(data, req)
+        })
       break
     case "Tag":
       createQuery = Tag({
@@ -73,7 +98,7 @@ module.exports = (req, res, next) => {
         .save()
         .then((tag) => {
           return {
-            createdResources: tag._doc,
+            createdResource: tag._doc,
             logMsg: `Tag '${tag.name}' was created!`,
           }
         })
@@ -98,13 +123,13 @@ module.exports = (req, res, next) => {
        * can put check on the max "coin value" generation by that staff
        */
       createQuery = Coupon({
-        generatedBy: "61da8ea900622555940aacb7",
+        generatedBy: req.user.userId,
         forCoins: data.forCoins,
       })
         .save()
         .then((coupon) => {
           return {
-            createdResources: coupon._doc,
+            createdResource: coupon._doc,
             logMsg: `A coupon for : ${data.forCoins} was created`,
           }
         })
@@ -116,37 +141,62 @@ module.exports = (req, res, next) => {
         validityDays: data.validityDays,
         price: data.price,
         status: data.status,
-        createdBy: "61da8ea900622555940aacb7",
+        createdBy: req.user.userId,
       })
         .save()
         .then((chatPlan) => {
           return {
-            createdResources: chatPlan._doc,
+            createdResource: chatPlan._doc,
             logMsg: `Chat plan ${chatPlan.name} was created, `,
           }
         })
       break
+    case "Staff":
+      if (data.rootUser.password !== data.rootUser.conformation) {
+        createQuery = Promise.resolve("Passwords do not match!")
+        break
+      }
+
+      createQuery = bcrypt
+        .genSalt(5)
+        .then((salt) => {
+          return bcrypt.hash(data.rootUser.password, salt)
+        })
+        .then((hashedPassword) => {
+          data.rootUser.password = hashedPassword
+          req.body.rootUser.password = hashedPassword
+          delete data.rootUser.conformation
+          return createProcessors.createStaff(Staff, req, res, next, {
+            requiredModels: {
+              User: User,
+              Role: Role,
+            },
+          })
+        })
+
+      break
     default:
+      console.log("Default case reached for ", resource)
       break
   }
 
   return createQuery
-    .then(({ createdResources, logMsg }) => {
+    .then(({ createdResource, logMsg }) => {
       return Promise.all([
-        createdResources,
+        createdResource,
         Log({
           msg: logMsg,
-          by: "61da8ea900622555940aacb7",
+          by: req.user.userId,
         }).save(),
       ])
     })
-    .then(([createdResources]) => {
+    .then(([createdResource]) => {
       /**
        * add a log entry also after  successful creation of a record
        */
       return res
         .status(201)
-        .json({ id: createdResources._id, ...createdResources })
+        .json({ id: createdResource._id, ...createdResource })
     })
     .catch((err) => next(err))
 }

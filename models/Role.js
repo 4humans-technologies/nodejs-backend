@@ -18,10 +18,10 @@ const roleSchema = new mongoose.Schema(
       required: true,
       validate: {
         validator: (v) => {
-          return validator.isAlphanumeric(v)
+          return /^[a-zA-Z0-9_]+$/.test(v)
         },
         message:
-          "Role name should not contain special characters or spaces!, only letters and numbers are allowed",
+          "Role name should contain only letters (A to Z), numbers(0 to 9) and _",
       },
     },
     createdBy: {

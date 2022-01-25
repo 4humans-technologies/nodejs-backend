@@ -43,7 +43,7 @@ exports.updateTag = (Tag, req, res, options) => {
         tag,
         Log({
           msg: `Updated ${result.nModified} models tag :${name} was updated to ${tag.name}`,
-          by: "61da8ea900622555940aacb7",
+          by: req.user.userId,
         }).save(),
       ])
     })
@@ -121,7 +121,7 @@ exports.updateViewer = (Viewer, req, res, options) => {
         updatedResource,
         Log({
           msg: `Model @${user.username} was updated successfully!`,
-          by: "61da8ea900622555940aacb7",
+          by: req.user.userId,
         }).save(),
       ])
     })
@@ -142,6 +142,17 @@ exports.updateModel = (Model, req, res, options) => {
   /**
    * delete id because dont want to re-set _id
    */
+  delete relatedUser.followers
+  delete relatedUser.currentStream
+  delete relatedUser.isStreaming
+  delete relatedUser.onCall
+  delete relatedUser.numberOfFollowers
+  delete relatedUser.pendingCalls
+  delete relatedUser.privateChats
+  delete relatedUser.streams
+  delete relatedUser.audioCallHistory
+  delete relatedUser.videoCallHistory
+
   delete rootUser._id
   delete wallet._id
   delete relatedUser._id
@@ -197,7 +208,7 @@ exports.updateModel = (Model, req, res, options) => {
         updatedResource,
         Log({
           msg: `Model @${user.username} was updated successfully!`,
-          by: "61da8ea900622555940aacb7",
+          by: req.user.userId,
         }).save(),
       ])
     })
@@ -228,7 +239,7 @@ exports.updateChatPlan = (PrivateChatPlan, req, res, options) => {
         chatPlan,
         Log({
           msg: `Chat plan ${chatPlan.name} was updated successfully!`,
-          by: "61da8ea900622555940aacb7",
+          by: req.user.userId,
         }).save(),
       ])
     })
@@ -278,7 +289,7 @@ exports.updateUnApprovedModel = (Model, req, res, options) => {
         _id: approvalId,
         forModel: relatedUser._id,
         roleDuringApproval: "noRoleYet",
-        by: "61da8ea900622555940aacb7",
+        by: req.user.userId,
         remark: "This model is approved when admin was not properly setup",
       })
     )
@@ -306,15 +317,151 @@ exports.updateUnApprovedModel = (Model, req, res, options) => {
         updatedResource,
         Log({
           // msg: `Model @${updatedResource.rootUser.username} was Approved by ${req.user.username}`,
-          msg: `Model @${
-            updatedResource.rootUser.username
-          } was Approved by ${"61da8ea900622555940aacb7"}`,
-          by: "61da8ea900622555940aacb7",
+          msg: `Model @${updatedResource.rootUser.username} was Approved by ${req.user.username}`,
+          by: req.user.userId,
         }).save(),
       ])
     })
     .then(([updatedResources, log]) => {
       console.log(log.msg)
       return res.status(200).json(updatedResources)
+    })
+}
+
+exports.updateStaff = (Staff, req, res, options) => {
+  const {
+    rootUser: { _id: rootUserId, ...rootUser },
+    ...staff
+  } = req.body
+
+  const staffId = staff._id
+
+  delete staff._id
+  delete rootUser.permissions
+
+  const Role = options.requiredModels.Role
+  const User = options.requiredModels.User
+
+  let theRole
+  return Role.findOne({
+    _id: req.body.rootUser.role,
+  })
+    .lean()
+    .then((role) => {
+      theRole = role
+      return Promise.all([
+        Staff.findOneAndUpdate(
+          {
+            _id: staffId,
+          },
+          {
+            $set: staff,
+          },
+          {
+            new: true,
+          }
+        ).lean(),
+        User.findOneAndUpdate(
+          {
+            _id: rootUserId,
+          },
+          {
+            $set: {
+              permissions: role.permissions,
+              ...rootUser,
+            },
+          },
+          {
+            new: true,
+          }
+        ).lean(),
+      ])
+    })
+    .then(([staff, user]) => {
+      staff = {
+        ...staff,
+        rootUser: {
+          ...user,
+          role: theRole,
+        },
+      }
+      return Promise.all([
+        staff,
+        Log({
+          msg: `Staff ${user.username} was updated by, ${req.user.username}`,
+          by: req.user.userId,
+        }).save(),
+      ])
+    })
+    .then(([staff]) => {
+      return res.status(200).json({
+        id: staff._id,
+        ...staff,
+      })
+    })
+}
+
+exports.updateViewer = (Viewer, req, res, options) => {
+  const {
+    wallet: { _id: walletId, ...wallet },
+    rootUser: { _id: rootId, meta, createdAt, ...rootUser },
+    ...rltdUser
+  } = req.body
+
+  const { id, _id: relatedId, ...relatedUser } = rltdUser
+
+  const User = options.requiredModels.User
+  const Wallet = options.requiredModels.Wallet
+
+  return Promise.all([
+    Viewer.findOneAndUpdate(
+      {
+        _id: relatedId,
+      },
+      {
+        $set: relatedUser,
+      },
+      { new: true }
+    ).lean(),
+    User.findOneAndUpdate(
+      {
+        _id: rootId,
+      },
+      {
+        $set: rootUser,
+      },
+      { new: true }
+    ).lean(),
+    Wallet.findOneAndUpdate(
+      {
+        _id: walletId,
+      },
+      {
+        $set: wallet,
+      },
+      { new: true }
+    ).lean(),
+  ])
+    .then(([viewer, user, wallet]) => {
+      viewer = {
+        ...viewer,
+        rootUser: {
+          ...user,
+        },
+        wallet: wallet,
+      }
+      return Promise.all([
+        viewer,
+        Log({
+          msg: `Viewer ${user.username} was updated successfully by, ${req.user.username}`,
+          by: req.user.userId,
+        }).save(),
+      ])
+    })
+    .then(([viewer]) => {
+      return res.status(200).json({
+        id: viewer._id,
+        ...viewer,
+      })
     })
 }

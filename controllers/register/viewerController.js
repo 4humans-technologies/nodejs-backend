@@ -213,7 +213,7 @@ exports.updateByUser = (req, res, next) => {
   )
     .then((viewer) => {
       if (viewer.n >= 1) {
-        res.status(200).json({
+        return res.status(200).json({
           actionStatus: "success",
           message: "Details updated successfully",
         })

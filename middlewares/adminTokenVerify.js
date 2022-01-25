@@ -1,10 +1,12 @@
 const jwt = require("jsonwebtoken")
-const User = require("../models/User")
 
 module.exports = (req, _res, next) => {
+  /**
+   * ADMINISTRATION TOKEN ONLY
+   */
   if (!req.get("Authorization")) {
     const err = new Error("No Token Found In The Header")
-    err.statusCode = 401
+    err.statusCode = 403
     throw err
 
     /**
@@ -13,14 +15,13 @@ module.exports = (req, _res, next) => {
      * it is required to have token in the request
      */
   }
-
   const token = req.get("Authorization").split(" ")[1]
   if (!token) {
     /**
      * wrong token is a clear violation, raise error
      */
     const err = new Error("token wrongly attached")
-    err.statusCode = 401
+    err.statusCode = 403
     throw err
   }
 
@@ -39,43 +40,15 @@ module.exports = (req, _res, next) => {
           throw err
         }
       }
+
       if (decodedToken) {
-        req.userId = decodedToken.userId
-        let select
-        if (decodedToken.userType === "Model") {
-          select =
-            "-followers -hobbies -bio -privateImages -streams -videoCallHistory -audioCallHistory -pendingCalls -dailyIncome -tags"
-        } else if (decodedToken.userType === "Viewer") {
-          select =
-            "-hobbies -following -streams -bio -pendingCalls -audioCallHistory -videoCallHistory"
-        } else {
-          select = ""
-        }
-        User.findById(
-          decodedToken.userId,
-          "role permissions userType needApproval relatedUser username"
-        )
-          .populate({
-            path: "relatedUser",
-            select: select,
-          })
-          .populate({
-            path: "wallet",
-            select: "currentAmount",
-          })
-          .lean()
-          .then((user) => {
-            req.user = user
-            next()
-          })
-          .catch((err) => {
-            next(err)
-          })
+        req.user = decodedToken
+        return next()
       }
     })
   } catch (err) {
     const error = new Error(err.message || "Internal server error")
     error.statusCode = 500
-    next(error)
+    return next(error)
   }
 }

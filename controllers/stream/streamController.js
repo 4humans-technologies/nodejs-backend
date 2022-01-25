@@ -335,12 +335,12 @@ exports.handleModelAcceptedCallRequest = (req, res, next) => {
                * have money to afford next complete minute
                */
               canAffordNextMinute = true
+              call.advanceCut = minCharges
             } else {
               /**
                * does not have money to afford next minute
                */
               canAffordNextMinute = false
-              call.advanceCut = minCharges
               modelTokenValidity = Math.floor(
                 (viewerWallet.currentAmount * 60) / callDoc.chargePerMin
               )
