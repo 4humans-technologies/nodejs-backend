@@ -6,10 +6,9 @@ const permissionSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    code: {
+    verbose: {
       type: String,
       required: true,
-      unique: true,
     },
   },
   {

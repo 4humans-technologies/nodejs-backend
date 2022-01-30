@@ -40,6 +40,24 @@ module.exports = (req, res, next) => {
    */
   const { resource, id } = req.params
 
+  if (!req.user.permissions.includes(`delete-${resource}`)) {
+    return Log({
+      msg: `🔴 [ALERT] ${req.user?.username} tried to delete ${resource} which he does not have permission to`,
+      by: req.user?.userId,
+    })
+      .save()
+      .then((log) => {
+        console.log(log.msg)
+        return res
+          .status(403)
+          .json({ message: `You are not authorized to delete ${resource}` })
+      })
+      .catch((err) => {
+        console.error(err)
+        return next(err)
+      })
+  }
+
   var deleteQuery
   var objectsToDelete = []
   switch (resource) {
@@ -382,7 +400,9 @@ module.exports = (req, res, next) => {
         .then((users) => {
           if (users.length !== 0) {
             const error = new Error(
-              `${users.join(", ")} still have this role alloted to them! ⚠ ⚠`
+              `${users
+                .map((user) => user.username)
+                .join(", ")} still have this role alloted to them! ⚠ ⚠`
             )
             error.statusCode = 422
             throw error

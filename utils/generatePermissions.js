@@ -16,25 +16,39 @@ exports.generatePermissionsForModel = (modelName) => {
   return Permission.insertMany([...permissionStrings])
 }
 
-exports.getPermissionsAtBulk = (all = false, modelNames = null) => {
+exports.getPermissionsAtBulk = () => {
   const permissionStrings = ["create", "read", "update", "delete"]
   const allGeneratedPermissions = []
 
-  if (all) {
-    // for (let i = 0; i < 1000; i++) {
-    allDBModelsNames.forEach((modelName) => {
-      permissionStrings.forEach((action) => {
-        const permissionString = `${action}-${modelName.toLowerCase()}`
-        allGeneratedPermissions.push({
-          value: permissionString,
-          code: generateCode(permissionString),
-        })
+  allDBModelsNames.forEach(({ name, verbose }) => {
+    permissionStrings.forEach((action) => {
+      const permissionString = `${action}-${name}`
+      allGeneratedPermissions.push({
+        value: permissionString,
+        verbose: `${action} 👉 ${verbose}`,
       })
     })
-    // }
-    // console.log("generated all entries!")
-    return allGeneratedPermissions
-  } else {
-    console.log("Bro, you have not setup for this 😏😏😏🔴")
-  }
+  })
+
+  console.log(allGeneratedPermissions)
+  return allGeneratedPermissions
 }
+
+// function a() {
+//   const permissionStrings = ["create", "read", "update", "delete"]
+//   const allGeneratedPermissions = []
+
+//   allDBModelsNames.forEach(({ name, verbose }) => {
+//     permissionStrings.forEach((action) => {
+//       const permissionString = `${action}-${name}`
+//       allGeneratedPermissions.push({
+//         value: permissionString,
+//         verbose: `${action} 👉 ${verbose}`,
+//       })
+//     })
+//   })
+
+//   console.log(allGeneratedPermissions)
+//   return allGeneratedPermissions
+// }
+// a()

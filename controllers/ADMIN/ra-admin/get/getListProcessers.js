@@ -545,7 +545,10 @@ exports.getStaffList = (req, res, next, options) => {
       },
     },
     {
-      $unwind: "$createdBy",
+      $unwind: {
+        path: "$createdBy",
+        preserveNullAndEmptyArrays: true,
+      },
     },
     {
       $lookup: {

@@ -18,6 +18,24 @@ const Stream = require("../../../../models/globals/Stream")
 const Log = require("../../../../models/log/log")
 
 exports.composeDashboard = (req, res, next) => {
+  if (!req.user.permissions.includes("view-Dashboard")) {
+    return Log({
+      msg: `🔴 [ALERT] ${req.user?.username} tried to view Dashboard which he does not have permission to`,
+      by: req.user?.userId,
+    })
+      .save()
+      .then((log) => {
+        console.log(log.msg)
+        return res
+          .status(403)
+          .json({ message: "You are not authorized to view Dashboard" })
+      })
+      .catch((err) => {
+        console.error(err)
+        return next(err)
+      })
+  }
+
   const todayElapsed =
     new Date().getHours() * 3600 * 1000 +
     new Date().getMinutes() * 60 * 1000 +
@@ -121,6 +139,7 @@ exports.composeDashboard = (req, res, next) => {
         path: "relatedUser",
         select: "name profileImage",
       })
+      .sort({ createdAt: -1 })
       .lean(),
     Model.find().countDocuments(),
     Viewer.find().countDocuments(),
@@ -139,10 +158,10 @@ exports.composeDashboard = (req, res, next) => {
         totalViewers,
         [
           {
-            monthlyEarning: [{ sum: monthlyEarning }],
-            monthlyCount: [{ monthlyCount }],
-            weeklyEarning: [{ sum: weeklyEarning }],
-            todayEarning: [{ sum: todayEarning }],
+            monthlyEarning: [monthlyEarning],
+            monthlyCount: [monthlyCount],
+            weeklyEarning: [weeklyEarning],
+            todayEarning: [todayEarning],
           },
         ],
       ] = results
@@ -156,10 +175,10 @@ exports.composeDashboard = (req, res, next) => {
           liveModels,
           totalModels,
           totalViewers,
-          monthlyEarning,
-          monthlyCount,
-          weeklyEarning,
-          todayEarning,
+          monthlyEarning: monthlyEarning?.sum || 0,
+          monthlyCount: monthlyCount?.monthlyCount || 0,
+          weeklyEarning: weeklyEarning?.sum || 0,
+          todayEarning: todayEarning?.sum || 0,
         },
         logs,
         unApprovedModels,

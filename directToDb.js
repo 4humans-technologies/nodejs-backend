@@ -15,6 +15,9 @@ const Permission = require("./models/Permission")
 const Log = require("./models/log/log")
 const generateJwt = require("./utils/generateJwt")
 const bcrypt = require("bcrypt")
+const generatePermissions = require("./utils/generatePermissions")
+const Chance = require("chance")
+const chance = new Chance()
 
 if (process.env.LOCAL_DB === "false") {
   var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@dreamgirl-mongodb-3node-blr-1-c5185824.mongo.ondigitalocean.com/${process.env.DO_MONGO_DIRECT_TEST_DB_NAME}?authSource=${process.env.DO_MONGO_AUTH_SOURCE}&replicaSet=${process.env.DO_MONGO_REPLICA_SET}&ssl=true`
@@ -559,4 +562,152 @@ function couponAggregation() {
 // couponOps()
 // coinOps()
 // testOps()
-couponAggregation()
+// couponAggregation()
+
+function addPermissionsToDb() {
+  const allPermissions = generatePermissions.getPermissionsAtBulk()
+  Permission.insertMany(allPermissions)
+    .then(() => {
+      console.log("All Permissions Added In DB")
+    })
+    .catch((err) => console.error(err))
+}
+// addPermissionsToDb()
+
+function getAllModels() {
+  const REJECTED_MODEL_IDS = ["61da89e6cdd8ebdb2a04d00e"]
+  Model.aggregate([
+    {
+      $match: {
+        _id: {
+          $nin: REJECTED_MODEL_IDS,
+        },
+      },
+    },
+    {
+      $project: {
+        rootUser: 1,
+        isStreaming: 1,
+        onCall: 1,
+        profileImage: 1,
+        rating: 1,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "rootUser",
+        as: "rootUser",
+      },
+    },
+    {
+      $unwind: "$rootUser",
+    },
+    {
+      $match: {
+        "rootUser.needApproval": false,
+      },
+    },
+    {
+      $sort: { onCall: -1, isStreaming: -1 },
+    },
+    {
+      $project: {
+        rootUser: 0,
+      },
+    },
+  ])
+    .then((allModels) => {
+      return console.log(allModels)
+    })
+    .catch((err) => console.error(err))
+}
+// getAllModels()
+
+function deleteAlertLogs() {
+  Log.find()
+    .then((logs) => {
+      const logsToDelete = []
+      logs.forEach((log) => {
+        if (log.msg.startsWith("🔴 [ALERT]")) {
+          logsToDelete.push(log)
+        }
+      })
+      return Promise.all(logsToDelete.map((log) => log.delete()))
+    })
+    .then((result) => {
+      console.log("Deleted ", result.length, " Logs!")
+    })
+    .catch((err) => console.error(err))
+}
+// deleteAlertLogs()
+
+function AddManyRandomViewers() {
+  const walletId = new ObjectId()
+  const advRootUserId = new ObjectId()
+  const advRelatedUserId = new ObjectId()
+
+  return Promise.all([
+    Wallet({
+      _id: walletId,
+      userType: "Viewer",
+      currentAmount: 389,
+      rootUser: advRootUserId,
+      relatedUser: advRelatedUserId,
+    }).save(),
+    Viewer({
+      _id: advRelatedUserId,
+      rootUser: advRootUserId,
+      wallet: walletId,
+      name: `Name_${chance.string({
+        casing: "lower",
+        length: "32",
+        alpha: true,
+        numeric: false,
+      })}`,
+      email: `${chance.string({
+        casing: "lower",
+        length: "32",
+        alpha: true,
+        numeric: false,
+      })}@thetestingdomain.com`,
+      gender: "Male",
+      profileImage:
+        "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/Ogwins7AHLpljoBStpjuiV1y.jpeg",
+      hobbies: ["dance", "sprint", "learn", "rich"],
+    }).save(),
+    User({
+      _id: advRootUserId,
+      userType: "Viewer",
+      needApproval: false,
+      relatedUser: advRelatedUserId,
+      password: "testing123",
+      username: `Name_${chance.string({
+        casing: "lower",
+        length: "48",
+        alpha: true,
+        numeric: false,
+      })}`,
+    }).save(),
+  ])
+    .then((results) => {
+      console.log("Viewer created with username: ", results[2].username)
+    })
+    .catch((err) => {
+      /**
+       * delete all the created records
+       */
+      return Promise.all([
+        Wallet.deleteOne({ _id: walletId }),
+        User.deleteOne({ _id: advRootUserId }),
+        Viewer.deleteOne({ _id: advRelatedUserId }),
+      ]).finally(() => {
+        console.error(err)
+      })
+    })
+}
+
+for (var i = 0; i < 4000; i++) {
+  AddManyRandomViewers()
+}

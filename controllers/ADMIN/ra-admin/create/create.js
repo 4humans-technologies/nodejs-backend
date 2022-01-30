@@ -47,6 +47,25 @@ module.exports = (req, res, next) => {
    */
 
   const { resource } = req.params
+
+  if (!req.user.permissions.includes(`create-${resource}`)) {
+    return Log({
+      msg: `🔴 [ALERT] ${req.user?.username} tried to create ${resource} which he does not have permission to`,
+      by: req.user?.userId,
+    })
+      .save()
+      .then((log) => {
+        console.log(log.msg)
+        return res
+          .status(403)
+          .json({ message: `You are not authorized to create ${resource}` })
+      })
+      .catch((err) => {
+        console.error(err)
+        return next(err)
+      })
+  }
+
   const data = req.body
 
   var createQuery, options

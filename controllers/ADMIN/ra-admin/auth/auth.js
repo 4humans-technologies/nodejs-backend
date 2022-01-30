@@ -52,7 +52,7 @@ exports.loginStaff = (req, res, next) => {
         },
         { $set: { "meta.lastLogin": new Date() } }
       )
-        .select("role relatedUser username")
+        .select("role relatedUser username userType")
         .populate([
           {
             path: "relatedUser",
@@ -60,7 +60,7 @@ exports.loginStaff = (req, res, next) => {
           },
           {
             path: "role",
-            select: "roleName",
+            select: "roleName permissions",
           },
         ])
         .lean()

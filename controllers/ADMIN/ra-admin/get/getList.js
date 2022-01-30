@@ -52,6 +52,24 @@ module.exports = (req, res, next) => {
 
   const { resource } = req.params
 
+  if (!req.user.permissions.includes(`read-${resource}`)) {
+    return Log({
+      msg: `🔴 [ALERT] ${req.user?.username} tried to access ${resource} which he does not have permission to`,
+      by: req.user?.userId,
+    })
+      .save()
+      .then((log) => {
+        console.log(log.msg)
+        return res
+          .status(403)
+          .json({ message: `You are not authorized to view ${resource}` })
+      })
+      .catch((err) => {
+        console.error(err)
+        return next(err)
+      })
+  }
+
   var range = JSON.parse(req.query.range || "[0, 25]")
   var sort = JSON.parse(req.query.sort || "[]")
   var filter = JSON.parse(req.query.filter || "{}")
@@ -174,7 +192,7 @@ module.exports = (req, res, next) => {
     case "Permission":
       processWith = "normal"
       model = Permission
-      select = "value"
+      select = "value verbose"
       populate = []
       break
     default:

@@ -28,6 +28,8 @@ module.exports = (data) => {
     }).save(),
     User({
       _id: advRootUserId,
+      userType: "Viewer",
+      relatedUser: advRelatedUserId,
       ...data.user,
     }).save(),
   ])

@@ -8,6 +8,8 @@ const Model = require("../../models/userTypes/Model")
 const paginator = require("../../utils/paginator")
 const io = require("../../socket")
 
+const REJECTED_MODEL_IDS = ["61da89e6cdd8ebdb2a04d00e"]
+
 exports.getStreamingModels = (req, res, next) => {
   // what about sorting order
   const qry = {
@@ -31,59 +33,113 @@ exports.getRankingOnlineModels = (req, res, next) => {
    */
 
   /* onCall or streaming */
-  const query = Model.find({
-    isStreaming: true,
-    _id: {
-      $nin: [
-        "61da89e6cdd8ebdb2a04d00e",
-        "61dac4ddb25f7f53005abfe3",
-        "61dc75fb34f02d0b242e41e4",
-        "61dcde0934f02d0b242e481a",
-        "61dce21534f02d0b242e4842",
-        "61dc62f634f02d0b242e27f6",
-        "61daac52cdd8ebdb2a04d30d",
-      ],
+  Model.aggregate([
+    {
+      $match: {
+        _id: {
+          $nin: REJECTED_MODEL_IDS,
+        },
+        $or: [{ isStreaming: true }, { onCall: true }],
+      },
     },
-  })
-    .sort("rating")
-    .lean()
-
-  paginator
-    .withNormal(
-      null,
-      query,
-      "rating onCall isStreaming profileImage bannedStates",
-      req,
-      res
-    )
+    {
+      $project: {
+        rootUser: 1,
+        isStreaming: 1,
+        onCall: 1,
+        profileImage: 1,
+        rating: 1,
+        bannedStates: 1,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "rootUser",
+        as: "rootUser",
+      },
+    },
+    {
+      $unwind: "$rootUser",
+    },
+    {
+      $match: {
+        "rootUser.needApproval": false,
+      },
+    },
+    {
+      $sort: { isStreaming: -1 },
+    },
+    {
+      $project: {
+        rootUser: 0,
+      },
+    },
+  ])
+    .then((liveModels) => {
+      return res.status(200).json({
+        actionStatus: "success",
+        resultDocs: liveModels,
+        page: 1,
+        totalMatches: liveModels.length,
+      })
+    })
     .catch((err) => next(err))
 }
 
 exports.getAllModels = (req, res, next) => {
-  const query = Model.find({
-    _id: {
-      $nin: [
-        "61da89e6cdd8ebdb2a04d00e",
-        "61dac4ddb25f7f53005abfe3",
-        "61dc75fb34f02d0b242e41e4",
-        "61dcde0934f02d0b242e481a",
-        "61dce21534f02d0b242e4842",
-        "61dc62f634f02d0b242e27f6",
-        "61daac52cdd8ebdb2a04d30d",
-      ],
+  Model.aggregate([
+    {
+      $match: {
+        _id: {
+          $nin: REJECTED_MODEL_IDS,
+        },
+      },
     },
-  })
-    .sort({ isStreaming: -1 })
-    .lean()
-
-  paginator
-    .withNormal(
-      null,
-      query,
-      "rating onCall isStreaming profileImage bannedStates",
-      req,
-      res
-    )
+    {
+      $project: {
+        rootUser: 1,
+        isStreaming: 1,
+        onCall: 1,
+        bannedStates: 1,
+        profileImage: 1,
+        rating: 1,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "rootUser",
+        as: "rootUser",
+      },
+    },
+    {
+      $unwind: "$rootUser",
+    },
+    {
+      $match: {
+        "rootUser.needApproval": false,
+      },
+    },
+    {
+      $sort: { onCall: -1, isStreaming: -1 },
+    },
+    {
+      $project: {
+        rootUser: 0,
+      },
+    },
+  ])
+    .then((allModels) => {
+      return res.status(200).json({
+        actionStatus: "success",
+        resultDocs: allModels,
+        page: 1,
+        totalMatches: allModels.length,
+      })
+    })
     .catch((err) => next(err))
 }
 

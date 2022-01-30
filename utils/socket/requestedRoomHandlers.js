@@ -15,7 +15,7 @@ module.exports = function requestRoomHandlers(client) {
         } else {
           /* miscellaneous behaviour*/
           console.log(
-            "miscellaneous behaviour trying to join invalid room >> ",
+            "miscellaneous behaviour Un-Authed trying to join invalid room >> ",
             rooms
           )
         }
@@ -28,7 +28,7 @@ module.exports = function requestRoomHandlers(client) {
             } else {
               /* miscellaneous behaviour, why joining someone elses room*/
               console.log(
-                "miscellaneous behaviour trying to join invalid room >> ",
+                "miscellaneous behaviour Authed trying to join invalid room >> ",
                 rooms[i]
               )
             }

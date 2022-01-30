@@ -41,6 +41,24 @@ module.exports = (req, res, next) => {
    */
   const { resource, id } = req.params
 
+  if (!req.user.permissions.includes(`update-${resource}`)) {
+    return Log({
+      msg: `🔴 [ALERT] ${req.user?.username} tried to update ${resource} which he does not have permission to`,
+      by: req.user?.userId,
+    })
+      .save()
+      .then((log) => {
+        console.log(log.msg)
+        return res
+          .status(403)
+          .json({ message: `You are not authorized to update ${resource}` })
+      })
+      .catch((err) => {
+        console.error(err)
+        return next(err)
+      })
+  }
+
   var processorFunc, model, processorOptions
   switch (resource) {
     case "UnApprovedModel":
@@ -131,6 +149,13 @@ module.exports = (req, res, next) => {
       model = Staff
       break
     case "Role":
+      processorFunc = updateProcessors.updateRole
+      processorOptions = {
+        requiredModels: {
+          User: User,
+          Permission: Permission,
+        },
+      }
       model = Role
       break
     case "Log":
@@ -147,7 +172,7 @@ module.exports = (req, res, next) => {
        */
 
       model = Coupon
-      Coupon.findOneAndUpdate(body)
+      // Coupon.findOneAndUpdate(body)
       break
     case "PriceRange":
       model = PriceRange

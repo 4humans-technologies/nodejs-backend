@@ -465,3 +465,106 @@ exports.updateViewer = (Viewer, req, res, options) => {
       })
     })
 }
+
+exports.updateRole = (Role, req, res, options) => {
+  const { _id } = options
+
+  const User = options.requiredModels.User
+  const Permission = options.requiredModels.Permission
+
+  const {
+    _id: roleId,
+    id,
+    createdAt,
+    updatedAt,
+    permissions,
+    createdBy,
+    ...role
+  } = req.body
+
+  if (role.permissionIds) {
+    /**
+     * if roles permissions were altered
+     */
+    let permissionsValues
+    let permissionIds
+    return Permission.find({
+      _id: { $in: role.permissionIds },
+    })
+      .lean()
+      .then((permissions) => {
+        permissionsValues = permissions.map((pr) => pr.value)
+        permissionIds = permissions.map((pr) => pr._id)
+        return Role.findOneAndUpdate(
+          {
+            _id: _id,
+          },
+          {
+            $set: {
+              permissions: permissionsValues,
+              permissionIds: permissionIds,
+              ...role,
+            },
+          },
+          {
+            new: true,
+          }
+        ).lean()
+      })
+      .then((role) => {
+        return Promise.all([
+          role,
+          User.updateMany(
+            { role: _id },
+            {
+              permissions: permissionsValues,
+            }
+          ),
+        ])
+      })
+      .then(([role, updateResult]) => {
+        return Promise.all([
+          role,
+          Log({
+            msg: `Role ${role.roleName} was updated & ${updateResult.nModified} staff were updated, by ${req.user.username}`,
+            by: req.user.userId,
+          }).save(),
+        ])
+      })
+      .then(([role]) => {
+        return res.status(200).json({
+          id: role._id,
+          ...role,
+        })
+      })
+  } else {
+    /**
+     * if role's permissions were not altered
+     */
+    return Role.findOneAndUpdate(
+      {
+        _id: _id,
+      },
+      {
+        $set: role,
+      }
+    )
+      .lean()
+      .then(prevRole => {
+        return Promise.all([
+          prevRole,
+          Log({
+            msg: `Role ${prevRole.roleName} was updated to ${role.roleName}, by ${req.user.username}`,
+            by: req.user.userId,
+          }).save(),
+        ])
+      })
+      .then(([prevRole]) => {
+        return res.status(200).json({
+          id: prevRole._id,
+          ...prevRole,
+          roleName: role.roleName,
+        })
+      })
+  }
+}

@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken")
-
+const Role = require("../models/Role")
 module.exports = (req, _res, next) => {
   /**
    * ADMINISTRATION TOKEN ONLY
@@ -43,7 +43,14 @@ module.exports = (req, _res, next) => {
 
       if (decodedToken) {
         req.user = decodedToken
-        return next()
+        return Role.findById(req.user.role)
+          .select("permissions roleName")
+          .lean()
+          .then((role) => {
+            req.user.permissions = role.permissions
+            return next()
+          })
+          .catch((err) => next(err))
       }
     })
   } catch (err) {

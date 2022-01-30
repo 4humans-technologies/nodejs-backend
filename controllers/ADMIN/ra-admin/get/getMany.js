@@ -34,10 +34,10 @@ module.exports = (req, res, next) => {
    */
   const { resource } = req.params
 
-  const { filter } = req.query
-  const ids = filter.ids
+  const filter = JSON.parse(req.query.filter)
+  const ids = filter?.ids || filter.id
 
-  var model, select, populate
+  var model, select, populate, findQry
   switch (resource) {
     case "Model":
       model = Model
@@ -84,6 +84,9 @@ module.exports = (req, res, next) => {
       model = CoinPurchase
       break
     case "Tag":
+      findQry = {
+        name: ids,
+      }
       model = Tag
       break
     case "Approval":
@@ -91,6 +94,7 @@ module.exports = (req, res, next) => {
       break
     case "Permission":
       model = Permission
+      select = "value verbose"
       break
     case "Staff":
       model = Staff
@@ -124,18 +128,17 @@ module.exports = (req, res, next) => {
   }
 
   model
-    .find({
-      _id: { $in: ids },
-    })
+    .find(
+      findQry || {
+        _id: { $in: ids },
+      }
+    )
     .select(select)
     .populate(populate)
     .lean()
-    .then((record) => {
-      if (record) {
-        return res.status(200).json({
-          id: record._id,
-          ...record,
-        })
+    .then((records) => {
+      if (records) {
+        return res.status(200).json(records)
       } else {
         const error = new Error(
           `The requested ${resource} was not found, Invalid Id`

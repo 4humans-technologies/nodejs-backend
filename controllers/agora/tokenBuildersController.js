@@ -746,14 +746,14 @@ exports.generateRtcTokenUnauthed = (req, res, next) => {
                         } else {
                           /* err */
                           console.error("Redis get/set error", err)
-                          next(err)
+                          return next(err)
                         }
                       }
                     )
                   } else {
                     /* err */
                     console.error("Redis get/set error", err)
-                    next(err)
+                    return next(err)
                   }
                 }
               )
