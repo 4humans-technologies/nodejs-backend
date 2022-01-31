@@ -74,13 +74,13 @@ const deleteHandlers = require("./routes/ADMIN/ra-admin/delete/delete")
 const adminAuth = require("./routes/ADMIN/ra-admin/auth/auth")
 
 // CONNECT-URL--->
-if (process.env.LOCAL_DB === "false") {
-  var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@dreamgirl-mongodb-3node-blr-1-c5185824.mongo.ondigitalocean.com/${process.env.DO_MONGO_DB_NAME}?authSource=${process.env.DO_MONGO_AUTH_SOURCE}&replicaSet=${process.env.DO_MONGO_REPLICA_SET}&ssl=true`
-  // CONNECT_URL = `mongodb+srv://${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_USER}:${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_PASS}@nodejs.fsqgg.mongodb.net/${process.env.DB_NAME}?w=majority`
-} else {
-  // CONNECT_URL = `mongodb://192.168.1.104:27017/${process.env.DB_NAME}`;
-  var CONNECT_URL = `mongodb://localhost:27017/${process.env.DB_NAME}`
-}
+// if (process.env.LOCAL_DB === "false") {
+//   var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@dreamgirl-mongodb-3node-blr-1-c5185824.mongo.ondigitalocean.com/dreamgirl_dev?authSource=${process.env.DO_MONGO_AUTH_SOURCE}&replicaSet=${process.env.DO_MONGO_REPLICA_SET}&ssl=true`
+//   // CONNECT_URL = `mongodb+srv://${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_USER}:${process.env.NODE_TODO_MONGO_ATLAS_ROHIT_PASS}@nodejs.fsqgg.mongodb.net/${process.env.DB_NAME}?w=majority`
+// } else {
+var CONNECT_URL = `mongodb://192.168.1.104:27017/${process.env.DB_NAME}`
+//   var CONNECT_URL = `mongodb://0.0.0.0:27017/${process.env.DO_MONGO_DIRECT_TEST_DB_NAME}`
+// }
 
 app.use((req, res, next) => {
   if (process.env.RUN_ENV === "windows") {
@@ -89,9 +89,6 @@ app.use((req, res, next) => {
     const allowedOrigins = [
       "https://dreamgirllive.com",
       "https://www.dreamgirllive.com",
-      "http://localhost:3000",
-      "https://proxy-dg-admin-git-main-consciousprogramer.vercel.app",
-      "https://proxy-dg-admin.vercel.app",
     ]
     const origin = req.headers.origin
     if (allowedOrigins.includes(origin)) {
@@ -271,9 +268,7 @@ mongoose
   })
   .then(() => {
     console.log("============== CONNECTED TO MongoDB =============")
-    const server = app.listen(process.env.PORT || 8080, () =>
-      console.log("Listening on : " + process.env.PORT)
-    )
+    const server = app.listen(8000, () => console.log("Listening on : " + 8000))
     const socketOptions = {
       cors: {
         origin: [

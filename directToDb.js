@@ -1,3 +1,4 @@
+const dotObject = require("dot-object")
 require("dotenv").config()
 const mongoose = require("mongoose")
 const User = require("./models/User")
@@ -39,7 +40,7 @@ mongoose
     readPreference: process.env.DO_READ_PREFERENCE,
   })
   .then(() => {
-    console.log("============== CONNECTED TO MongoDB =============")
+    // console.log("============== CONNECTED TO MongoDB =============")
   })
 
 function findAllUsers() {
@@ -644,19 +645,27 @@ function deleteAlertLogs() {
 // deleteAlertLogs()
 
 function AddManyRandomViewers() {
-  const walletId = new ObjectId()
-  const advRootUserId = new ObjectId()
-  const advRelatedUserId = new ObjectId()
+  const walletData = []
+  const viewerData = []
+  const userData = []
 
-  return Promise.all([
-    Wallet({
+  console.log("Started Generating Data")
+  const DocCount = 50_000
+  const startTime = Date.now()
+  for (var i = 0; i < DocCount; i++) {
+    const walletId = new ObjectId()
+    const advRootUserId = new ObjectId()
+    const advRelatedUserId = new ObjectId()
+
+    walletData.push({
       _id: walletId,
       userType: "Viewer",
       currentAmount: 389,
       rootUser: advRootUserId,
       relatedUser: advRelatedUserId,
-    }).save(),
-    Viewer({
+    })
+
+    viewerData.push({
       _id: advRelatedUserId,
       rootUser: advRootUserId,
       wallet: walletId,
@@ -676,8 +685,9 @@ function AddManyRandomViewers() {
       profileImage:
         "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/Ogwins7AHLpljoBStpjuiV1y.jpeg",
       hobbies: ["dance", "sprint", "learn", "rich"],
-    }).save(),
-    User({
+    })
+
+    userData.push({
       _id: advRootUserId,
       userType: "Viewer",
       needApproval: false,
@@ -689,25 +699,311 @@ function AddManyRandomViewers() {
         alpha: true,
         numeric: false,
       })}`,
-    }).save(),
+    })
+  }
+
+  console.log("All data generated in : ", Date.now() - startTime + "ms")
+
+  // return Promise.all([
+  //   Wallet({
+  //     _id: walletId,
+  //     userType: "Viewer",
+  //     currentAmount: 389,
+  //     rootUser: advRootUserId,
+  //     relatedUser: advRelatedUserId,
+  //   }).save(),
+  //   Viewer({
+  //     _id: advRelatedUserId,
+  //     rootUser: advRootUserId,
+  //     wallet: walletId,
+  //     name: `Name_${chance.string({
+  //       casing: "lower",
+  //       length: "32",
+  //       alpha: true,
+  //       numeric: false,
+  //     })}`,
+  //     email: `${chance.string({
+  //       casing: "lower",
+  //       length: "32",
+  //       alpha: true,
+  //       numeric: false,
+  //     })}@thetestingdomain.com`,
+  //     gender: "Male",
+  //     profileImage:
+  //       "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/Ogwins7AHLpljoBStpjuiV1y.jpeg",
+  //     hobbies: ["dance", "sprint", "learn", "rich"],
+  //   }).save(),
+  //   User({
+  //     _id: advRootUserId,
+  //     userType: "Viewer",
+  //     needApproval: false,
+  //     relatedUser: advRelatedUserId,
+  //     password: "testing123",
+  //     username: `Name_${chance.string({
+  //       casing: "lower",
+  //       length: "48",
+  //       alpha: true,
+  //       numeric: false,
+  //     })}`,
+  //   }).save(),
+  // ])
+
+  const mongoStart = Date.now()
+  console.log("Adding in mongodb")
+  return Promise.all([
+    Wallet.insertMany(walletData),
+    Viewer.insertMany(viewerData),
+    User.insertMany(userData),
   ])
-    .then((results) => {
-      console.log("Viewer created with username: ", results[2].username)
+    .then(() => {
+      // console.log("Results : ", results)
+      console.log(
+        "All " + DocCount + " docs added in: ",
+        Date.now() - mongoStart + "ms"
+      )
     })
     .catch((err) => {
-      /**
-       * delete all the created records
-       */
-      return Promise.all([
-        Wallet.deleteOne({ _id: walletId }),
-        User.deleteOne({ _id: advRootUserId }),
-        Viewer.deleteOne({ _id: advRelatedUserId }),
-      ]).finally(() => {
-        console.error(err)
-      })
+      console.error(err)
     })
 }
 
-for (var i = 0; i < 4000; i++) {
-  AddManyRandomViewers()
+// AddManyRandomViewers()
+
+const getViewerList = (req, res, next, options) => {
+  /**
+   * for viewer increase the debounce or do search on click
+   */
+  Viewer.aggregate([
+    {
+      $project: {
+        email: 0,
+        backgroundImage: 0,
+        hobbies: 0,
+        following: 0,
+        streams: 0,
+        currentChatPlan: 0,
+        privateImagesPlans: 0,
+        privateVideosPlans: 0,
+        videoCallHistory: 0,
+        audioCallHistory: 0,
+        pendingCalls: 0,
+        privateChats: 0,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "rootUser",
+        foreignField: "_id",
+        as: "rootUser",
+      },
+    },
+    {
+      $unwind: "$rootUser",
+    },
+    {
+      $lookup: {
+        from: "wallets",
+        localField: "wallet",
+        foreignField: "_id",
+        as: "wallet",
+      },
+    },
+    {
+      $unwind: "$wallet",
+    },
+    {
+      $project: {
+        profileImage: 1,
+        rootUser: {
+          username: 1,
+          "meta.lastLogin": 1,
+          createdAt: 1,
+          "inProcessDetails.emailVerified": 1,
+          "inProcessDetails.phoneVerification": 1,
+        },
+        wallet: {
+          currentAmount: 1,
+        },
+        name: 1,
+        gender: 1,
+        isChatPlanActive: 1,
+      },
+    },
+    {
+      $match: dotObject.dot(options.match),
+    },
+    {
+      $facet: {
+        records: [
+          {
+            $sort: options.sort,
+          },
+          {
+            $skip: options.skip,
+          },
+          {
+            $limit: options.limit,
+          },
+        ],
+        count: [{ $count: "totalCount" }],
+      },
+    },
+  ])
+    .then(([{ records, count }]) => {
+      const totalCount = count?.[0]?.totalCount || 0
+      res.setHeader(
+        "Content-Range",
+        `${options.skip}-${
+          options.range[1] < totalCount ? options.range[1] - 1 : totalCount - 1
+        }/${totalCount}`
+      )
+
+      return res.status(200).json(records)
+    })
+    .catch((err) => next(err))
 }
+
+exports.getRoleList = (req, res, next, options) => {
+  Role.aggregate([
+    {
+      $lookup: {
+        from: "users",
+        localField: "createdBy",
+        foreignField: "_id",
+        as: "createdBy",
+      },
+    },
+    {
+      $unwind: "$createdBy",
+    },
+    {
+      $match: dotObject.dot(options.match),
+    },
+    {
+      $facet: {
+        records: [
+          {
+            $sort: options.sort,
+          },
+          {
+            $skip: options.skip,
+          },
+          {
+            $limit: options.limit,
+          },
+        ],
+        count: [{ $count: "totalCount" }],
+      },
+    },
+  ])
+    .then(([{ records, count }]) => {
+      const totalCount = count?.[0]?.totalCount || 0
+      res.setHeader(
+        "Content-Range",
+        `${options.skip}-${
+          options.range[1] < totalCount ? options.range[1] - 1 : totalCount - 1
+        }/${totalCount}`
+      )
+      return res.status(200).json(records.map((r) => ({ id: r._id, ...r })))
+    })
+    .catch((err) => next(err))
+}
+
+const getStaffList = () => {
+  console.log("Fetching viewers...")
+  const startTime = Date.now()
+  const LIMIT = 20
+  const options = {
+    match: {},
+    sort: { id: 1 },
+    skip: 60000 * LIMIT,
+    limit: LIMIT,
+  }
+
+  Viewer.aggregate([
+    // {
+    //   $project: {
+    //     email: 0,
+    //     backgroundImage: 0,
+    //     hobbies: 0,
+    //     following: 0,
+    //     streams: 0,
+    //     currentChatPlan: 0,
+    //     privateImagesPlans: 0,
+    //     privateVideosPlans: 0,
+    //     videoCallHistory: 0,
+    //     audioCallHistory: 0,
+    //     pendingCalls: 0,
+    //     privateChats: 0,
+    //   },
+    // },
+    // {
+    //   $lookup: {
+    //     from: "users",
+    //     localField: "rootUser",
+    //     foreignField: "_id",
+    //     as: "rootUser",
+    //   },
+    // },
+    // {
+    //   $unwind: "$rootUser",
+    // },
+    // {
+    //   $lookup: {
+    //     from: "wallets",
+    //     localField: "wallet",
+    //     foreignField: "_id",
+    //     as: "wallet",
+    //   },
+    // },
+    // {
+    //   $unwind: "$wallet",
+    // },
+    // {
+    //   $project: {
+    //     profileImage: 1,
+    //     rootUser: {
+    //       username: 1,
+    //       "meta.lastLogin": 1,
+    //       createdAt: 1,
+    //       "inProcessDetails.emailVerified": 1,
+    //       "inProcessDetails.phoneVerification": 1,
+    //     },
+    //     wallet: {
+    //       currentAmount: 1,
+    //     },
+    //     name: 1,
+    //     gender: 1,
+    //     isChatPlanActive: 1,
+    //   },
+    // },
+    // {
+    //   $match: dotObject.dot(options.match),
+    // },
+    {
+      $facet: {
+        records: [
+          {
+            $sort: options.sort,
+          },
+          {
+            $skip: options.skip,
+          },
+          {
+            $limit: options.limit,
+          },
+        ],
+        count: [{ $count: "totalCount" }],
+      },
+    },
+  ])
+    .allowDiskUse(true)
+    .then(([{ records, count }]) => {
+      console.log("Execution time : ", (Date.now() - startTime) / 1000)
+      console.log("Number of docs : ", count)
+    })
+    .catch((err) => console.error(err))
+}
+
+getStaffList()
