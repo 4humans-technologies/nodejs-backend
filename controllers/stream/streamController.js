@@ -1265,7 +1265,7 @@ exports.viewerFollowModel = (req, res, next) => {
     .lean()
     .select("name profileImage following")
     .then((viewer) => {
-      if (!viewer.following.includes(req.user.relatedUser._id)) {
+      if (!viewer.following.map((i) => i.toString()).includes(modelId)) {
         /* was not already following, Follow the model */
         viewerData = {
           name: viewer.name,
@@ -1278,6 +1278,7 @@ exports.viewerFollowModel = (req, res, next) => {
               _id: modelId,
             },
             {
+              $addToSet: { followers: req.user.relatedUser._id },
               $inc: { numberOfFollowers: 1 },
             },
             {
@@ -1324,7 +1325,7 @@ exports.viewerFollowModel = (req, res, next) => {
           newCount: result[0].numberOfFollowers,
         })
       } else {
-        Notifier.newModelNotification("viewer-follow", modelId, viewerData)
+        // Notifier.newModelNotification("viewer-follow", modelId, viewerData)
         return res.status(200).json({
           actionStatus: "success",
           message: "You are now following this model.",

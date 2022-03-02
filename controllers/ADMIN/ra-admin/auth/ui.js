@@ -1,11 +1,6 @@
-// root
-const Role = require("../../../../models/Role")
-const Permission = require("../../../../models/Permission")
-
 // userTypes
 const Model = require("../../../../models/userTypes/Model")
 const Viewer = require("../../../../models/userTypes/Viewer")
-const Staff = require("../../../../models/userTypes/Staff")
 const User = require("../../../../models/User")
 const Coupon = require("../../../../models/management/coupon")
 
@@ -183,6 +178,26 @@ exports.composeDashboard = (req, res, next) => {
         logs,
         unApprovedModels,
         todayViewers,
+      })
+    })
+    .catch((err) => next(err))
+}
+
+exports.getStreamedMinutes = (req, res, next) => {
+  const { modelId } = req.params
+
+  Stream.find({
+    model: modelId,
+    createdAt: {
+      $gte: new Date(Date.now() - 3600 * 24 * 1000),
+      $lte: new Date(),
+    },
+  })
+    .lean()
+    .select("duration -_id")
+    .then((streams) => {
+      return res.status(200).json({
+        lastTwentyFourHourStreams: streams,
       })
     })
     .catch((err) => next(err))

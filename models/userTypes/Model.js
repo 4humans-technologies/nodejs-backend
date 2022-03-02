@@ -13,16 +13,6 @@ const modelSchema = new mongoose.Schema({
       //select: false,
     },
   ],
-  // roomKings: [
-  //   {
-  //     id: {
-  //       type: mongoose.Schema.Types.ObjectId,
-  //       ref: "Viewer",
-  //       required: true,
-  //     },
-  //     totalSpent: Number,
-  //   },
-  // ],
   numberOfFollowers: {
     type: Number,
     default: 0,
@@ -31,6 +21,18 @@ const modelSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Approval",
     //select: false,
+  },
+  lastStreamTime: {
+    type: Date,
+    default: Date,
+  },
+  totalStreamMinutes: {
+    type: Number,
+    default: 0,
+  },
+  todayStreamMinutes: {
+    type: Number,
+    default: 0,
   },
   name: {
     type: String,

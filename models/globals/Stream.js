@@ -4,7 +4,7 @@ const streamSchema = new mongoose.Schema({
   model: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    ref: "userType",
+    ref: "Model",
   },
   createdAt: {
     type: Date,

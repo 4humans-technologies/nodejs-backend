@@ -90,6 +90,7 @@ app.use((req, res, next) => {
       "https://dreamgirllive.com",
       "https://www.dreamgirllive.com",
       "http://localhost:3000",
+      "http://localhost:3001",
       "https://proxy-dg-admin-git-main-consciousprogramer.vercel.app",
       "https://proxy-dg-admin.vercel.app",
     ]

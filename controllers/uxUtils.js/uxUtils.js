@@ -91,6 +91,9 @@ exports.getRankingOnlineModels = (req, res, next) => {
 exports.getAllModels = (req, res, next) => {
   Model.aggregate([
     {
+      $sort: { onCall: -1, isStreaming: -1 },
+    },
+    {
       $match: {
         _id: {
           $nin: REJECTED_MODEL_IDS,
@@ -100,6 +103,9 @@ exports.getAllModels = (req, res, next) => {
     {
       $project: {
         rootUser: 1,
+        name: 1,
+        gender: 1,
+        charges: 1,
         isStreaming: 1,
         onCall: 1,
         bannedStates: 1,
@@ -124,11 +130,16 @@ exports.getAllModels = (req, res, next) => {
       },
     },
     {
-      $sort: { onCall: -1, isStreaming: -1 },
-    },
-    {
       $project: {
-        rootUser: 0,
+        rootUser: {
+          password: 0,
+          createdAt: 0,
+          meta: 0,
+          inProcessDetails: 0,
+          needApproval: 0,
+          permissions: 0,
+          userType: 0,
+        },
       },
     },
   ])

@@ -268,7 +268,7 @@ exports.genRtcTokenViewer = (req, res, next) => {
             _id: req.user.relatedUser._id,
           },
           {
-            $addToSet: { streams: Types.ObjectId(model.currentStream._id) },
+            $addToSet: { streams: model.currentStream._id },
           }
         )
           .select(

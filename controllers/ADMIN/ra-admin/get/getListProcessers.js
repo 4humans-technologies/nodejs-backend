@@ -383,7 +383,6 @@ exports.getViewerList = (req, res, next, options) => {
   Viewer.aggregate([
     {
       $project: {
-        email: 0,
         backgroundImage: 0,
         hobbies: 0,
         following: 0,
@@ -421,6 +420,7 @@ exports.getViewerList = (req, res, next, options) => {
     },
     {
       $project: {
+        email: 1,
         profileImage: 1,
         rootUser: {
           username: 1,

@@ -81,6 +81,18 @@ router.post(
 router.post("/update-password", tokenVerify, modelProfileData.updatePassword)
 
 router.post(
+  "/delete-public-content",
+  tokenVerifyWithOutPopulate,
+  modelProfileData.deletePublicContent
+)
+
+router.post(
+  "/delete-albums",
+  tokenVerifyWithOutPopulate,
+  modelProfileData.deleteAlbum
+)
+
+router.post(
   "/create-album",
   [
     body("name").notEmpty().isString(),

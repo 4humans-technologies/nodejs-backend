@@ -1,7 +1,6 @@
 const Model = require("../../models/userTypes/Model")
 const User = require("../../models/User")
 const bcrypt = require("bcrypt")
-const Approval = require("../../models/management/approval")
 const CoinsSpendHistory = require("../../models/globals/coinsSpendHistory")
 const {
   generateEmailConformationJWT,
@@ -10,6 +9,7 @@ const { sendModelEmailConformation } = require("../../sendgrid")
 const ImageAlbum = require("../../models/globals/ImageAlbum")
 const VideoAlbum = require("../../models/globals/VideosAlbum")
 const ObjectId = require("mongodb").ObjectId
+const { deleteImages } = require("../../utils/aws/s3")
 
 exports.getModelProfileData = (req, res, next) => {
   Model.findById(req.user.relatedUser._id)
@@ -225,7 +225,7 @@ exports.updateModelBasicDetails = (req, res, next) => {
   /**
    * this blocks working is under observation dont' use it
    */
-  const { updatedData } = req.body
+  const { updatedData, deleteObjects } = req.body
 
   const userData = {}
 
@@ -259,6 +259,10 @@ exports.updateModelBasicDetails = (req, res, next) => {
           }
         ).lean(),
       ]
+
+  if (deleteObjects && deleteObjects.length > 0) {
+    queryArray.push(deleteImages(deleteObjects))
+  }
 
   const query = Promise.all(queryArray)
 
@@ -436,9 +440,13 @@ exports.handlePublicVideosUpload = (req, res, next) => {
 
 exports.updateInfoFields = (req, res, next) => {
   let fieldsToUpdate = {}
+  let deleteUrls = []
 
   req.body.forEach((field) => {
     fieldsToUpdate[field.field] = field.value
+    if (field.deleteUrl) {
+      deleteUrls.push(field.deleteUrl)
+    }
   })
 
   Model.updateOne(
@@ -449,10 +457,21 @@ exports.updateInfoFields = (req, res, next) => {
     { runValidators: true }
   )
     .then(() => {
-      return res.status(200).json({
-        actionStatus: "success",
-        updatedFields: Object.keys(fieldsToUpdate),
-      })
+      if (deleteUrls.length !== 0) {
+        deleteImages(deleteUrls)
+          .then(() => {
+            return res.status(200).json({
+              actionStatus: "success",
+              updatedFields: Object.keys(fieldsToUpdate),
+            })
+          })
+          .catch((err) => next(err))
+      } else {
+        return res.status(200).json({
+          actionStatus: "success",
+          updatedFields: Object.keys(fieldsToUpdate),
+        })
+      }
     })
     .catch((err) => {
       if (err.name === "ValidationError") {
@@ -466,6 +485,105 @@ exports.updateInfoFields = (req, res, next) => {
       }
       return next(err)
     })
+}
+
+exports.deletePublicContent = (req, res, next) => {
+  const { urls, type } = req.body
+
+  if (type === "Images") {
+    deleteImages(urls)
+      .then(({ Deleted, Errors }) => {
+        if (Errors.length > 0) throw Errors
+        console.log(`${Deleted.length} images`)
+        Model.updateOne(
+          { _id: req.user.relatedUser._id },
+          {
+            $pull: { publicImages: { $in: urls } },
+          }
+        ).then((result) => {
+          console.log("Update results : ", result.nModified)
+          return res.status(200).json({
+            actionStatus: "success",
+            DeletedContent: Deleted.map((item) => item.Key),
+          })
+        })
+      })
+      .catch((err) => next(err))
+  } else if (type === "Videos") {
+    deleteImages(urls)
+      .then(({ Deleted, Errors }) => {
+        if (Errors.length > 0) throw Errors
+        console.log(`${Deleted.length} videos`)
+        Model.updateOne(
+          { _id: req.user.relatedUser._id },
+          {
+            $pull: { publicVideos: { $in: urls } },
+          }
+        ).then((result) => {
+          console.log("Update results : ", result.nModified)
+          return res.status(200).json({
+            actionStatus: "success",
+            DeletedContent: Deleted.map((item) => item.Key),
+          })
+        })
+      })
+      .catch((err) => next(err))
+  }
+}
+
+exports.deleteAlbum = (req, res, next) => {
+  const { albumId, type } = req.body
+  let originals
+  let thumbs
+  if (type === "ImageAlbum") {
+    ImageAlbum.findById(albumId)
+      .lean()
+      .then((album) => {
+        if (!album) {
+          throw new Error("Invalid Album Id")
+        }
+        originals = album.originalImages
+        thumbs = album.thumbnails
+        if (originals.length + thumbs.length === 0) {
+          return Promise.all(["Album Empty"])
+        }
+        return Promise.all([deleteImages(originals), deleteImages(thumbs)])
+      })
+      .then((deleteResult) => {
+        console.log("Delete results : ", deleteResult)
+        return ImageAlbum.findByIdAndRemove(albumId)
+      })
+      .then(() => {
+        return res.status(200).json({
+          actionStatus: "success",
+        })
+      })
+      .catch((err) => next(err))
+  } else if (type === "VideosAlbum") {
+    VideoAlbum.findById(albumId)
+      .lean()
+      .then((album) => {
+        if (!album) {
+          throw new Error("Invalid Album Id")
+        }
+        originals = album.originalVideos
+        thumbs = album.thumbnails
+        if (originals.length + thumbs.length === 0) {
+          return Promise.all(["Album Empty"])
+        }
+        return Promise.all([deleteImages(originals), deleteImages(thumbs)])
+      })
+      .then((deleteResult) => {
+        console.log("Delete results : ", deleteResult)
+        return VideoAlbum.findByIdAndRemove(albumId)
+      })
+      .then(() => {
+        return res.status(200).json({
+          actionStatus: "success",
+        })
+      })
+      .catch((err) => next(err))
+  }
 }
 
 exports.getAskedFields = (req, res, next) => {

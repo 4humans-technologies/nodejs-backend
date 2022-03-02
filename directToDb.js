@@ -1005,5 +1005,21 @@ const getStaffList = () => {
     })
     .catch((err) => console.error(err))
 }
+// getStaffList()
 
-getStaffList()
+const repairModelFollow = (req, res, next) => {
+  console.log("repairModelFollow RAN")
+  Model.find()
+    .lean()
+    .select("followers numberOfFollowers")
+    .then((models) => {
+      // console.log("All Models => ", models)
+      models.forEach((model) => {
+        console.log(
+          `Actual nums : ${model.followers.length}, In Un-real : ${model.numberOfFollowers}`
+        )
+      })
+    })
+}
+
+repairModelFollow()
