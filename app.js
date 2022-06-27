@@ -77,12 +77,16 @@ const adminAuth = require("./routes/ADMIN/ra-admin/auth/auth")
 if (process.env.LOCAL_DB === "false") {
   // these were the creds for Digital ocean database .👇👇
   // var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@dreamgirl-mongodb-3node-blr-1-c5185824.mongo.ondigitalocean.com/${process.env.DO_MONGO_DB_NAME}?authSource=${process.env.DO_MONGO_AUTH_SOURCE}&replicaSet=${process.env.DO_MONGO_REPLICA_SET}&ssl=true`
-  var CONNECT_URL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@cluster0.acfgh.mongodb.net/${process.env.DB_NAME}?w=majority`
+
+  // var CONNECT_URL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@cluster0.acfgh.mongodb.net/${process.env.DB_NAME}?w=majority`
+
+  // var CONNECT_URL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@cluster0.acfgh.mongodb.net/${process.env.DB_NAME}?w=majority`
+  var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@cluster0.btitm.mongodb.net/${process.env.DO_MONGO_DB_NAME}`
 } else {
   // CONNECT_URL = `mongodb://192.168.1.104:27017/${process.env.DB_NAME}`;
   // CONNECT_URL = `mongodb://localhost:27017/${process.env.DB_NAME}`
-  
-  var CONNECT_URL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@cluster0.acfgh.mongodb.net/${process.env.DB_NAME}?w=majority`
+
+  CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@cluster0.btitm.mongodb.net/${process.env.DO_MONGO_DB_NAME}`
 }
 
 app.use((req, res, next) => {
@@ -137,7 +141,7 @@ app.use("/api/website/coupon", couponRouter)
 app.use("/api/website/verification", verificationRouter)
 
 /* ip address blockage workaround */
-app.get("/api/website/get-geo-location", (req, res, next) => {
+app.get("/api/website/get-geo-location", (req, res) => {
   return res.status(200).json({
     regionName: "delta",
   })
@@ -264,13 +268,7 @@ mongoose
     useCreateIndex: true,
     useFindAndModify: false,
     tls: true,
-    tlsCAFile: "./ca-certificate.crt",
     readConcern: "local",
-    writeConcern: {
-      w: 1,
-      j: false,
-      wtimeout: 6000,
-    },
     readPreference: process.env.DO_READ_PREFERENCE,
   })
   .then(() => {

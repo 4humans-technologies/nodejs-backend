@@ -1,11 +1,11 @@
 const aws = require("aws-sdk")
 const { nanoid } = require("nanoid/async")
 
-const region = "ap-south-1"
-const bucketName = "dreamgirl-public-bucket"
-
 const accessKeyId = process.env.AWS_S3_ACCESS_KEY_ID
 const secretAccessKey = process.env.AWS_S3_SECRET_ACCESS_KEY
+
+const region = "ap-south-1"
+const bucketName = "mr-auber-membership-public"
 
 const s3 = new aws.S3({
   region: region,
