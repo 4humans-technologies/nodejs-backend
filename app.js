@@ -81,6 +81,8 @@ if (process.env.LOCAL_DB === "false") {
   // var CONNECT_URL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@cluster0.acfgh.mongodb.net/${process.env.DB_NAME}?w=majority`
 
   // var CONNECT_URL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@cluster0.acfgh.mongodb.net/${process.env.DB_NAME}?w=majority`
+  
+  // this is the first atlas db which
   var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@cluster0.btitm.mongodb.net/${process.env.DO_MONGO_DB_NAME}`
 } else {
   // CONNECT_URL = `mongodb://192.168.1.104:27017/${process.env.DB_NAME}`;
