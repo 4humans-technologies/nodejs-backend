@@ -81,7 +81,7 @@ if (process.env.LOCAL_DB === "false") {
   // var CONNECT_URL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@cluster0.acfgh.mongodb.net/${process.env.DB_NAME}?w=majority`
 
   // var CONNECT_URL = `mongodb+srv://${process.env.MONGO_USERNAME}:${process.env.MONGO_PASSWORD}@cluster0.acfgh.mongodb.net/${process.env.DB_NAME}?w=majority`
-  
+
   // this is the first atlas db which
   var CONNECT_URL = `mongodb+srv://${process.env.DO_MONGO_USER}:${process.env.DO_MONGO_PASS}@cluster0.btitm.mongodb.net/${process.env.DO_MONGO_DB_NAME}`
 } else {
@@ -95,16 +95,15 @@ app.use((req, res, next) => {
   if (process.env.RUN_ENV === "windows") {
     res.setHeader("Access-Control-Allow-Origin", "*")
   } else {
-    const allowedOrigins = [
-      "https://dreamgirllive.com",
-      "https://www.dreamgirllive.com",
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "https://proxy-dg-admin-git-main-consciousprogramer.vercel.app",
-      "https://proxy-dg-admin.vercel.app",
-    ]
+    const allowedOrigins = ["http://localhost:3000", "http://localhost:3001"]
     const origin = req.headers.origin
-    if (allowedOrigins.includes(origin)) {
+
+    if (
+      allowedOrigins.includes(origin) ||
+      origin.endsWith(".vercel.app") ||
+      origin.endsWith(".ngrok.io") ||
+      origin.endsWith("dreamgirllive.co.in")
+    ) {
       res.setHeader("Access-Control-Allow-Origin", origin)
     }
   }
