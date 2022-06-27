@@ -27,6 +27,8 @@
   },
   "homepage": "https://github.com/4humans-technologies/dreamgirl#readme",
   "dependencies": {
+    "@firebase/app-compat": "^0.1.28",
+    "@firebase/app-types": "^0.7.0",
     "@sendgrid/mail": "^7.6.0",
     "@socket.io/admin-ui": "^0.2.0",
     "agora-access-token": "^2.0.4",
@@ -38,6 +40,7 @@
     "csurf": "^1.11.0",
     "dot-object": "^2.1.4",
     "dotenv": "^10.0.0",
+    "eslint-plugin-import": "2.25.2",
     "express": "^4.17.1",
     "express-validator": "^6.12.1",
     "firebase-admin": "^10.0.0",

@@ -4,11 +4,8 @@ const { nanoid } = require("nanoid/async")
 const region = "ap-south-1"
 const bucketName = "dreamgirl-public-bucket"
 
-// const accessKeyId = process.env.AWS_S3_ACCESS_KEY_ID
-// const secretAccessKey = process.env.AWS_S3_SECRET_ACCESS_KEY
-
-const accessKeyId = "AKIA6BNW6CGZE6SOUW33"
-const secretAccessKey = "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"
+const accessKeyId = process.env.AWS_S3_ACCESS_KEY_ID
+const secretAccessKey = process.env.AWS_S3_SECRET_ACCESS_KEY
 
 const s3 = new aws.S3({
   region: region,
@@ -113,14 +110,3 @@ exports.deleteImages = (urls = []) => {
     })
     .promise()
 }
-// const urls = [
-//   "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/image-album/621da12715854937946fd6d2/Rdf3lIyJQUmqTcj_tzSYPmwV%2A%2A__original.jpeg",
-//   "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/image-album/621da12715854937946fd6d2/KUJ9nXPKsZqToKPDyKYEZBcH%2A%2A__original.jpeg",
-//   // "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/ZH59-cQua7ik8f0C3AWjBOU7.jpeg",
-//   "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/image-album/621da12715854937946fd6d2/Rdf3lIyJQUmqTcj_tzSYPmwV%2A%2A__thumbnail.jpeg",
-//   "https://dreamgirl-public-bucket.s3.ap-south-1.amazonaws.com/image-album/621da12715854937946fd6d2/KUJ9nXPKsZqToKPDyKYEZBcH%2A%2A__thumbnail.jpeg"
-// ]
-
-// this.deleteImages(urls).then((result) => {
-//   console.log(result)
-// })

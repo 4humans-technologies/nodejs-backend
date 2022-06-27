@@ -10,3 +10,4 @@ dreamgirl-firebase-creds.json
 .env.test.local
 .env.production.local
 dump.rdb
+dreamgirl-firebase-creds.json
