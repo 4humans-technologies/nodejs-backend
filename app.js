@@ -95,7 +95,7 @@ app.use((req, res, next) => {
   if (process.env.RUN_ENV === "windows") {
     res.setHeader("Access-Control-Allow-Origin", "*")
   } else {
-    const allowedOrigins = ["http://localhost:3000", "http://localhost:3001"]
+    const allowedOrigins = ["http://localhost:3000", "http://localhost:3001","https://www.tuktuklive.com","https://tuktuklive.com"]
     const origin = req.headers.origin
 
     if (
