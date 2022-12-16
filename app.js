@@ -58,7 +58,8 @@ const privateContentRouter = require("./routes/stream/PrivateContent")
 const modelProfileRouter = require("./routes/profile/modelProfile")
 const viewerProfileRouter = require("./routes/profile/viewerProfile")
 const couponRouter = require("./routes/management/coupon")
-
+const astropayPaymentGatewayRouter = require("./routes/paymentGateway/astropayRoute")
+const packageRouter = require("./routes/package/package")
 // 🔴 ADMIN ROUTES 🔴
 const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
@@ -139,6 +140,8 @@ app.use(
 app.use("/api/website/profile", modelProfileRouter)
 app.use("/api/website/profile/viewer", viewerProfileRouter)
 app.use("/api/website/coupon", couponRouter)
+app.use("/api/website/paymentGateway/astropay",astropayPaymentGatewayRouter )
+app.use("/api/website/package",packageRouter )
 app.use("/api/website/verification", verificationRouter)
 
 /* ip address blockage workaround */
