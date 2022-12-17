@@ -9,7 +9,6 @@ const { body } = require("express-validator")
 
 router.post(
   "/",
-  [body("forCoins").isInt()],
   tokenVerify,
 //   (req, res, next) => {
 //     if (req.user.permissions.includes("create-package")) {
@@ -57,6 +56,23 @@ router.put(
     //   }
     // },
     packageController.packageList
+  )
+
+  router.get(
+    "/:id",
+    tokenVerify,
+    // (req, res, next) => {
+    //   if (req.user.permissions.includes("update-package")) {
+    //     next()
+    //   } else {
+    //     const err = new Error(
+    //       "Permission denied, you don't have permission to perform this action"
+    //     )
+    //     err.statusCode = 403
+    //     return next(error)
+    //   }
+    // },
+    packageController.getPackageById
   )
 
 module.exports = router
