@@ -59,13 +59,13 @@ const modelProfileRouter = require("./routes/profile/modelProfile")
 const viewerProfileRouter = require("./routes/profile/viewerProfile")
 const couponRouter = require("./routes/management/coupon")
 const astropayPaymentGatewayRouter = require("./routes/paymentGateway/astropayRoute")
-const packageRouter = require("./routes/package/package")
+const packageRouter = require("./routes/package/packageRoutes")
 // 🔴 ADMIN ROUTES 🔴
 const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
 const privateChatRouter = require("./routes/ADMIN/privateChat")
 const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
-
+const adminPackageRouter = require("./routes/ADMIN/adminPackageRoutes");
 // ra-admin routes
 const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
 const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
@@ -232,7 +232,7 @@ app.use("/api/admin/gifts", adminGiftRoutes)
 app.use("/api/admin/privatechat", privateChatRouter)
 app.use("/api/admin/coupon", couponAdminRouter)
 app.use("/api/admin/role", roleRouter)
-
+app.use("/api/admin/package", adminPackageRouter)
 // ra-admin
 app.use("/api/admin/dashboard", getOne)
 app.use("/api/admin/dashboard", getLists)
