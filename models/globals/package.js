@@ -1,37 +1,38 @@
 const mongoose = require("mongoose")
 
-const currencySchema= new mongoose.Schema({
-  actualAmount:{
-    type: Number
+const packageSchema = new mongoose.Schema({
+  status: {   
+    //status to manage the state
+    type: String,
+    required: true,
+    enum: ["INACTIVE", "ACTIVE"],
   },
-  discountedAmount:{
-    type: Number
-  },
-  currencyUrl: {
+  packageUrl: {
+    //url of tnc or other purpose 
     type: String,
     default: "",
-}
-})
-const packageSchema = new mongoose.Schema({
-    status: {
-      type: String,
-      required: true,
-      enum: ["INACTIVE","ACTIVE"],
-    },
-    INR: currencySchema,
-    packageUrl: {
-        type: String,
-        default: "",
-    }, 
-    coin: {
-      type: Number,
-      required: true
-  },  
+  },
+  coin: {
+    //Number of coin
+    type: Number,
+    required: true
+  },
   description: {
+    //Number of description
     type: String,
     required: false
-},   
   },
+  actualAmountINR: {
+    //Amount to show user in INR
+    type: Number,
+    required: true
+  },
+  discountedAmountINR: {
+    //Amount to charge user in INR
+    type: Number,
+    required: true
+  },
+},
   { timestamps: true }
 );
 
