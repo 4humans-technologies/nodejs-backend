@@ -5,6 +5,14 @@ const Order = require("../../models/globals/order");
 const cryptoJS = require("crypto-js");
 const package = require("../../models/globals/package");
 let axios = require("axios");
+
+/**
+ * controller for deposit
+ * @param {*} req 
+ * @param {*} res 
+ * @param {*} next 
+ * @returns 
+ */
 exports.deposit = async (req, res, next) => {
   const reqBody = req.body;
   try {
@@ -13,25 +21,34 @@ exports.deposit = async (req, res, next) => {
       status: "ACTIVE",
     });
     console.log(packageRecord);
+
     if (
       !packageRecord[reqBody.currency]?.discountedAmount &&
-      packageRecord[reqBody.currency]?.discountedAmount != reqBody.amount
+      packageRecord[reqBody.currency]?.discountedAmount != reqBody.amount && false
     ) {
+
       const message = !packageRecord[reqBody.currency]?.discountedAmount
         ? "packageId, no active package found"
         : "amount, amount of package is miss match";
+
       return res.status(400).json({
         actionStatus: "failed",
         message: `Please enter a valid ${message}`,
       });
     }
+
     const orderRecord = await Order.create({
       status: "CREATED",
       relatedUser: req.user.relatedUser._id,
       packageId: reqBody.packageId,
+      amount: reqBody.amount,
+      currency: reqBody.currency,
+      country: reqBody.country,
+      packageAmountINR: packageRecord?.INR?.discountedAmount
     });
+
     console.log(orderRecord, req.user);
-    const axiosResponse = await createDepositOnAstropay(reqBody, orderRecord,req.user);
+    const axiosResponse = await createDepositOnAstropay(reqBody, orderRecord, req.user);
     const updateOrder = await Order.updateOne(
       {
         _id: orderRecord._id,
@@ -57,6 +74,13 @@ exports.deposit = async (req, res, next) => {
   }
 };
 
+/**
+ * controller for callback
+ * @param {*} req 
+ * @param {*} res 
+ * @param {*} next 
+ * @returns 
+ */
 exports.callback = async (req, res, next) => {
   let coin;
   let walletModified = false;
@@ -126,12 +150,22 @@ exports.callback = async (req, res, next) => {
   }
 };
 
+/**
+ * function to get signature
+ * @param {Object} reqBody 
+ * @returns {string} return signature
+ */
 async function getSignature(reqBody) {
   const secretKey = process.env.astropay_secret;
   const requestBody = JSON.stringify(reqBody); //Turn request body to a letiable
   let hash = cryptoJS.HmacSHA256(requestBody, secretKey).toString();
   return hash;
 }
+/**
+ * Fucntion to get deposit status.
+ * @param {String} depositExternalId 
+ * @returns Obeject
+ */
 async function astropayDepositAPICall(depositExternalId) {
   var config = {
     method: "get",
@@ -146,7 +180,7 @@ async function astropayDepositAPICall(depositExternalId) {
   return axiosResponse.data;
 }
 
-async function createDepositOnAstropay(reqBody, orderRecord,reqUser) {
+async function createDepositOnAstropay(reqBody, orderRecord, reqUser) {
   const astropayReqBody = {
     amount: reqBody.amount,
     currency: reqBody.currency,
