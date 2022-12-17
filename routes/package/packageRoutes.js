@@ -1,6 +1,6 @@
 const router = require("express").Router()
 const tokenVerifyWithOutPopulate = require("../../middlewares/tokenVerifyWithOutPopulate")
-const package = require("../../controllers/package/package")
+const package = require("../../controllers/package/packageController")
 
 router.get("/",
   tokenVerifyWithOutPopulate,
