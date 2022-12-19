@@ -1,6 +1,5 @@
 const package = require("../../models/globals/package");
-const fetch = require('node-fetch');
-
+const {getExchangeRate} =require("../../utils/exchangeRate");
 //list all active package for user
 exports.getPackage = async (req, res, next) => {
   const reqQuery = req.query;
@@ -28,15 +27,3 @@ exports.getPackage = async (req, res, next) => {
     });
   }
 };
-
-
-/**
- * 
- * @param {String} base 
- * @returns 
- */
-async function getExchangeRate(base) {
-
-  const response = await (await fetch(process.env.EXCHANGE_RATE_URL + base)).json();
-  return response.rates[baseCurrency];
-}
