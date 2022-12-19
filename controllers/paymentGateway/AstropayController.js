@@ -5,6 +5,7 @@ const Order = require("../../models/globals/order");
 const cryptoJS = require("crypto-js");
 const package = require("../../models/globals/package");
 let axios = require("axios");
+const {getExchangeRate} =require("../../utils/exchangeRate");
 
 /**
  * controller for deposit
@@ -21,10 +22,11 @@ exports.deposit = async (req, res, next) => {
       status: "ACTIVE",
     });
     console.log(packageRecord);
-
+const exchangeRate = await getExchangeRate("INR",reqBody.currency);
     if (
-      !packageRecord[reqBody.currency]?.discountedAmount &&
-      packageRecord[reqBody.currency]?.discountedAmount != reqBody.amount && false
+      !packageRecord &&
+      !packageRecord?.discountedAmountINR &&
+      (packageRecord.discountedAmountINR*exchangeRate) != reqBody.amount
     ) {
 
       const message = !packageRecord[reqBody.currency]?.discountedAmount
@@ -44,7 +46,7 @@ exports.deposit = async (req, res, next) => {
       amount: reqBody.amount,
       currency: reqBody.currency,
       country: reqBody.country,
-      packageAmountINR: packageRecord?.INR?.discountedAmount
+      packageAmountINR: packageRecord?.discountedAmountINR
     });
 
     console.log(orderRecord, req.user);
@@ -131,7 +133,9 @@ exports.callback = async (req, res, next) => {
       walletRecord
     );
 
-    return res.status(204);
+    return res.status(200).json({
+      statusCode:"success"
+    });
   } catch (err) {
     if (coin && walletModified) {
       const walletRecord = await Wallet.findOneAndUpdate(
