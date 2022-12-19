@@ -60,12 +60,15 @@ const viewerProfileRouter = require("./routes/profile/viewerProfile")
 const couponRouter = require("./routes/management/coupon")
 const astropayPaymentGatewayRouter = require("./routes/paymentGateway/astropayRoute")
 const packageRouter = require("./routes/package/packageRoutes")
+const orderRouter = require("./routes/order/orderRoutes")
+
 // 🔴 ADMIN ROUTES 🔴
 const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
 const privateChatRouter = require("./routes/ADMIN/privateChat")
 const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
 const adminPackageRouter = require("./routes/ADMIN/adminPackageRoutes");
+const adminOrderRouter = require("./routes/ADMIN/adminOrderRoute");
 // ra-admin routes
 const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
 const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
@@ -142,6 +145,7 @@ app.use("/api/website/profile/viewer", viewerProfileRouter)
 app.use("/api/website/coupon", couponRouter)
 app.use("/api/website/paymentGateway/astropay",astropayPaymentGatewayRouter )
 app.use("/api/website/package",packageRouter )
+app.use("/api/website/order",orderRouter )
 app.use("/api/website/verification", verificationRouter)
 
 /* ip address blockage workaround */
@@ -233,6 +237,8 @@ app.use("/api/admin/privatechat", privateChatRouter)
 app.use("/api/admin/coupon", couponAdminRouter)
 app.use("/api/admin/role", roleRouter)
 app.use("/api/admin/package", adminPackageRouter)
+app.use("/api/admin/order", adminOrderRouter)
+
 // ra-admin
 app.use("/api/admin/dashboard", getOne)
 app.use("/api/admin/dashboard", getLists)
