@@ -6,6 +6,7 @@ dreamgirl-firebase-creds.json
 # local env files
 **.env
 .env.local
+.env.old_one
 .env.development.local
 .env.test.local
 .env.production.local

@@ -26,7 +26,7 @@ packageController.createPackage
 
 router.put(
     "/:id",
-    [body("status").isString()],
+    // [body("status").isString()],
     tokenVerify,
     // (req, res, next) => {
     //   if (req.user.permissions.includes("update-package")) {

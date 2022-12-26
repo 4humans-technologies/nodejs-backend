@@ -1,4 +1,4 @@
-const order = require("../../models/globals/order");
+const order = require("../../models/globals/Order");
 
 //list all active package for user
 exports.getOrder = async (req, res, next) => {

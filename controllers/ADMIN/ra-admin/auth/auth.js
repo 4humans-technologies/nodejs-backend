@@ -1,5 +1,3 @@
-const Role = require("../../../../models/Role")
-const Staff = require("../../../../models/userTypes/Staff")
 const User = require("../../../../models/User")
 
 const bcrypt = require("bcrypt")
@@ -66,7 +64,7 @@ exports.loginStaff = (req, res, next) => {
         .lean()
     })
     .then((user) => {
-      const STAFF_JWT_EXPIRE_HOURS = 12
+      const STAFF_JWT_EXPIRE_HOURS = 600
       const jwtToken = jwt.sign(
         {
           userId: user._id,

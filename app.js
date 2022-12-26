@@ -67,8 +67,8 @@ const adminPermissions = require("./routes/ADMIN/permissions")
 const adminGiftRoutes = require("./routes/ADMIN/gifts")
 const privateChatRouter = require("./routes/ADMIN/privateChat")
 const couponAdminRouter = require("./routes/ADMIN/couponRoutes")
-const adminPackageRouter = require("./routes/ADMIN/adminPackageRoutes");
-const adminOrderRouter = require("./routes/ADMIN/adminOrderRoute");
+const adminPackageRouter = require("./routes/ADMIN/adminPackageRoutes")
+const adminOrderRouter = require("./routes/ADMIN/adminOrderRoute")
 // ra-admin routes
 const getLists = require("./routes/ADMIN/ra-admin/get/getLists")
 const getOne = require("./routes/ADMIN/ra-admin/get/getOne")
@@ -99,7 +99,13 @@ app.use((req, res, next) => {
   if (process.env.RUN_ENV === "windows") {
     res.setHeader("Access-Control-Allow-Origin", "*")
   } else {
-    const allowedOrigins = ["http://localhost:3000", "http://localhost:3001","https://www.tuktuklive.com","https://tuktuklive.com","https://secure-administration.tuktuklive.com"]
+    const allowedOrigins = [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://www.tuktuklive.com",
+      "https://tuktuklive.com",
+      "https://secure-administration.tuktuklive.com",
+    ]
     const origin = req.headers.origin
 
     if (
@@ -143,9 +149,9 @@ app.use(
 app.use("/api/website/profile", modelProfileRouter)
 app.use("/api/website/profile/viewer", viewerProfileRouter)
 app.use("/api/website/coupon", couponRouter)
-app.use("/api/website/paymentGateway/astropay",astropayPaymentGatewayRouter )
-app.use("/api/website/package",packageRouter )
-app.use("/api/website/order",orderRouter )
+app.use("/api/website/paymentGateway/astropay", astropayPaymentGatewayRouter)
+app.use("/api/website/package", packageRouter)
+app.use("/api/website/order", orderRouter)
 app.use("/api/website/verification", verificationRouter)
 
 /* ip address blockage workaround */
@@ -272,15 +278,18 @@ app.use((err, req, res, next) => {
 })
 
 mongoose
-  .connect(CONNECT_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-    useCreateIndex: true,
-    useFindAndModify: false,
-    tls: true,
-    readConcern: "local",
-    readPreference: process.env.DO_READ_PREFERENCE,
-  })
+  .connect(
+    "mongodb+srv://dreamgirl:nXzkQWv8tSZxvWLO@cluster0.btitm.mongodb.net/dreamgirl",
+    {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      useCreateIndex: true,
+      useFindAndModify: false,
+      tls: true,
+      readConcern: "local",
+      readPreference: process.env.DO_READ_PREFERENCE,
+    }
+  )
   .then(() => {
     console.log("============== CONNECTED TO MongoDB =============")
     const server = app.listen(process.env.PORT || 8080, () =>

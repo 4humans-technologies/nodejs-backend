@@ -1,4 +1,4 @@
-const Package = require("../../models/globals/package");
+const Package = require("../../models/globals/package")
 
 //create package
 exports.createPackage = async (req, res, next) => {
@@ -6,14 +6,13 @@ exports.createPackage = async (req, res, next) => {
 
   try {
     const packageRecord = await Package.create({
-      "status": "INACTIVE",
-      "INR": requestBody.INR,
-      "coin": requestBody.coin,
+      status: requestBody.status,
+      coin: requestBody.coin,
       actualAmountINR: requestBody.actualAmount,
       discountedAmountINR: requestBody.discountedAmount,
       packageUrl: requestBody?.packageUrl || "",
-      description: requestBody?.description || ""
-    });
+      description: requestBody?.description || "",
+    })
     return res.status(200).json({
       actionStatus: "success",
       data: packageRecord,
@@ -25,17 +24,20 @@ exports.createPackage = async (req, res, next) => {
 
 //update package
 exports.updatePackage = async (req, res, next) => {
-  const packageId = req.params.id;
-  const requestBody = req.body;
+  const packageId = req.params.id
+  const requestBody = req.body
   try {
-    await Package.updateOne({
-      _id: packageId,
-    }, {
-      "status": requestBody.status,
-    });
+    await Package.updateOne(
+      {
+        _id: packageId,
+      },
+      {
+        status: requestBody.status,
+      }
+    )
     return res.status(200).json({
       actionStatus: "success",
-      message:"package update"
+      message: "package update",
     })
   } catch (err) {
     next(err)
@@ -44,11 +46,11 @@ exports.updatePackage = async (req, res, next) => {
 
 //list package
 exports.packageList = async (req, res, next) => {
-  const requestBody = req.query;
+  const requestBody = req.query
   console.log(requestBody)
 
   try {
-    const packageRecord = await Package.find().lean();
+    const packageRecord = await Package.find().lean()
     return res.status(200).json({
       actionStatus: "success",
       data: packageRecord,
@@ -60,9 +62,9 @@ exports.packageList = async (req, res, next) => {
 
 //get package by id
 exports.getPackageById = async (req, res, next) => {
-  const packageId = req.params?.id;
+  const packageId = req.params?.id
   try {
-    const packageRecord = await Package.findById(packageId).lean();
+    const packageRecord = await Package.findById(packageId).lean()
     return res.status(200).json({
       actionStatus: "success",
       data: packageRecord,
