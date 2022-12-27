@@ -198,11 +198,14 @@ async function createDepositOnAstropay(reqBody, orderRecord, reqUser) {
     product: {
       mcc: process.env.ASTROPAY_MCC,
       category: process.env.ASTROPAY_CATEGORY,
-      merchant_code: process.env.ASTROPAY_MERCHANT_CODE,
-      description: "Test Deposit",
+      merchant_code: "01", // this is self assigned uid for your products
+      description: "Purchase of coins package from tuktuklive.com",
     },
     visual_info: {
       merchant_name: "tuktuklive",
+      merchant_logo:
+        process.env.ASTROPAY_MERCHANT_LOGO ??
+        "https://www.tuktuklive.com/_next/image?url=%2F_next%2Fstatic%2Fimage%2Fpublic%2Flogo.72adf0041b358d039321bc1598e27b8d.png&w=384&q=100",
     },
   }
   console.log(astropayReqBody)
