@@ -1,5 +1,6 @@
 /node_modules
 **/node_modules
+dreamgirl-firebase-creds.json
 
 
 # local env files
@@ -8,3 +9,5 @@
 .env.development.local
 .env.test.local
 .env.production.local
+dump.rdb
+dreamgirl-firebase-creds.json
